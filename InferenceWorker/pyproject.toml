@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "demux-worker"
+version = "0.1.0"
+description = "Demux Milestone 2 MLX worker — BS-RoFormer inference proof"
+readme = "README.md"
+requires-python = "==3.12.12"
+license = { text = "MIT" }
+authors = [{ name = "Demux" }]
+dependencies = [
+    "bs-roformer-infer[mlx] @ git+https://github.com/openmirlab/bs-roformer-infer.git@b0f1386fcced25f559f3e61c9f08a73cd9bddf80",
+    "mlx==0.31.2",
+    "mlx-spectro==0.7.0",
+    "torch==2.13.0",
+    "soundfile>=0.12",
+    "numpy>=1.23",
+    "PyYAML>=6.0",
+    "requests>=2.31",
+    "tqdm>=4.64",
+    "packaging>=14.1",
+    "ml-collections>=0.1.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+prepare-model = "demux_worker.prepare_model:main"
+demux-worker = "demux_worker.worker:main"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/demux_worker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not network and not realweights'"
+
+[tool.uv]
+managed = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

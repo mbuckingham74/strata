@@ -1,1 +1,10 @@
 .DS_Store
+.slim/deepwork/
+InferenceWorker/.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+# local M2 artifacts (outside Git per spec)
+.m2-outputs/
+.m2-staging/
+evidence-tmp/
