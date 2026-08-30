@@ -110,12 +110,67 @@ def test_invalid_channel_count_rejection():
             validate_canonical_mixture(p)
 
 
-def test_invalid_frame_count_rejection():
+def test_variable_lengths_accepted():
+    """Variable-length inputs are now valid; canonical validation succeeds for multiple positive lengths."""
+    for frames in [44100, 88200, 100000, 882000]:
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "mixture.wav"
+            _make_wav(p, frames=frames, fill="random", seed=frames % 100)
+            meta = validate_canonical_mixture(p)
+            assert meta["frames"] == frames
+            assert meta["channels"] == EXPECTED_CHANNELS
+            assert meta["sample_rate"] == EXPECTED_SAMPLE_RATE
+            assert abs(meta["duration"] - (frames / EXPECTED_SAMPLE_RATE)) < 1e-6
+            assert meta["duration"] > 0
+            # Matching stem should pass when expected_frames is given
+            stem_p = Path(td) / "vocals.wav"
+            _make_wav(stem_p, frames=frames, fill="random", seed=frames % 100 + 1)
+            stem_meta = validate_stem(stem_p, expected_frames=frames)
+            assert stem_meta["frames"] == frames
+            # Also without expected_frames, positive frames passes
+            stem_meta2 = validate_stem(stem_p)
+            assert stem_meta2["frames"] == frames
+
+
+def test_stem_frame_mismatch_rejected():
+    """Stem frames must equal input frames when expected_frames is supplied."""
     with tempfile.TemporaryDirectory() as td:
-        p = Path(td) / "bad.wav"
-        _make_wav(p, frames=44100)
-        with pytest.raises(ValueError, match="frames"):
-            validate_canonical_mixture(p)
+        input_frames = 44100
+        for mismatch in [44101, 882000, 88200]:
+            p = Path(td) / f"vocals_{mismatch}.wav"
+            _make_wav(p, frames=mismatch, fill="random", seed=mismatch % 100)
+            with pytest.raises(ValueError, match="frames"):
+                validate_stem(p, expected_frames=input_frames)
+
+
+def test_zero_frames_rejected():
+    """Zero or empty frames must be rejected with frames error."""
+    with tempfile.TemporaryDirectory() as td:
+        # Attempt to create 0-frame wav; soundfile may produce header with 0 frames
+        p = Path(td) / "empty.wav"
+        try:
+            _make_wav(p, frames=0, fill="zeros")
+        except Exception:
+            # If writer fails for 0 frames, that satisfies rejection (no valid wav produced)
+            pytest.skip("soundfile does not support 0-frame write on this platform")
+        # If file was created, validation must reject
+        if p.exists():
+            with pytest.raises(ValueError, match="frames|file too short|positive"):
+                validate_canonical_mixture(p)
+            with pytest.raises(ValueError, match="frames|positive"):
+                validate_stem(p)
+            with pytest.raises(ValueError, match="frames"):
+                validate_stem(p, expected_frames=44100)
+
+
+def test_canonical_duration_consistency():
+    """Duration must be consistent with frames/sr; variable lengths retain positive duration."""
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "mix.wav"
+        _make_wav(p, frames=12345, fill="random", seed=7)
+        meta = validate_canonical_mixture(p)
+        assert meta["duration"] > 0
+        assert abs(meta["duration"] - (12345 / EXPECTED_SAMPLE_RATE)) < 1e-6
 
 
 def test_nonfinite_rejection():
@@ -131,6 +186,9 @@ def test_stem_validation_rejects_zero():
         p = Path(td) / "vocals.wav"
         _make_wav(p, fill="zeros")
         with pytest.raises(ValueError, match="identically zero"):
+            validate_stem(p, expected_frames=882000)
+        # also without expected_frames should reject for zero signal
+        with pytest.raises(ValueError, match="identically zero"):
             validate_stem(p)
 
 
@@ -138,8 +196,11 @@ def test_stem_validation_passes_good():
     with tempfile.TemporaryDirectory() as td:
         p = Path(td) / "vocals.wav"
         _make_wav(p, fill="random", seed=1)
-        meta = validate_stem(p)
+        meta = validate_stem(p, expected_frames=882000)
         assert meta["frames"] == 882000
+        # also passes without expected_frames for positive frames
+        meta2 = validate_stem(p)
+        assert meta2["frames"] == 882000
 
 
 # --- Protocol parsing ---
@@ -212,8 +273,9 @@ def test_staging_behavior_atomic():
         _make_wav(staging / "mixture_instrumental.wav", fill="random", seed=99)
         # Simulate normalization and exclusion: instrumental should not be in final
         assert (staging / "mixture_instrumental.wav").exists()
-        # Validate six stems
+        # Validate six stems — with and without expected_frames (variable-length contract)
         for stem in EXPECTED_STEMS:
+            validate_stem(staging / f"{stem}.wav", expected_frames=EXPECTED_FRAMES)
             validate_stem(staging / f"{stem}.wav")
         # Staging not yet final
         final = out_base / "m2-proof"

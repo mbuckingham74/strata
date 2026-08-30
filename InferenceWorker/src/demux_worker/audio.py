@@ -16,8 +16,6 @@ except ImportError:  # pragma: no cover
 
 from .constants import (
     EXPECTED_CHANNELS,
-    EXPECTED_DURATION,
-    EXPECTED_FRAMES,
     EXPECTED_SAMPLE_RATE,
 )
 
@@ -96,18 +94,17 @@ def read_wav_info(path: Path) -> dict:
 
 
 def validate_canonical_mixture(path: Path) -> dict:
-    """Validate the canonical mixture.wav per spec, raising on mismatch.
+    """Validate a variable-length mixture.wav per spec, raising on mismatch.
 
     Required:
-        File: mixture.wav
         Container: WAV
         Subtype: FLOAT / Float32
         Sample rate: 44100
         Channels: 2
-        Frames: 882000
-        Duration: 20.0
+        Frames: positive (>0), variable length
+        Duration: positive and consistent with frames/sr (±1e-6)
         Samples: finite
-        Signal: non-empty
+        Signal: non-empty (not identically zero)
     Returns metadata dict on success.
     Does not silently convert/resample.
     """
@@ -123,18 +120,24 @@ def validate_canonical_mixture(path: Path) -> dict:
         raise ValueError(f"sample rate {info['sample_rate']} != {EXPECTED_SAMPLE_RATE}")
     if info["channels"] != EXPECTED_CHANNELS:
         raise ValueError(f"channels {info['channels']} != {EXPECTED_CHANNELS}")
-    if info["frames"] != EXPECTED_FRAMES:
-        raise ValueError(f"frames {info['frames']} != {EXPECTED_FRAMES}")
-    if abs(info["duration"] - EXPECTED_DURATION) > 1e-6:
-        raise ValueError(f"duration {info['duration']} != {EXPECTED_DURATION}")
+    if info["frames"] <= 0:
+        raise ValueError(f"frames must be positive, got {info['frames']}")
+    if info["duration"] <= 0:
+        raise ValueError(f"duration must be positive, got {info['duration']}")
+    # Duration consistency with frames/sr
+    expected_duration = info["frames"] / info["sample_rate"] if info["sample_rate"] else 0
+    if abs(info["duration"] - expected_duration) > 1e-6:
+        raise ValueError(f"duration {info['duration']} inconsistent with frames {info['frames']}/sr {info['sample_rate']}")
     # Read samples via soundfile for finite/non-empty checks
     if sf is None:
         raise RuntimeError("soundfile not installed")
     data, sr = sf.read(str(p), dtype="float32", always_2d=True)
     if sr != EXPECTED_SAMPLE_RATE:
         raise ValueError(f"soundfile sr {sr} != {EXPECTED_SAMPLE_RATE}")
-    if data.shape != (EXPECTED_FRAMES, EXPECTED_CHANNELS):
-        raise ValueError(f"data shape {data.shape} != ({EXPECTED_FRAMES},{EXPECTED_CHANNELS})")
+    if data.shape[0] != info["frames"]:
+        raise ValueError(f"data frames {data.shape[0]} != header frames {info['frames']}")
+    if data.shape[1] != EXPECTED_CHANNELS:
+        raise ValueError(f"data channels {data.shape[1]} != {EXPECTED_CHANNELS}")
     if not np.isfinite(data).all():
         raise ValueError("samples contain non-finite values")
     if not np.any(data != 0):
@@ -147,9 +150,10 @@ def validate_canonical_mixture(path: Path) -> dict:
     return meta
 
 
-def validate_stem(path: Path) -> dict:
+def validate_stem(path: Path, expected_frames: int | None = None) -> dict:
     """Validate a final stem per spec:
-    WAV, Float32, 44100, stereo, 882000 frames, finite, not identically zero.
+    WAV, Float32, 44100, stereo, finite, not identically zero.
+    Frames must be positive; if expected_frames is given, must match it exactly.
     Returns metadata dict.
     """
     p = Path(path)
@@ -160,11 +164,25 @@ def validate_stem(path: Path) -> dict:
         raise ValueError(f"stem {p.name} sr {info['sample_rate']} != {EXPECTED_SAMPLE_RATE}")
     if info["channels"] != EXPECTED_CHANNELS:
         raise ValueError(f"stem {p.name} channels {info['channels']} != {EXPECTED_CHANNELS}")
-    if info["frames"] != EXPECTED_FRAMES:
-        raise ValueError(f"stem {p.name} frames {info['frames']} != {EXPECTED_FRAMES}")
+    if expected_frames is not None:
+        if info["frames"] != expected_frames:
+            raise ValueError(f"stem {p.name} frames {info['frames']} != expected {expected_frames}")
+    else:
+        if info["frames"] <= 0:
+            raise ValueError(f"stem {p.name} frames must be positive, got {info['frames']}")
     if sf is None:
         raise RuntimeError("soundfile not installed")
     data, sr = sf.read(str(p), dtype="float32", always_2d=True)
+    if sr != EXPECTED_SAMPLE_RATE:
+        raise ValueError(f"stem {p.name} sr {sr} != {EXPECTED_SAMPLE_RATE}")
+    if expected_frames is not None:
+        if data.shape[0] != expected_frames:
+            raise ValueError(f"stem {p.name} frames {data.shape[0]} != expected {expected_frames}")
+    else:
+        if data.shape[0] != info["frames"]:
+            raise ValueError(f"stem {p.name} frames {data.shape[0]} != header frames {info['frames']}")
+    if data.shape[1] != EXPECTED_CHANNELS:
+        raise ValueError(f"stem {p.name} channels {data.shape[1]} != {EXPECTED_CHANNELS}")
     if not np.isfinite(data).all():
         raise ValueError(f"stem {p.name} contains non-finite values")
     if not np.any(data != 0):

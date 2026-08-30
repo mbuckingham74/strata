@@ -25,8 +25,6 @@ from .constants import (
     CONFIG_PATH,
     CONFIG_SHA256,
     EXPECTED_CHANNELS,
-    EXPECTED_DURATION,
-    EXPECTED_FRAMES,
     EXPECTED_SAMPLE_RATE,
     EXPECTED_STEMS,
     MANIFEST_FILENAME,
@@ -349,11 +347,12 @@ def _handle_separate(obj: dict, job_busy: bool) -> tuple[dict | None, bool]:
             print(f"normalized stems mismatch missing {missing} extra {extra} found {normalized.keys()}", file=sys.stderr)
             raise ValueError(f"expected 6 stems {EXPECTED_STEMS}, got {sorted(normalized.keys())}")
 
-        # Validate all six before finalization
+        # Validate all six before finalization — stems must match input frames
+        input_frames = int(canonical_meta["frames"])
         stem_metas = {}
         for stem in EXPECTED_STEMS:
             p = normalized[stem]
-            meta = validate_stem(p)
+            meta = validate_stem(p, expected_frames=input_frames)
             stem_metas[stem] = meta
             print(f"validated stem {stem}: {meta}", file=sys.stderr)
 
@@ -380,12 +379,20 @@ def _handle_separate(obj: dict, job_busy: bool) -> tuple[dict | None, bool]:
         # Build manifest
         # Gather versions
         versions = _cached_versions
-        # Real-time factor
-        source_duration = EXPECTED_DURATION  # 20.0 per canonical, but also compute from input_meta
+        # Real-time factor — variable length: use input duration or frames/sr
         try:
-            source_duration = float(input_meta.get("duration", 20.0))
+            sd = input_meta.get("duration")
+            if sd is not None and float(sd) > 0:
+                source_duration = float(sd)
+            else:
+                source_duration = float(input_meta.get("frames", 0)) / EXPECTED_SAMPLE_RATE
         except Exception:
-            source_duration = 20.0
+            try:
+                source_duration = float(input_meta.get("frames", 0)) / EXPECTED_SAMPLE_RATE
+            except Exception:
+                source_duration = 0
+        if not source_duration or source_duration <= 0:
+            source_duration = float(input_frames) / EXPECTED_SAMPLE_RATE if input_frames else 0
         rtf = inference_wall / source_duration if source_duration else 0
 
         # Attempt to get peak allocation if exposed (MLX)
