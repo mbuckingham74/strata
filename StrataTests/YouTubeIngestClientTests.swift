@@ -126,6 +126,93 @@ final class YouTubeIngestClientTests: XCTestCase {
         XCTAssertTrue(lines[1].contains("mixture.wav"), "ffmpeg should contain mixture.wav")
         // Check absolute paths for ffmpeg input/output
         XCTAssertTrue(lines[1].contains("/"), "ffmpeg args should contain absolute paths")
+        // FFmpeg must disable stdin to avoid job-control stop (STAT=T) when launched from GUI app
+        XCTAssertTrue(lines[1].contains("-nostdin"), "ffmpeg should contain -nostdin to avoid inherited stdin job-control stop: \(lines[1])")
+        // -nostdin must precede input/output args for ffmpeg global option correctness
+        if let nostdinRange = lines[1].range(of: "-nostdin"), let yRange = lines[1].range(of: " -y ") {
+            XCTAssertTrue(nostdinRange.lowerBound < yRange.lowerBound, "-nostdin should appear before -y: \(lines[1])")
+        }
+    }
+
+    func testFFmpegInvokedWithNostdinAndDetachedStdin() async throws {
+        let cacheBase = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase) }
+        let logFile = try makeLogFile()
+        defer { try? FileManager.default.removeItem(at: logFile) }
+
+        let ytScript = """
+        #!/usr/bin/python3
+        import sys, os
+        args = sys.argv[1:]
+        if "-o" in args:
+            idx = args.index("-o")
+            tmpl = args[idx+1]
+            out = tmpl.replace("%(ext)s", "webm")
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            with open(out, "wb") as outf:
+                outf.write(b"\\x00" * 256)
+        sys.exit(0)
+        """
+        // Fake ffmpeg that asserts stdin is not a tty and reads EOF without blocking, and logs args
+        let ffStdinScript = """
+        #!/usr/bin/python3
+        import sys, os, struct
+        log_path = "\(logFile.path)"
+        with open(log_path, "a") as f:
+            f.write("ffmpeg " + " ".join(sys.argv[1:]) + "\\n")
+            # Verify stdin is detached: reading should return immediate EOF (empty) not block
+            try:
+                data = sys.stdin.buffer.read(1)
+                if data is None:
+                    data = b""
+                f.write("stdin_bytes: " + str(len(data)) + "\\n")
+                f.write("stdin_is_tty: " + str(sys.stdin.isatty()) + "\\n")
+            except Exception as e:
+                f.write("stdin_error: " + str(e) + "\\n")
+        # Still produce valid wav to allow ingest to succeed
+        out = sys.argv[-1]
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        frames = 256
+        sr = 44100
+        ch = 2
+        bits = 32
+        byte_rate = sr * ch * bits // 8
+        block_align = ch * bits // 8
+        data_size = frames * ch * 4
+        with open(out, "wb") as f:
+            f.write(b"RIFF")
+            f.write(struct.pack("<I", 36 + data_size))
+            f.write(b"WAVE")
+            f.write(b"fmt ")
+            f.write(struct.pack("<IHHIIHH", 16, 3, ch, sr, byte_rate, block_align, bits))
+            f.write(b"data")
+            f.write(struct.pack("<I", data_size))
+            f.write(b"\\x00" * data_size)
+        sys.exit(0)
+        """
+        let ytURL = try makeFakeExecutable(name: "yt-dlp", scriptContent: ytScript)
+        let ffURL = try makeFakeExecutable(name: "ffmpeg", scriptContent: ffStdinScript)
+        defer {
+            try? FileManager.default.removeItem(at: ytURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: ffURL.deletingLastPathComponent())
+        }
+        let client = YouTubeIngestClient(ytDlpURL: ytURL, ffmpegURL: ffURL, cacheBaseURL: cacheBase)
+        let result = try await client.ingest(youTubeURL: validYouTubeURL())
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.path), "mixture.wav should exist when stdin is detached")
+
+        let log = try String(contentsOf: logFile, encoding: .utf8)
+        let lines = log.split(separator: "\n").map(String.init)
+        let ffLine = lines.first(where: { $0.hasPrefix("ffmpeg ") })
+        XCTAssertNotNil(ffLine, "ffmpeg invocation should be logged")
+        XCTAssertTrue(ffLine!.contains("-nostdin"), "ffmpeg must be launched with -nostdin")
+        XCTAssertTrue(ffLine!.hasPrefix("ffmpeg -nostdin"), "ffmpeg -nostdin should be first argument, got: \(ffLine!)")
+
+        // Verify stdin was detached (EOF, not tty, not blocking)
+        let stdinBytesLine = lines.first(where: { $0.hasPrefix("stdin_bytes:") })
+        XCTAssertNotNil(stdinBytesLine, "fake ffmpeg should log stdin_bytes")
+        XCTAssertEqual(stdinBytesLine, "stdin_bytes: 0", "stdin should be detached to EOF (0 bytes), got: \(stdinBytesLine ?? "nil")")
+        let isTtyLine = lines.first(where: { $0.hasPrefix("stdin_is_tty:") })
+        XCTAssertEqual(isTtyLine, "stdin_is_tty: False", "stdin should not be a tty when launched from GUI: \(isTtyLine ?? "nil")")
     }
 
     // MARK: - 2. successful canonical publication

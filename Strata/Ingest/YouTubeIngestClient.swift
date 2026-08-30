@@ -154,7 +154,7 @@ actor YouTubeIngestClient {
 
             // FFmpeg
             let mixtureURL = runDir.appendingPathComponent("mixture.wav")
-            let ffArgs = ["-y", "-i", sourceURL.path, "-ar", "44100", "-ac", "2", "-c:a", "pcm_f32le", mixtureURL.path]
+            let ffArgs = ["-nostdin", "-y", "-i", sourceURL.path, "-ar", "44100", "-ac", "2", "-c:a", "pcm_f32le", mixtureURL.path]
             let ffStatus = try await runTool(toolName: "ffmpeg", executableURL: ffmpegURL, arguments: ffArgs, tailBox: tailBox)
             if ffStatus != 0 {
                 throw YouTubeIngestError.toolFailure(tool: "ffmpeg", exitCode: ffStatus, stderrTail: tailBox.string())
@@ -282,6 +282,7 @@ actor YouTubeIngestClient {
         let process = Process()
         process.executableURL = executableURL
         process.arguments = arguments
+        process.standardInput = FileHandle.nullDevice
         let stderrPipe = Pipe()
         process.standardError = stderrPipe
         process.standardOutput = Pipe()
