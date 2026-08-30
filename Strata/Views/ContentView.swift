@@ -230,6 +230,7 @@ struct InferenceCard: View {
     @Bindable var inferenceController: InferenceController
     @Binding var inferenceInputURL: URL?
     @Binding var showingInferenceImporter: Bool
+    @State private var youTubeURLString = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -254,6 +255,26 @@ struct InferenceCard: View {
                     Text("No file chosen").font(.caption).foregroundStyle(.tertiary)
                     Spacer()
                 }
+            }
+
+            // YouTube URL (M4 minimal)
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("Paste YouTube URL", text: $youTubeURLString)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(inferenceController.isSeparating)
+                    .accessibilityLabel("YouTube URL")
+                    .accessibilityIdentifier("YouTubeURLField")
+                Button {
+                    let trimmed = youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return }
+                    inferenceController.startSeparation(youTubeURL: url)
+                } label: {
+                    Label("Separate from YouTube", systemImage: "link").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
+                .disabled(youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating)
+                .accessibilityIdentifier("SeparateFromYouTubeButton")
             }
 
             // Start / Cancel

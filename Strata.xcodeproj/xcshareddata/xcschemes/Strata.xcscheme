@@ -20,7 +20,7 @@
                ReferencedContainer = "container:Strata.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
-         <BuildActionEntry
+          <BuildActionEntry
             buildForTesting = "YES"
             buildForRunning = "NO"
             buildForProfiling = "NO"
@@ -31,6 +31,20 @@
                BlueprintIdentifier = "F00000000000000000000002"
                BuildableName = "StrataTests.xctest"
                BlueprintName = "StrataTests"
+               ReferencedContainer = "container:Strata.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+          <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "F00000000000000000000003"
+               BuildableName = "StrataUITests.xctest"
+               BlueprintName = "StrataUITests"
                ReferencedContainer = "container:Strata.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -51,6 +65,17 @@
                BlueprintIdentifier = "F00000000000000000000002"
                BuildableName = "StrataTests.xctest"
                BlueprintName = "StrataTests"
+               ReferencedContainer = "container:Strata.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "F00000000000000000000003"
+               BuildableName = "StrataUITests.xctest"
+               BlueprintName = "StrataUITests"
                ReferencedContainer = "container:Strata.xcodeproj">
             </BuildableReference>
          </TestableReference>
