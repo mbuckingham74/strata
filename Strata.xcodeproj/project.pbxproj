@@ -35,6 +35,8 @@
 		A1000000000000000000001A /* YouTubeIngestClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001A /* YouTubeIngestClientTests.swift */; };
 		A1000000000000000000001B /* InferenceControllerYouTubeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001B /* InferenceControllerYouTubeTests.swift */; };
 		A1000000000000000000001D /* InferenceCardYouTubeUITest.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001D /* InferenceCardYouTubeUITest.swift */; };
+		A1000000000000000000001E /* MultiStemAudioTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001E /* MultiStemAudioTransport.swift */; };
+		A1000000000000000000001F /* MultiStemAudioTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001F /* MultiStemAudioTransportTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -68,6 +70,8 @@
 		B1000000000000000000001A /* YouTubeIngestClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeIngestClientTests.swift; sourceTree = "<group>"; };
 		B1000000000000000000001B /* InferenceControllerYouTubeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceControllerYouTubeTests.swift; sourceTree = "<group>"; };
 		B1000000000000000000001D /* InferenceCardYouTubeUITest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceCardYouTubeUITest.swift; sourceTree = "<group>"; };
+		B1000000000000000000001E /* MultiStemAudioTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiStemAudioTransport.swift; sourceTree = "<group>"; };
+		B1000000000000000000001F /* MultiStemAudioTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiStemAudioTransportTests.swift; sourceTree = "<group>"; };
 		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -125,6 +129,7 @@
 			children = (
 				B10000000000000000000002 /* AudioTransport.swift */,
 				B10000000000000000000003 /* PlaybackController.swift */,
+				B1000000000000000000001E /* MultiStemAudioTransport.swift */,
 			);
 			path = Audio;
 			sourceTree = "<group>";
@@ -183,6 +188,7 @@
 				B10000000000000000000018 /* InferenceWorkerSolXHighTests.swift */,
 				B1000000000000000000001A /* YouTubeIngestClientTests.swift */,
 				B1000000000000000000001B /* InferenceControllerYouTubeTests.swift */,
+				B1000000000000000000001F /* MultiStemAudioTransportTests.swift */,
 			);
 			path = StrataTests;
 			sourceTree = "<group>";
@@ -337,6 +343,7 @@
 				A10000000000000000000001 /* StrataApp.swift in Sources */,
 				A10000000000000000000002 /* AudioTransport.swift in Sources */,
 				A10000000000000000000003 /* PlaybackController.swift in Sources */,
+				A1000000000000000000001E /* MultiStemAudioTransport.swift in Sources */,
 				A10000000000000000000004 /* ContentView.swift in Sources */,
 				A10000000000000000000007 /* AppLifecycleDelegate.swift in Sources */,
 				A10000000000000000000013 /* AppTerminationCoordinator.swift in Sources */,
@@ -367,6 +374,7 @@
 				A10000000000000000000018 /* InferenceWorkerSolXHighTests.swift in Sources */,
 				A1000000000000000000001A /* YouTubeIngestClientTests.swift in Sources */,
 				A1000000000000000000001B /* InferenceControllerYouTubeTests.swift in Sources */,
+				A1000000000000000000001F /* MultiStemAudioTransportTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
