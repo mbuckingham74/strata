@@ -2,17 +2,37 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
-    @Bindable var controller: PlaybackController
+    @Bindable var playbackController: PlaybackController
+    @Bindable var inferenceController: InferenceController
+
+    // Backward compat for preview / tests that use single arg: provide convenience init
+    init(playbackController: PlaybackController, inferenceController: InferenceController) {
+        self.playbackController = playbackController
+        self.inferenceController = inferenceController
+    }
+    init(controller: PlaybackController) {
+        self.playbackController = controller
+        self.inferenceController = InferenceController()
+    }
+
     @State private var showingImporter = false
+    @State private var showingInferenceImporter = false
+    @State private var inferenceInputURL: URL?
     @State private var showingError = false
 
     var body: some View {
         NavigationSplitView {
-            SidebarView(controller: controller, showingImporter: $showingImporter)
+            SidebarView(controller: playbackController, showingImporter: $showingImporter)
                 .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 300)
         } detail: {
-            MainWorkspaceView(controller: controller, showingImporter: $showingImporter)
-                .background(Color(nsColor: .underPageBackgroundColor).opacity(0.0)) // placeholder to keep nav
+            MainWorkspaceView(
+                controller: playbackController,
+                showingImporter: $showingImporter,
+                inferenceController: inferenceController,
+                inferenceInputURL: $inferenceInputURL,
+                showingInferenceImporter: $showingInferenceImporter
+            )
+            .background(Color(nsColor: .underPageBackgroundColor).opacity(0.0))
         }
         .fileImporter(
             isPresented: $showingImporter,
@@ -22,38 +42,56 @@ struct ContentView: View {
             switch result {
             case .success(let urls):
                 guard let url = urls.first else { return }
-                // Access security-scoped if needed; fileImporter already grants.
                 let didAccess = url.startAccessingSecurityScopedResource()
                 defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
-                controller.load(url: url)
+                playbackController.load(url: url)
             case .failure(let error):
-                controller.errorMessage = error.localizedDescription
+                playbackController.errorMessage = error.localizedDescription
+            }
+        }
+        .fileImporter(
+            isPresented: $showingInferenceImporter,
+            allowedContentTypes: [.wav, .audio],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                let didAccess = url.startAccessingSecurityScopedResource()
+                defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
+                // Keep a bookmark-safe copy outside sandbox
+                inferenceInputURL = url
+            case .failure(let error):
+                inferenceController.cancel()
+                // Surface via inference error state? Use status
+                break
             }
         }
         .alert("Playback Error", isPresented: Binding(
-            get: { controller.errorMessage != nil },
-            set: { if !$0 { controller.errorMessage = nil } }
+            get: { playbackController.errorMessage != nil },
+            set: { if !$0 { playbackController.errorMessage = nil } }
         )) {
-            Button("OK") { controller.errorMessage = nil }
+            Button("OK") { playbackController.errorMessage = nil }
         } message: {
-            if let msg = controller.errorMessage {
-                Text(msg)
-            }
+            if let msg = playbackController.errorMessage { Text(msg) }
+        }
+        .alert("Inference Error", isPresented: Binding(
+            get: { inferenceController.errorMessage != nil && inferenceController.state != .failed("Cancelled") },
+            set: { if !$0 { /* keep */ } }
+        )) {
+            Button("OK") { }
+        } message: {
+            if let msg = inferenceController.errorMessage { Text(msg) }
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingImporter = true
-                } label: {
-                    Label("Add Audio", systemImage: "plus")
-                }
-                .help("Add Audio")
+                Button { showingImporter = true } label: { Label("Add Audio", systemImage: "plus") }.help("Add Audio")
             }
         }
     }
 }
 
-// MARK: - Sidebar
+// MARK: - Sidebar (unchanged)
 
 struct SidebarView: View {
     @Bindable var controller: PlaybackController
@@ -63,87 +101,32 @@ struct SidebarView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Label("Library", systemImage: "music.note.list")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
+                    .font(.caption).fontWeight(.semibold).foregroundStyle(.secondary).textCase(.uppercase)
                 Spacer()
-                Button {
-                    showingImporter = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(width: 22, height: 22)
-                        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
-                .help("Add Audio")
-                .accessibilityLabel("Add Audio")
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-
+                Button { showingImporter = true } label: {
+                    Image(systemName: "plus").font(.system(size: 11, weight: .semibold)).frame(width: 22, height: 22).background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                }.buttonStyle(.plain).help("Add Audio").accessibilityLabel("Add Audio")
+            }.padding(.horizontal, 14).padding(.vertical, 12)
             Divider().opacity(0.15)
-
             if controller.hasFile, let title = controller.title {
-                ScrollView {
-                    VStack(spacing: 6) {
-                        SidebarEntry(
-                            title: title,
-                            duration: controller.formattedDuration,
-                            isSelected: true
-                        )
-                        .padding(.horizontal, 8)
-                        .padding(.top, 8)
-                    }
-                }
+                ScrollView { VStack(spacing: 6) { SidebarEntry(title: title, duration: controller.formattedDuration, isSelected: true).padding(.horizontal, 8).padding(.top, 8) } }
             } else {
                 VStack(spacing: 12) {
                     Spacer()
-                    Image(systemName: "music.note")
-                        .font(.system(size: 28, weight: .light))
-                        .foregroundStyle(.secondary)
-                    Text("No audio loaded")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    Text("Add a local audio file to begin.")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 20)
-                    Button {
-                        showingImporter = true
-                    } label: {
-                        Text("Add Audio")
-                            .font(.callout.weight(.medium))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
-                    .accessibilityLabel("Add Audio")
+                    Image(systemName: "music.note").font(.system(size: 28, weight: .light)).foregroundStyle(.secondary)
+                    Text("No audio loaded").font(.callout).foregroundStyle(.secondary)
+                    Text("Add a local audio file to begin.").font(.caption).foregroundStyle(.tertiary).multilineTextAlignment(.center).padding(.horizontal, 20)
+                    Button { showingImporter = true } label: { Text("Add Audio").font(.callout.weight(.medium)).padding(.horizontal, 14).padding(.vertical, 6) }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).accessibilityLabel("Add Audio")
                     Spacer()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-
             Spacer(minLength: 0)
-
             HStack(spacing: 6) {
-                Circle()
-                    .fill(Color.green.opacity(0.9))
-                    .frame(width: 6, height: 6)
-                Text("Engine ready · 100% local")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                Circle().fill(Color.green.opacity(0.9)).frame(width: 6, height: 6)
+                Text("Engine ready · 100% local").font(.caption2).foregroundStyle(.secondary)
                 Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(.white.opacity(0.03))
-            .overlay(Divider().opacity(0.1), alignment: .top)
-        }
-        .background(Color(nsColor: .windowBackgroundColor))
+            }.padding(.horizontal, 12).padding(.vertical, 10).background(.white.opacity(0.03)).overlay(Divider().opacity(0.1), alignment: .top)
+        }.background(Color(nsColor: .windowBackgroundColor))
     }
 }
 
@@ -151,38 +134,18 @@ struct SidebarEntry: View {
     let title: String
     let duration: String
     let isSelected: Bool
-
     var body: some View {
         HStack(spacing: 10) {
             ZStack {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color(red: 0.56, green: 0.46, blue: 0.95).opacity(0.22))
-                    .frame(width: 36, height: 36)
-                Image(systemName: "waveform")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color(red: 0.56, green: 0.46, blue: 0.95))
+                RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.56, green: 0.46, blue: 0.95).opacity(0.22)).frame(width: 36, height: 36)
+                Image(systemName: "waveform").font(.system(size: 14, weight: .medium)).foregroundStyle(Color(red: 0.56, green: 0.46, blue: 0.95))
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.callout)
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
-                Text(duration)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(title).font(.callout).lineLimit(1).foregroundStyle(.primary)
+                Text(duration).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? Color.white.opacity(0.08) : Color.clear)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isSelected ? Color.white.opacity(0.08) : Color.clear, lineWidth: 1)
-        )
+        }.padding(.horizontal, 10).padding(.vertical, 8).background(RoundedRectangle(cornerRadius: 8).fill(isSelected ? Color.white.opacity(0.08) : Color.clear)).overlay(RoundedRectangle(cornerRadius: 8).stroke(isSelected ? Color.white.opacity(0.08) : Color.clear, lineWidth: 1))
     }
 }
 
@@ -191,102 +154,175 @@ struct SidebarEntry: View {
 struct MainWorkspaceView: View {
     @Bindable var controller: PlaybackController
     @Binding var showingImporter: Bool
+    @Bindable var inferenceController: InferenceController
+    @Binding var inferenceInputURL: URL?
+    @Binding var showingInferenceImporter: Bool
 
     var body: some View {
         ZStack {
-            // Dark main workspace
-            Color(red: 0.09, green: 0.09, blue: 0.11)
-                .ignoresSafeArea()
-
-            if controller.hasFile {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        // Selected-audio header
+            Color(red: 0.09, green: 0.09, blue: 0.11).ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Selected-audio header
+                    if controller.hasFile {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(controller.title ?? "Untitled")
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
+                            Text(controller.title ?? "Untitled").font(.title3.weight(.semibold)).foregroundStyle(.white).lineLimit(1)
                             HStack(spacing: 6) {
-                                Text(controller.formattedDuration)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text("·")
-                                    .foregroundStyle(.tertiary)
-                                Text("Original mix")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text("·")
-                                    .foregroundStyle(.tertiary)
-                                Text("Local file")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                Text(controller.formattedDuration).font(.caption).foregroundStyle(.secondary)
+                                Text("·").foregroundStyle(.tertiary)
+                                Text("Original mix").font(.caption).foregroundStyle(.secondary)
+                                Text("·").foregroundStyle(.tertiary)
+                                Text("Local file").font(.caption).foregroundStyle(.secondary)
                             }
-                        }
-                        .padding(.horizontal, 24)
-                        .padding(.top, 24)
-
-                        TransportCard(controller: controller)
-                            .padding(.horizontal, 24)
-
-                        // One Original mix row
+                        }.padding(.horizontal, 24).padding(.top, 24)
+                        TransportCard(controller: controller).padding(.horizontal, 24)
                         VStack(alignment: .leading, spacing: 0) {
-                            Text("Tracks")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-                                .padding(.horizontal, 24)
-                                .padding(.bottom, 8)
-
-                            OriginalMixRow(controller: controller)
-                                .padding(.horizontal, 24)
+                            Text("Tracks").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase).padding(.horizontal, 24).padding(.bottom, 8)
+                            OriginalMixRow(controller: controller).padding(.horizontal, 24)
                         }
-                        .padding(.bottom, 24)
+                    } else {
+                        EmptyStateView(showingImporter: $showingImporter).frame(height: 260).padding(.top, 20)
                     }
+
+                    // M3 Inference Bridge (minimal proof UI)
+                    InferenceCard(
+                        inferenceController: inferenceController,
+                        inferenceInputURL: $inferenceInputURL,
+                        showingInferenceImporter: $showingInferenceImporter
+                    ).padding(.horizontal, 24).padding(.bottom, 24)
                 }
-            } else {
-                EmptyStateView(showingImporter: $showingImporter)
             }
         }
     }
 }
 
+// Fallback for old call site
+extension MainWorkspaceView {
+    init(controller: PlaybackController, showingImporter: Binding<Bool>) {
+        self.controller = controller
+        self._showingImporter = showingImporter
+        self.inferenceController = InferenceController()
+        self._inferenceInputURL = .constant(nil)
+        self._showingInferenceImporter = .constant(false)
+    }
+}
+
 struct EmptyStateView: View {
     @Binding var showingImporter: Bool
-
     var body: some View {
         VStack(spacing: 20) {
             ZStack {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.white.opacity(0.06))
-                    .frame(width: 72, height: 72)
-                Image(systemName: "music.note")
-                    .font(.system(size: 30, weight: .light))
-                    .foregroundStyle(Color(red: 0.56, green: 0.46, blue: 0.95))
+                RoundedRectangle(cornerRadius: 16).fill(Color.white.opacity(0.06)).frame(width: 72, height: 72)
+                Image(systemName: "music.note").font(.system(size: 30, weight: .light)).foregroundStyle(Color(red: 0.56, green: 0.46, blue: 0.95))
             }
             VStack(spacing: 8) {
-                Text("No audio selected")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.white)
-                Text("Add a local audio file to play, pause, and seek through AVAudioEngine.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 360)
+                Text("No audio selected").font(.title3.weight(.semibold)).foregroundStyle(.white)
+                Text("Add a local audio file to play, pause, and seek through AVAudioEngine.").font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 360)
             }
-            Button {
-                showingImporter = true
-            } label: {
-                Label("Add Audio", systemImage: "plus")
-                    .font(.callout.weight(.medium))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+            Button { showingImporter = true } label: { Label("Add Audio", systemImage: "plus").font(.callout.weight(.medium)).padding(.horizontal, 16).padding(.vertical, 8) }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).accessibilityLabel("Add Audio")
+        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Inference Card (M3 minimal)
+
+struct InferenceCard: View {
+    @Bindable var inferenceController: InferenceController
+    @Binding var inferenceInputURL: URL?
+    @Binding var showingInferenceImporter: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label("Separation", systemImage: "waveform.path.badge.magnifyingglass").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
+                Spacer()
+                if inferenceController.isSeparating {
+                    ProgressView().scaleEffect(0.7).tint(.white)
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
-            .accessibilityLabel("Add Audio")
+            Text("Local BS-RoFormer via MLX — proves Swift ownership of the inference worker.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+
+            // Input picker
+            HStack(spacing: 10) {
+                Button { showingInferenceImporter = true } label: {
+                    Label(inferenceInputURL == nil ? "Choose WAV" : "Change WAV", systemImage: "doc.badge.ellipsis").font(.callout.weight(.medium))
+                }.buttonStyle(.bordered).tint(.white).disabled(inferenceController.isSeparating)
+                if let url = inferenceInputURL {
+                    Text(url.lastPathComponent).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                } else {
+                    Text("No file chosen").font(.caption).foregroundStyle(.tertiary)
+                    Spacer()
+                }
+            }
+
+            // Start / Cancel
+            HStack(spacing: 10) {
+                Button {
+                    guard let url = inferenceInputURL else { return }
+                    inferenceController.startSeparation(inputURL: url)
+                } label: {
+                    Label("Separate", systemImage: "play.fill").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).disabled(inferenceInputURL == nil || inferenceController.isSeparating)
+
+                if inferenceController.isSeparating {
+                    Button(role: .destructive) { inferenceController.cancel() } label: { Text("Cancel").font(.callout.weight(.medium)) }.buttonStyle(.bordered).tint(.red)
+                }
+                Spacer()
+                Text(statusText).font(.caption).foregroundStyle(statusColor)
+            }
+
+            // Failure
+            if case .failed(let msg) = inferenceController.state, msg != "Cancelled" {
+                Text(msg).font(.caption).foregroundStyle(.red.opacity(0.9)).fixedSize(horizontal: false, vertical: true).padding(10).background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            }
+
+            // Completed stems
+            if case .completed = inferenceController.state, let result = inferenceController.result {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Stems — 6 validated").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
+                    ForEach(result.sortedStems, id: \.name) { stem in
+                        HStack(spacing: 10) {
+                            Image(systemName: icon(for: stem.name)).font(.caption).foregroundStyle(.secondary).frame(width: 16)
+                            Text(stem.name.rawValue).font(.callout.weight(.medium)).foregroundStyle(.white).frame(width: 60, alignment: .leading)
+                            Text(stem.url.lastPathComponent).font(.caption.monospaced()).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
+                            Spacer()
+                            Text("\(stem.frameCount) frames").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                        }.padding(.horizontal, 10).padding(.vertical, 8).background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    Text(result.jobDirectoryURL.path).font(.caption2.monospaced()).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
+                }.padding(.top, 4)
+            }
+        }.padding(16).background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.06)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1)))
+    }
+
+    private var statusText: String {
+        switch inferenceController.state {
+        case .idle: return "Ready"
+        case .loadingModel: return "Loading model…"
+        case .separating: return "Separating…"
+        case .completed: return "Complete"
+        case .failed(let m): return m
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    private var statusColor: Color {
+        switch inferenceController.state {
+        case .idle: return .secondary
+        case .loadingModel, .separating: return Color(red: 0.56, green: 0.46, blue: 0.95)
+        case .completed: return .green
+        case .failed(let m) where m == "Cancelled": return .secondary
+        case .failed: return .red
+        }
+    }
+    private func icon(for stem: StemName) -> String {
+        switch stem {
+        case .vocals: return "mic.fill"
+        case .drums: return "drum.fill"
+        case .bass: return "guitars.fill"
+        case .guitar: return "guitars"
+        case .piano: return "pianokeys"
+        case .other: return "music.note"
+        }
     }
 }
 
@@ -296,96 +332,24 @@ struct TransportCard: View {
     @Bindable var controller: PlaybackController
     @State private var sliderValue: Double = 0
     @State private var isDragging = false
-
     var body: some View {
         VStack(spacing: 14) {
-            // Progress slider with time labels
             VStack(spacing: 6) {
                 HStack {
-                    Text(controller.formattedTime(isDragging ? sliderValue : controller.currentTime))
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .frame(width: 48, alignment: .leading)
-                    Slider(
-                        value: Binding(
-                            get: { isDragging ? sliderValue : controller.currentTime },
-                            set: { newVal in
-                                sliderValue = newVal
-                                if isDragging {
-                                    // Live scrub feedback without committing seek until end? But spec wants seek on commit.
-                                }
-                            }
-                        ),
-                        in: 0...(controller.duration > 0 ? controller.duration : 1),
-                        onEditingChanged: { editing in
-                            isDragging = editing
-                            if editing {
-                                sliderValue = controller.currentTime
-                            } else {
-                                controller.seek(to: sliderValue)
-                            }
-                        }
-                    )
-                    .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
-                    .disabled(!controller.hasFile)
-                    .accessibilityLabel("Seek")
-
-                    Text(controller.formattedDuration)
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .frame(width: 48, alignment: .trailing)
+                    Text(controller.formattedTime(isDragging ? sliderValue : controller.currentTime)).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 48, alignment: .leading)
+                    Slider(value: Binding(get: { isDragging ? sliderValue : controller.currentTime }, set: { newVal in sliderValue = newVal }), in: 0...(controller.duration > 0 ? controller.duration : 1), onEditingChanged: { editing in isDragging = editing; if editing { sliderValue = controller.currentTime } else { controller.seek(to: sliderValue) } }).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).disabled(!controller.hasFile).accessibilityLabel("Seek")
+                    Text(controller.formattedDuration).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 48, alignment: .trailing)
                 }
             }
-
             HStack {
-                Button {
-                    if controller.isPlaying {
-                        controller.pause()
-                    } else {
-                        controller.play()
-                    }
-                } label: {
-                    Image(systemName: controller.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .background(Color(red: 0.56, green: 0.46, blue: 0.95), in: Circle())
-                        .shadow(color: Color(red: 0.56, green: 0.46, blue: 0.95).opacity(0.4), radius: 8, y: 2)
-                }
-                .buttonStyle(.plain)
-                .disabled(!controller.hasFile)
-                .accessibilityLabel(controller.isPlaying ? "Pause" : "Play")
-
+                Button { if controller.isPlaying { controller.pause() } else { controller.play() } } label: { Image(systemName: controller.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).frame(width: 36, height: 36).background(Color(red: 0.56, green: 0.46, blue: 0.95), in: Circle()).shadow(color: Color(red: 0.56, green: 0.46, blue: 0.95).opacity(0.4), radius: 8, y: 2) }.buttonStyle(.plain).disabled(!controller.hasFile).accessibilityLabel(controller.isPlaying ? "Pause" : "Play")
                 Spacer()
-
-                // Subtle status
                 HStack(spacing: 6) {
-                    Circle()
-                        .fill(controller.isPlaying ? Color.green : Color.secondary.opacity(0.4))
-                        .frame(width: 6, height: 6)
-                    Text(controller.isPlaying ? "Playing" : "Paused")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Circle().fill(controller.isPlaying ? Color.green : Color.secondary.opacity(0.4)).frame(width: 6, height: 6)
+                    Text(controller.isPlaying ? "Playing" : "Paused").font(.caption).foregroundStyle(.secondary)
                 }
             }
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color.white.opacity(0.06))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                )
-        )
-        .onChange(of: controller.currentTime) { _, newValue in
-            if !isDragging {
-                sliderValue = newValue
-            }
-        }
-        .onAppear {
-            sliderValue = controller.currentTime
-        }
+        }.padding(16).background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.06)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1))).onChange(of: controller.currentTime) { _, newValue in if !isDragging { sliderValue = newValue } }.onAppear { sliderValue = controller.currentTime }
     }
 }
 
@@ -393,47 +357,23 @@ struct TransportCard: View {
 
 struct OriginalMixRow: View {
     @Bindable var controller: PlaybackController
-
     var body: some View {
         HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(red: 0.56, green: 0.46, blue: 0.95).opacity(0.18))
-                    .frame(width: 32, height: 32)
-                Image(systemName: "waveform.path.ecg")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color(red: 0.56, green: 0.46, blue: 0.95))
-            }
-            Text("Original mix")
-                .font(.callout.weight(.medium))
-                .foregroundStyle(.white)
+            ZStack { RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.56, green: 0.46, blue: 0.95).opacity(0.18)).frame(width: 32, height: 32); Image(systemName: "waveform.path.ecg").font(.system(size: 14, weight: .medium)).foregroundStyle(Color(red: 0.56, green: 0.46, blue: 0.95)) }
+            Text("Original mix").font(.callout.weight(.medium)).foregroundStyle(.white)
             Spacer()
-            Text(controller.formattedDuration)
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-            // No mute/solo/export — intentionally minimal
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.white.opacity(0.07), lineWidth: 1)
-                )
-        )
+            Text(controller.formattedDuration).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+        }.padding(.horizontal, 14).padding(.vertical, 12).background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.05)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.07), lineWidth: 1)))
     }
 }
 
 #Preview {
     let fake = FakePreviewTransport()
     let ctrl = PlaybackController(transport: fake)
-    ContentView(controller: ctrl)
-        .frame(width: 900, height: 600)
+    let ic = InferenceController()
+    ContentView(playbackController: ctrl, inferenceController: ic).frame(width: 900, height: 600)
 }
 
-// Lightweight preview fake to satisfy preview without needing real file.
 @MainActor
 private final class FakePreviewTransport: AudioTransport {
     var duration: TimeInterval = 187

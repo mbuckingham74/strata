@@ -13,6 +13,24 @@
 		A10000000000000000000004 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* ContentView.swift */; };
 		A10000000000000000000005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* Assets.xcassets */; };
 		A10000000000000000000006 /* PlaybackControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* PlaybackControllerTests.swift */; };
+		A10000000000000000000007 /* AppLifecycleDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* AppLifecycleDelegate.swift */; };
+		A10000000000000000000008 /* InferenceProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* InferenceProtocol.swift */; };
+		A10000000000000000000009 /* InferenceWorkerStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* InferenceWorkerStateMachine.swift */; };
+		A1000000000000000000000A /* SeparationResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* SeparationResult.swift */; };
+		A1000000000000000000000B /* WorkerLaunchConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* WorkerLaunchConfiguration.swift */; };
+		A1000000000000000000000C /* InferenceWorkerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000C /* InferenceWorkerClient.swift */; };
+		A1000000000000000000000D /* InferenceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* InferenceController.swift */; };
+		A1000000000000000000000E /* InferenceProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000E /* InferenceProtocolTests.swift */; };
+		A1000000000000000000000F /* InferenceWorkerStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000F /* InferenceWorkerStateMachineTests.swift */; };
+		A10000000000000000000010 /* SeparationResultTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000010 /* SeparationResultTests.swift */; };
+		A10000000000000000000011 /* InferenceWorkerClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* InferenceWorkerClientTests.swift */; };
+		A10000000000000000000012 /* InferenceWorkerRealIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* InferenceWorkerRealIntegrationTests.swift */; };
+		A10000000000000000000013 /* AppTerminationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* AppTerminationCoordinator.swift */; };
+		A10000000000000000000014 /* AppTerminationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* AppTerminationCoordinatorTests.swift */; };
+		A10000000000000000000015 /* TrustedInferenceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000015 /* TrustedInferenceIdentity.swift */; };
+		A10000000000000000000016 /* SeparationResultTrustedIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000016 /* SeparationResultTrustedIdentityTests.swift */; };
+		A10000000000000000000017 /* InferenceControllerShutdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000017 /* InferenceControllerShutdownTests.swift */; };
+		A10000000000000000000018 /* InferenceWorkerSolXHighTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000018 /* InferenceWorkerSolXHighTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -24,6 +42,24 @@
 		B10000000000000000000006 /* PlaybackControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackControllerTests.swift; sourceTree = "<group>"; };
 		C00000000000000000000001 /* Demux.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Demux.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C00000000000000000000002 /* DemuxTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DemuxTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10000000000000000000007 /* AppLifecycleDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLifecycleDelegate.swift; sourceTree = "<group>"; };
+		B10000000000000000000008 /* InferenceProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceProtocol.swift; sourceTree = "<group>"; };
+		B10000000000000000000009 /* InferenceWorkerStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceWorkerStateMachine.swift; sourceTree = "<group>"; };
+		B1000000000000000000000A /* SeparationResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeparationResult.swift; sourceTree = "<group>"; };
+		B1000000000000000000000B /* WorkerLaunchConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerLaunchConfiguration.swift; sourceTree = "<group>"; };
+		B1000000000000000000000C /* InferenceWorkerClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceWorkerClient.swift; sourceTree = "<group>"; };
+		B1000000000000000000000D /* InferenceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceController.swift; sourceTree = "<group>"; };
+		B1000000000000000000000E /* InferenceProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceProtocolTests.swift; sourceTree = "<group>"; };
+		B1000000000000000000000F /* InferenceWorkerStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceWorkerStateMachineTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000010 /* SeparationResultTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeparationResultTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000011 /* InferenceWorkerClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceWorkerClientTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000012 /* InferenceWorkerRealIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceWorkerRealIntegrationTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000013 /* AppTerminationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTerminationCoordinator.swift; sourceTree = "<group>"; };
+		B10000000000000000000014 /* AppTerminationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTerminationCoordinatorTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000015 /* TrustedInferenceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustedInferenceIdentity.swift; sourceTree = "<group>"; };
+		B10000000000000000000016 /* SeparationResultTrustedIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeparationResultTrustedIdentityTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000017 /* InferenceControllerShutdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceControllerShutdownTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000018 /* InferenceWorkerSolXHighTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceWorkerSolXHighTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -57,6 +93,8 @@
 			isa = PBXGroup;
 			children = (
 				E00000000000000000000003 /* Audio */,
+				E00000000000000000000008 /* Application */,
+				E00000000000000000000009 /* Inference */,
 				E00000000000000000000004 /* Views */,
 				B10000000000000000000001 /* DemuxApp.swift */,
 				B10000000000000000000005 /* Assets.xcassets */,
@@ -81,10 +119,42 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		E00000000000000000000008 /* Application */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000007 /* AppLifecycleDelegate.swift */,
+				B10000000000000000000013 /* AppTerminationCoordinator.swift */,
+			);
+			path = Application;
+			sourceTree = "<group>";
+		};
+		E00000000000000000000009 /* Inference */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000008 /* InferenceProtocol.swift */,
+				B10000000000000000000009 /* InferenceWorkerStateMachine.swift */,
+				B1000000000000000000000A /* SeparationResult.swift */,
+				B1000000000000000000000B /* WorkerLaunchConfiguration.swift */,
+				B1000000000000000000000C /* InferenceWorkerClient.swift */,
+				B1000000000000000000000D /* InferenceController.swift */,
+				B10000000000000000000015 /* TrustedInferenceIdentity.swift */,
+			);
+			path = Inference;
+			sourceTree = "<group>";
+		};
 		E00000000000000000000006 /* DemuxTests */ = {
 			isa = PBXGroup;
 			children = (
 				B10000000000000000000006 /* PlaybackControllerTests.swift */,
+				B1000000000000000000000E /* InferenceProtocolTests.swift */,
+				B1000000000000000000000F /* InferenceWorkerStateMachineTests.swift */,
+				B10000000000000000000010 /* SeparationResultTests.swift */,
+				B10000000000000000000011 /* InferenceWorkerClientTests.swift */,
+				B10000000000000000000012 /* InferenceWorkerRealIntegrationTests.swift */,
+				B10000000000000000000014 /* AppTerminationCoordinatorTests.swift */,
+				B10000000000000000000016 /* SeparationResultTrustedIdentityTests.swift */,
+				B10000000000000000000017 /* InferenceControllerShutdownTests.swift */,
+				B10000000000000000000018 /* InferenceWorkerSolXHighTests.swift */,
 			);
 			path = DemuxTests;
 			sourceTree = "<group>";
@@ -201,6 +271,15 @@
 				A10000000000000000000002 /* AudioTransport.swift in Sources */,
 				A10000000000000000000003 /* PlaybackController.swift in Sources */,
 				A10000000000000000000004 /* ContentView.swift in Sources */,
+				A10000000000000000000007 /* AppLifecycleDelegate.swift in Sources */,
+				A10000000000000000000013 /* AppTerminationCoordinator.swift in Sources */,
+				A10000000000000000000008 /* InferenceProtocol.swift in Sources */,
+				A10000000000000000000009 /* InferenceWorkerStateMachine.swift in Sources */,
+				A1000000000000000000000A /* SeparationResult.swift in Sources */,
+				A1000000000000000000000B /* WorkerLaunchConfiguration.swift in Sources */,
+				A1000000000000000000000C /* InferenceWorkerClient.swift in Sources */,
+				A1000000000000000000000D /* InferenceController.swift in Sources */,
+				A10000000000000000000015 /* TrustedInferenceIdentity.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -209,6 +288,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000006 /* PlaybackControllerTests.swift in Sources */,
+				A1000000000000000000000E /* InferenceProtocolTests.swift in Sources */,
+				A1000000000000000000000F /* InferenceWorkerStateMachineTests.swift in Sources */,
+				A10000000000000000000010 /* SeparationResultTests.swift in Sources */,
+				A10000000000000000000011 /* InferenceWorkerClientTests.swift in Sources */,
+				A10000000000000000000012 /* InferenceWorkerRealIntegrationTests.swift in Sources */,
+				A10000000000000000000014 /* AppTerminationCoordinatorTests.swift in Sources */,
+				A10000000000000000000016 /* SeparationResultTrustedIdentityTests.swift in Sources */,
+				A10000000000000000000017 /* InferenceControllerShutdownTests.swift in Sources */,
+				A10000000000000000000018 /* InferenceWorkerSolXHighTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
