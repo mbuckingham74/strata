@@ -7,12 +7,16 @@ protocol StemAudioTransport: AnyObject {
     var duration: TimeInterval { get }
     var isPlaying: Bool { get }
     var currentTime: TimeInterval { get }
+    var mutedStems: Set<StemName> { get }
+    var soloedStems: Set<StemName> { get }
     var onCompletion: (() -> Void)? { get set }
     func load(result: SeparationResult) throws
     func play()
     func pause()
     func seek(to time: TimeInterval)
     func stop()
+    func setMuted(_ muted: Bool, for stem: StemName)
+    func setSoloed(_ soloed: Bool, for stem: StemName)
 }
 
 extension MultiStemAudioTransport: StemAudioTransport {}
@@ -30,6 +34,8 @@ final class StemPlaybackController {
     var duration: TimeInterval = 0
     var currentTime: TimeInterval = 0
     var isPlaying: Bool = false
+    private(set) var mutedStems: Set<StemName>
+    private(set) var soloedStems: Set<StemName>
     var errorMessage: String?
 
     var hasStems: Bool { result != nil }
@@ -42,6 +48,8 @@ final class StemPlaybackController {
 
     init(transport: StemAudioTransport) {
         self.transport = transport
+        self.mutedStems = transport.mutedStems
+        self.soloedStems = transport.soloedStems
         self.transport.onCompletion = { [weak self] in
             guard let self else { return }
             let captured = self.sessionGeneration
@@ -65,6 +73,8 @@ final class StemPlaybackController {
         }
         sessionGeneration &+= 1
         errorMessage = nil
+        mutedStems.removeAll()
+        soloedStems.removeAll()
 
         do {
             try transport.load(result: result)
@@ -78,6 +88,8 @@ final class StemPlaybackController {
             duration = transport.duration
             currentTime = 0
             isPlaying = false
+            mutedStems = transport.mutedStems
+            soloedStems = transport.soloedStems
             stopTimer()
         } catch {
             self.result = nil
@@ -129,6 +141,28 @@ final class StemPlaybackController {
 
     func stop() {
         stopSession()
+    }
+
+    // MARK: - Stem Audibility
+
+    func setMuted(_ muted: Bool, for stem: StemName) {
+        guard hasStems else { return }
+        transport.setMuted(muted, for: stem)
+        mutedStems = transport.mutedStems
+    }
+
+    func setSoloed(_ soloed: Bool, for stem: StemName) {
+        guard hasStems else { return }
+        transport.setSoloed(soloed, for: stem)
+        soloedStems = transport.soloedStems
+    }
+
+    func toggleMute(for stem: StemName) {
+        setMuted(!mutedStems.contains(stem), for: stem)
+    }
+
+    func toggleSolo(for stem: StemName) {
+        setSoloed(!soloedStems.contains(stem), for: stem)
     }
 
     // MARK: - Completion

@@ -12,6 +12,7 @@ final class MultiStemAudioTransport {
     private let engine = AVAudioEngine()
     private var players: [AVAudioPlayerNode] = []
     private var files: [AVAudioFile] = [] // parallel to players, sorted by StemName rawValue
+    private var stemNames: [StemName] = [] // parallel to players and files
     private var sampleRate: Double = 44_100
     private var totalFrames: AVAudioFramePosition = 0
     private var seekFrame: AVAudioFramePosition = 0
@@ -19,6 +20,9 @@ final class MultiStemAudioTransport {
     private var _isPlaying = false
     private var scheduleGeneration: UInt64 = 0
     private var lastCompletedGeneration: UInt64?
+
+    private(set) var mutedStems: Set<StemName> = []
+    private(set) var soloedStems: Set<StemName> = []
 
     /// Exposed for testing: current schedule generation.
     var currentGeneration: UInt64 { scheduleGeneration }
@@ -67,6 +71,9 @@ final class MultiStemAudioTransport {
         }
         players.removeAll()
         files.removeAll()
+        stemNames.removeAll()
+        mutedStems.removeAll()
+        soloedStems.removeAll()
         sampleRate = 44_100
         totalFrames = 0
         seekFrame = 0
@@ -138,12 +145,13 @@ final class MultiStemAudioTransport {
         seekFrame = 0
         needsSchedule = true
 
-        for (_, file) in opened {
+        for (name, file) in opened {
             let player = AVAudioPlayerNode()
             engine.attach(player)
             engine.connect(player, to: engine.mainMixerNode, format: file.processingFormat)
             players.append(player)
             files.append(file)
+            stemNames.append(name)
         }
         engine.prepare()
     }
@@ -246,7 +254,40 @@ final class MultiStemAudioTransport {
         needsSchedule = true
     }
 
+    // MARK: - Stem Audibility
+
+    func setMuted(_ muted: Bool, for stem: StemName) {
+        if muted {
+            mutedStems.insert(stem)
+        } else {
+            mutedStems.remove(stem)
+        }
+        applyStemAudibility()
+    }
+
+    func setSoloed(_ soloed: Bool, for stem: StemName) {
+        if soloed {
+            soloedStems.insert(stem)
+        } else {
+            soloedStems.remove(stem)
+        }
+        applyStemAudibility()
+    }
+
+    func isAudible(_ stem: StemName) -> Bool {
+        if !soloedStems.isEmpty {
+            return soloedStems.contains(stem)
+        }
+        return !mutedStems.contains(stem)
+    }
+
     // MARK: - Private
+
+    private func applyStemAudibility() {
+        for (stem, player) in zip(stemNames, players) {
+            player.volume = isAudible(stem) ? 1 : 0
+        }
+    }
 
     private func futureHostTime(delaySeconds: Double) -> AVAudioTime? {
         var info = mach_timebase_info_data_t()

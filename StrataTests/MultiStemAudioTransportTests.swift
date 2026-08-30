@@ -61,6 +61,43 @@ final class MultiStemAudioTransportTests: XCTestCase {
 
     // MARK: - Tests
 
+    func testMuteAndSoloAudibilitySemanticsDoNotChangePlaybackSchedule() {
+        let sut = MultiStemAudioTransport()
+        let generation = sut.currentGeneration
+
+        XCTAssertTrue(StemName.allCases.allSatisfy(sut.isAudible))
+
+        sut.setMuted(true, for: .vocals)
+        XCTAssertEqual(sut.mutedStems, [.vocals])
+        XCTAssertFalse(sut.isAudible(.vocals))
+        XCTAssertTrue(sut.isAudible(.drums))
+
+        sut.setSoloed(true, for: .vocals)
+        XCTAssertEqual(sut.mutedStems, [.vocals], "Solo must preserve mute state")
+        XCTAssertTrue(sut.isAudible(.vocals), "Solo temporarily overrides mute")
+        XCTAssertFalse(sut.isAudible(.drums))
+
+        sut.setSoloed(true, for: .drums)
+        XCTAssertEqual(sut.soloedStems, [.vocals, .drums])
+        XCTAssertTrue(sut.isAudible(.vocals))
+        XCTAssertTrue(sut.isAudible(.drums))
+        XCTAssertFalse(sut.isAudible(.bass))
+
+        sut.setSoloed(false, for: .vocals)
+        XCTAssertFalse(sut.isAudible(.vocals))
+        XCTAssertTrue(sut.isAudible(.drums))
+
+        sut.setSoloed(false, for: .drums)
+        XCTAssertTrue(sut.soloedStems.isEmpty)
+        XCTAssertFalse(sut.isAudible(.vocals), "Preserved mute must apply after solo clears")
+        XCTAssertTrue(sut.isAudible(.drums))
+
+        sut.setMuted(false, for: .vocals)
+        XCTAssertTrue(sut.isAudible(.vocals))
+        XCTAssertEqual(sut.currentGeneration, generation, "Audibility changes must not reschedule playback")
+        XCTAssertFalse(sut.isPlaying)
+    }
+
     func testLoadValidResultSetsDurationAndSharedPosition() throws {
         let sc = try buildValidResult(frames: 8820)
         defer { try? FileManager.default.removeItem(at: sc.base) }

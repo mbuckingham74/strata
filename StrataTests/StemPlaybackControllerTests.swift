@@ -9,6 +9,8 @@ final class FakeStemTransport: StemAudioTransport {
     var duration: TimeInterval
     var isPlaying: Bool = false
     var currentTime: TimeInterval = 0
+    private(set) var mutedStems: Set<StemName> = []
+    private(set) var soloedStems: Set<StemName> = []
     var onCompletion: (() -> Void)?
 
     var loadCallCount = 0
@@ -57,6 +59,8 @@ final class FakeStemTransport: StemAudioTransport {
         activeGeneration = 0
         currentTime = 0
         isPlaying = false
+        mutedStems.removeAll()
+        soloedStems.removeAll()
         lastScheduledFramesToPlay = nil
         didScheduleZeroLength = false
     }
@@ -124,6 +128,22 @@ final class FakeStemTransport: StemAudioTransport {
         activeGeneration = 0
         lastScheduledFramesToPlay = nil
         didScheduleZeroLength = false
+    }
+
+    func setMuted(_ muted: Bool, for stem: StemName) {
+        if muted {
+            mutedStems.insert(stem)
+        } else {
+            mutedStems.remove(stem)
+        }
+    }
+
+    func setSoloed(_ soloed: Bool, for stem: StemName) {
+        if soloed {
+            soloedStems.insert(stem)
+        } else {
+            soloedStems.remove(stem)
+        }
     }
 
     func triggerCompletion() {
@@ -250,6 +270,47 @@ final class StemPlaybackControllerTests: XCTestCase {
         sut.load(result: good)
         XCTAssertNil(sut.errorMessage)
         XCTAssertEqual(sut.title, "good")
+    }
+
+    func testExposesMuteAndSoloStateAndOperations() {
+        let fake = FakeStemTransport()
+        let sut = StemPlaybackController(transport: fake)
+
+        sut.setMuted(true, for: .vocals)
+        sut.setSoloed(true, for: .drums)
+        XCTAssertTrue(sut.mutedStems.isEmpty)
+        XCTAssertTrue(sut.soloedStems.isEmpty)
+
+        sut.load(result: makeDummyResult())
+        sut.setMuted(true, for: .vocals)
+        sut.setSoloed(true, for: .drums)
+        sut.toggleSolo(for: .bass)
+
+        XCTAssertEqual(sut.mutedStems, [.vocals])
+        XCTAssertEqual(sut.soloedStems, [.drums, .bass])
+        XCTAssertEqual(fake.mutedStems, sut.mutedStems)
+        XCTAssertEqual(fake.soloedStems, sut.soloedStems)
+
+        sut.toggleMute(for: .vocals)
+        sut.setSoloed(false, for: .drums)
+
+        XCTAssertTrue(sut.mutedStems.isEmpty)
+        XCTAssertEqual(sut.soloedStems, [.bass])
+    }
+
+    func testLoadingNewResultClearsMuteAndSoloState() {
+        let fake = FakeStemTransport()
+        let sut = StemPlaybackController(transport: fake)
+        sut.load(result: makeDummyResult(jobId: "first"))
+        sut.setMuted(true, for: .vocals)
+        sut.setSoloed(true, for: .drums)
+
+        sut.load(result: makeDummyResult(jobId: "second"))
+
+        XCTAssertTrue(sut.mutedStems.isEmpty)
+        XCTAssertTrue(sut.soloedStems.isEmpty)
+        XCTAssertTrue(fake.mutedStems.isEmpty)
+        XCTAssertTrue(fake.soloedStems.isEmpty)
     }
 
     // 3. Play updates state
