@@ -1,5 +1,5 @@
 import XCTest
-@testable import Demux
+@testable import Strata
 import Foundation
 import CryptoKit
 import AVFoundation
@@ -456,7 +456,7 @@ final class SeparationResultTests: XCTestCase {
         let b = URL(fileURLWithPath: "/private/tmp").standardizedFileURL.resolvingSymlinksInPath().path
         XCTAssertEqual(a, b)
         // Real file under /tmp should resolve to same object via /private/tmp
-        let fileA = URL(fileURLWithPath: "/tmp").appendingPathComponent("demux-canonical-test-\(UUID().uuidString)")
+        let fileA = URL(fileURLWithPath: "/tmp").appendingPathComponent("strata-canonical-test-\(UUID().uuidString)")
         try Data("x".utf8).write(to: fileA)
         defer { try? FileManager.default.removeItem(at: fileA) }
         let fileB = URL(fileURLWithPath: "/private/tmp").appendingPathComponent(fileA.lastPathComponent)

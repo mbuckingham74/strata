@@ -1,5 +1,5 @@
 import XCTest
-@testable import Demux
+@testable import Strata
 import Foundation
 import CryptoKit
 import AVFoundation
@@ -302,7 +302,7 @@ for line in sys.stdin:
     // MARK: - Fresh root harness §9
 
     func testArbitraryWorkerRootDrivesLaunch() throws {
-        let tmpRoot = FileManager.default.temporaryDirectory.appendingPathComponent("demux-m3-worker-\(UUID().uuidString)")
+        let tmpRoot = FileManager.default.temporaryDirectory.appendingPathComponent("strata-m3-worker-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tmpRoot, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmpRoot) }
         let venvBin = tmpRoot.appendingPathComponent(".venv/bin")
@@ -316,9 +316,9 @@ for line in sys.stdin:
         let config = try WorkerLaunchConfiguration.resolved(workerDirectoryOverride: tmpRoot.path, isDebug: true)
         XCTAssertEqual(config.processExecutableURL.resolvingSymlinksInPath().path, tmpRoot.appendingPathComponent(".venv/bin/python3").resolvingSymlinksInPath().path)
         XCTAssertEqual(config.processCurrentDirectoryURL.resolvingSymlinksInPath().path, tmpRoot.resolvingSymlinksInPath().path)
-        XCTAssertFalse(config.processExecutableURL.path.contains("/private/tmp/demux-m3-worker"))
+        XCTAssertFalse(config.processExecutableURL.path.contains("/private/tmp/strata-m3-worker"))
         // Ensure no fallback to fixed path
-        XCTAssertNotEqual(tmpRoot.path, "/private/tmp/demux-m3-worker")
+        XCTAssertNotEqual(tmpRoot.path, "/private/tmp/strata-m3-worker")
     }
 
     func testMissingSentinelWorkerRootFailsWithoutFallback() {

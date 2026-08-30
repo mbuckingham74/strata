@@ -1,5 +1,5 @@
 import XCTest
-@testable import Demux
+@testable import Strata
 import Foundation
 
 final class InferenceProtocolTests: XCTestCase {

@@ -113,7 +113,7 @@ struct WorkerLaunchConfiguration: Sendable, Equatable {
             if parent == url { break }
             url = parent
         }
-        // Also try SRCROOT derived from project structure: locate Demux.xcodeproj parent
+        // Also try SRCROOT derived from project structure: locate Strata.xcodeproj parent
         // Fallback: use current working directory
         let cwd = FileManager.default.currentDirectoryPath
         let cwdCandidate = URL(fileURLWithPath: cwd).appendingPathComponent("InferenceWorker")

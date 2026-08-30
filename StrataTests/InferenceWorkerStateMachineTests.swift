@@ -1,5 +1,5 @@
 import XCTest
-@testable import Demux
+@testable import Strata
 
 final class InferenceWorkerStateMachineTests: XCTestCase {
 

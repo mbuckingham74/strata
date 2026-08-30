@@ -46,12 +46,12 @@ final class InferenceController {
     func debugCleanupChainTail() -> Task<Void, Never>? { cleanupChainTail }
 #endif
 
-    // Output base per spec: ~/Library/Caches/Demux/M3Separations/
+    // Output base per spec: ~/Library/Caches/Strata/M3Separations/
     private let outputBaseOverride: URL?
     private var outputBaseURL: URL {
         if let override = outputBaseOverride { return override }
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        return caches.appendingPathComponent("Demux/M3Separations", isDirectory: true)
+        return caches.appendingPathComponent("Strata/M3Separations", isDirectory: true)
     }
 
     init(client: InferenceWorkerClient = InferenceWorkerClient()) {

@@ -1,6 +1,6 @@
-# Demux Product Roadmap
+# Strata Product Roadmap
 
-Demux is a personal native macOS music source-separation app.
+Strata is a personal native macOS music source-separation app.
 
 Long-term architecture:
 
@@ -68,7 +68,7 @@ Get song → separate → listen
 
 ### Goal
 
-Allow separated stems, or selected combinations of stems, to be saved for use outside Demux.
+Allow separated stems, or selected combinations of stems, to be saved for use outside Strata.
 
 ### Features
 
@@ -108,7 +108,7 @@ Get song → separate → save stems
 
 ### Goal
 
-Turn Demux from a stem player into a lightweight interactive music mixer.
+Turn Strata from a stem player into a lightweight interactive music mixer.
 
 ### Features
 
@@ -152,7 +152,7 @@ Get song → separate → mix → export mix
 
 ### Goal
 
-Allow Demux to process local audio files in addition to YouTube URLs.
+Allow Strata to process local audio files in addition to YouTube URLs.
 
 ### Features
 
@@ -187,7 +187,7 @@ Avoid rerunning expensive inference for songs that have already been separated.
 ### Features
 
 - Remember previously processed songs
-- Reopen an existing Demux project instantly
+- Reopen an existing Strata project instantly
 - Persist:
   - source metadata
   - canonical input identity
@@ -208,7 +208,7 @@ Required project/model data should live in persistent macOS application storage,
 
 ### Goal
 
-Make Demux more useful for studying and practicing music.
+Make Strata more useful for studying and practicing music.
 
 ### Candidate features
 
@@ -219,7 +219,7 @@ Make Demux more useful for studying and practicing music.
 - Better timeline navigation
 - Optional waveform overview
 
-Keep these features playback-oriented rather than turning Demux into a DAW.
+Keep these features playback-oriented rather than turning Strata into a DAW.
 
 ---
 
@@ -270,4 +270,4 @@ V2  Get song → separate → save stems
 V3  Get song → separate → mix → export mix
 ```
 
-That sequence gives Demux a complete, useful progression while preserving the existing architectural boundaries.
+That sequence gives Strata a complete, useful progression while preserving the existing architectural boundaries.

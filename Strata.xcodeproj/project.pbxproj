@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A10000000000000000000001 /* DemuxApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* DemuxApp.swift */; };
+		A10000000000000000000001 /* StrataApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* StrataApp.swift */; };
 		A10000000000000000000002 /* AudioTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* AudioTransport.swift */; };
 		A10000000000000000000003 /* PlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* PlaybackController.swift */; };
 		A10000000000000000000004 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* ContentView.swift */; };
@@ -34,14 +34,14 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		B10000000000000000000001 /* DemuxApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemuxApp.swift; sourceTree = "<group>"; };
+		B10000000000000000000001 /* StrataApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataApp.swift; sourceTree = "<group>"; };
 		B10000000000000000000002 /* AudioTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTransport.swift; sourceTree = "<group>"; };
 		B10000000000000000000003 /* PlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackController.swift; sourceTree = "<group>"; };
 		B10000000000000000000004 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		B10000000000000000000005 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10000000000000000000006 /* PlaybackControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackControllerTests.swift; sourceTree = "<group>"; };
-		C00000000000000000000001 /* Demux.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Demux.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		C00000000000000000000002 /* DemuxTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DemuxTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C00000000000000000000001 /* Strata.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Strata.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C00000000000000000000002 /* StrataTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10000000000000000000007 /* AppLifecycleDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLifecycleDelegate.swift; sourceTree = "<group>"; };
 		B10000000000000000000008 /* InferenceProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceProtocol.swift; sourceTree = "<group>"; };
 		B10000000000000000000009 /* InferenceWorkerStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceWorkerStateMachine.swift; sourceTree = "<group>"; };
@@ -83,23 +83,23 @@
 		E00000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
-				E00000000000000000000002 /* Demux */,
-				E00000000000000000000006 /* DemuxTests */,
+				E00000000000000000000002 /* Strata */,
+				E00000000000000000000006 /* StrataTests */,
 				E00000000000000000000007 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		E00000000000000000000002 /* Demux */ = {
+		E00000000000000000000002 /* Strata */ = {
 			isa = PBXGroup;
 			children = (
 				E00000000000000000000003 /* Audio */,
 				E00000000000000000000008 /* Application */,
 				E00000000000000000000009 /* Inference */,
 				E00000000000000000000004 /* Views */,
-				B10000000000000000000001 /* DemuxApp.swift */,
+				B10000000000000000000001 /* StrataApp.swift */,
 				B10000000000000000000005 /* Assets.xcassets */,
 			);
-			path = Demux;
+			path = Strata;
 			sourceTree = "<group>";
 		};
 		E00000000000000000000003 /* Audio */ = {
@@ -142,7 +142,7 @@
 			path = Inference;
 			sourceTree = "<group>";
 		};
-		E00000000000000000000006 /* DemuxTests */ = {
+		E00000000000000000000006 /* StrataTests */ = {
 			isa = PBXGroup;
 			children = (
 				B10000000000000000000006 /* PlaybackControllerTests.swift */,
@@ -156,14 +156,14 @@
 				B10000000000000000000017 /* InferenceControllerShutdownTests.swift */,
 				B10000000000000000000018 /* InferenceWorkerSolXHighTests.swift */,
 			);
-			path = DemuxTests;
+			path = StrataTests;
 			sourceTree = "<group>";
 		};
 		E00000000000000000000007 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				C00000000000000000000001 /* Demux.app */,
-				C00000000000000000000002 /* DemuxTests.xctest */,
+				C00000000000000000000001 /* Strata.app */,
+				C00000000000000000000002 /* StrataTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -171,9 +171,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		F00000000000000000000001 /* Demux */ = {
+		F00000000000000000000001 /* Strata */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 100000000000000000000001 /* Build configuration list for PBXNativeTarget "Demux" */;
+			buildConfigurationList = 100000000000000000000001 /* Build configuration list for PBXNativeTarget "Strata" */;
 			buildPhases = (
 				G00000000000000000000001 /* Sources */,
 				D10000000000000000000001 /* Frameworks */,
@@ -183,14 +183,14 @@
 			);
 			dependencies = (
 			);
-			name = Demux;
-			productName = Demux;
-			productReference = C00000000000000000000001 /* Demux.app */;
+			name = Strata;
+			productName = Strata;
+			productReference = C00000000000000000000001 /* Strata.app */;
 			productType = "com.apple.product-type.application";
 		};
-		F00000000000000000000002 /* DemuxTests */ = {
+		F00000000000000000000002 /* StrataTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 100000000000000000000002 /* Build configuration list for PBXNativeTarget "DemuxTests" */;
+			buildConfigurationList = 100000000000000000000002 /* Build configuration list for PBXNativeTarget "StrataTests" */;
 			buildPhases = (
 				G00000000000000000000003 /* Sources */,
 				D10000000000000000000002 /* Frameworks */,
@@ -201,9 +201,9 @@
 			dependencies = (
 				H00000000000000000000001 /* PBXTargetDependency */,
 			);
-			name = DemuxTests;
-			productName = DemuxTests;
-			productReference = C00000000000000000000002 /* DemuxTests.xctest */;
+			name = StrataTests;
+			productName = StrataTests;
+			productReference = C00000000000000000000002 /* StrataTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -225,7 +225,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 100000000000000000000003 /* Build configuration list for PBXProject "Demux" */;
+			buildConfigurationList = 100000000000000000000003 /* Build configuration list for PBXProject "Strata" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -238,8 +238,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				F00000000000000000000001 /* Demux */,
-				F00000000000000000000002 /* DemuxTests */,
+				F00000000000000000000001 /* Strata */,
+				F00000000000000000000002 /* StrataTests */,
 			);
 		};
 /* End PBXProject section */
@@ -267,7 +267,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000000000000000000001 /* DemuxApp.swift in Sources */,
+				A10000000000000000000001 /* StrataApp.swift in Sources */,
 				A10000000000000000000002 /* AudioTransport.swift in Sources */,
 				A10000000000000000000003 /* PlaybackController.swift in Sources */,
 				A10000000000000000000004 /* ContentView.swift in Sources */,
@@ -305,7 +305,7 @@
 /* Begin PBXTargetDependency section */
 		H00000000000000000000001 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = F00000000000000000000001 /* Demux */;
+			target = F00000000000000000000001 /* Strata */;
 			targetProxy = H00000000000000000000002 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -316,7 +316,7 @@
 			containerPortal = 100000000000000000000000 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = F00000000000000000000001;
-			remoteInfo = Demux;
+			remoteInfo = Strata;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -453,7 +453,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "";
-				INFOPLIST_KEY_CFBundleDisplayName = Demux;
+				INFOPLIST_KEY_CFBundleDisplayName = Strata;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -461,7 +461,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.demux.app;
+				PRODUCT_BUNDLE_IDENTIFIER = org.mzb74.Strata;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
@@ -478,7 +478,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "";
-				INFOPLIST_KEY_CFBundleDisplayName = Demux;
+				INFOPLIST_KEY_CFBundleDisplayName = Strata;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -486,7 +486,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.demux.app;
+				PRODUCT_BUNDLE_IDENTIFIER = org.mzb74.Strata;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
@@ -502,11 +502,11 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.demux.app.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = org.mzb74.StrataTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Demux.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Demux";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Strata.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Strata";
 			};
 			name = Debug;
 		};
@@ -519,18 +519,18 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.demux.app.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = org.mzb74.StrataTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Demux.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Demux";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Strata.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Strata";
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		100000000000000000000001 /* Build configuration list for PBXNativeTarget "Demux" */ = {
+		100000000000000000000001 /* Build configuration list for PBXNativeTarget "Strata" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				I00000000000000000000003 /* Debug */,
@@ -539,7 +539,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		100000000000000000000002 /* Build configuration list for PBXNativeTarget "DemuxTests" */ = {
+		100000000000000000000002 /* Build configuration list for PBXNativeTarget "StrataTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				I00000000000000000000005 /* Debug */,
@@ -548,7 +548,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		100000000000000000000003 /* Build configuration list for PBXProject "Demux" */ = {
+		100000000000000000000003 /* Build configuration list for PBXProject "Strata" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				I00000000000000000000001 /* Debug */,

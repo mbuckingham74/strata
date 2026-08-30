@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct DemuxApp: App {
+struct StrataApp: App {
     @NSApplicationDelegateAdaptor(AppLifecycleDelegate.self) var appDelegate
 
     @State private var playbackController: PlaybackController

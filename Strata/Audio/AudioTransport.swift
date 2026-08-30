@@ -76,7 +76,7 @@ final class AVAudioEngineTransport: AudioTransport {
         let format = loadedFile.processingFormat
         guard format.sampleRate > 0, loadedFile.length > 0 else {
             throw NSError(
-                domain: "Demux.AudioTransport",
+                domain: "Strata.AudioTransport",
                 code: -1,
                 userInfo: [NSLocalizedDescriptionKey: "Unsupported or empty audio file."]
             )
