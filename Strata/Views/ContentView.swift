@@ -4,15 +4,31 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @Bindable var playbackController: PlaybackController
     @Bindable var inferenceController: InferenceController
+    @Bindable var stemPlaybackController: StemPlaybackController
 
     // Backward compat for preview / tests that use single arg: provide convenience init
-    init(playbackController: PlaybackController, inferenceController: InferenceController) {
+    init(
+        playbackController: PlaybackController,
+        inferenceController: InferenceController,
+        stemPlaybackController: StemPlaybackController
+    ) {
         self.playbackController = playbackController
         self.inferenceController = inferenceController
+        self.stemPlaybackController = stemPlaybackController
+    }
+    init(playbackController: PlaybackController, inferenceController: InferenceController) {
+        self.init(
+            playbackController: playbackController,
+            inferenceController: inferenceController,
+            stemPlaybackController: StemPlaybackController()
+        )
     }
     init(controller: PlaybackController) {
-        self.playbackController = controller
-        self.inferenceController = InferenceController()
+        self.init(
+            playbackController: controller,
+            inferenceController: InferenceController(),
+            stemPlaybackController: StemPlaybackController()
+        )
     }
 
     @State private var showingImporter = false
@@ -29,6 +45,7 @@ struct ContentView: View {
                 controller: playbackController,
                 showingImporter: $showingImporter,
                 inferenceController: inferenceController,
+                stemPlaybackController: stemPlaybackController,
                 inferenceInputURL: $inferenceInputURL,
                 showingInferenceImporter: $showingInferenceImporter
             )
@@ -155,6 +172,7 @@ struct MainWorkspaceView: View {
     @Bindable var controller: PlaybackController
     @Binding var showingImporter: Bool
     @Bindable var inferenceController: InferenceController
+    @Bindable var stemPlaybackController: StemPlaybackController
     @Binding var inferenceInputURL: URL?
     @Binding var showingInferenceImporter: Bool
 
@@ -187,6 +205,7 @@ struct MainWorkspaceView: View {
                     // M3 Inference Bridge (minimal proof UI)
                     InferenceCard(
                         inferenceController: inferenceController,
+                        stemPlaybackController: stemPlaybackController,
                         inferenceInputURL: $inferenceInputURL,
                         showingInferenceImporter: $showingInferenceImporter
                     ).padding(.horizontal, 24).padding(.bottom, 24)
@@ -202,6 +221,7 @@ extension MainWorkspaceView {
         self.controller = controller
         self._showingImporter = showingImporter
         self.inferenceController = InferenceController()
+        self.stemPlaybackController = StemPlaybackController()
         self._inferenceInputURL = .constant(nil)
         self._showingInferenceImporter = .constant(false)
     }
@@ -228,6 +248,7 @@ struct EmptyStateView: View {
 
 struct InferenceCard: View {
     @Bindable var inferenceController: InferenceController
+    @Bindable var stemPlaybackController: StemPlaybackController
     @Binding var inferenceInputURL: URL?
     @Binding var showingInferenceImporter: Bool
     @State private var youTubeURLString = ""
@@ -302,6 +323,41 @@ struct InferenceCard: View {
             if case .completed = inferenceController.state, let result = inferenceController.result {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Stems — 6 validated").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
+                    HStack(spacing: 10) {
+                        Button {
+                            if stemPlaybackController.isPlaying {
+                                stemPlaybackController.pause()
+                            } else {
+                                stemPlaybackController.play()
+                            }
+                        } label: {
+                            Label(
+                                stemPlaybackController.isPlaying ? "Pause" : "Play",
+                                systemImage: stemPlaybackController.isPlaying ? "pause.fill" : "play.fill"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!stemPlaybackController.hasStems)
+
+                        Slider(
+                            value: Binding(
+                                get: { stemPlaybackController.currentTime },
+                                set: { stemPlaybackController.seek(to: $0) }
+                            ),
+                            in: 0...(stemPlaybackController.duration > 0 ? stemPlaybackController.duration : 1)
+                        )
+                        .disabled(!stemPlaybackController.hasStems)
+                        .accessibilityLabel("Seek stems")
+
+                        Text("\(stemPlaybackController.formattedCurrentTime) / \(stemPlaybackController.formattedDuration)")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    if let errorMessage = stemPlaybackController.errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red.opacity(0.9))
+                    }
                     ForEach(result.sortedStems, id: \.name) { stem in
                         HStack(spacing: 10) {
                             Image(systemName: icon(for: stem.name)).font(.caption).foregroundStyle(.secondary).frame(width: 16)
@@ -315,6 +371,14 @@ struct InferenceCard: View {
                 }.padding(.top, 4)
             }
         }.padding(16).background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.06)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1)))
+            .onChange(of: inferenceController.result) { _, result in
+                guard let result else { return }
+                loadCompletedResult(result)
+            }
+    }
+
+    func loadCompletedResult(_ result: SeparationResult) {
+        stemPlaybackController.load(result: result)
     }
 
     private var statusText: String {
@@ -392,7 +456,8 @@ struct OriginalMixRow: View {
     let fake = FakePreviewTransport()
     let ctrl = PlaybackController(transport: fake)
     let ic = InferenceController()
-    ContentView(playbackController: ctrl, inferenceController: ic).frame(width: 900, height: 600)
+    let sc = StemPlaybackController()
+    ContentView(playbackController: ctrl, inferenceController: ic, stemPlaybackController: sc).frame(width: 900, height: 600)
 }
 
 @MainActor

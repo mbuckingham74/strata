@@ -219,6 +219,25 @@ final class StemPlaybackControllerTests: XCTestCase {
         XCTAssertNotNil(sut.result)
     }
 
+    func testCompletedInferenceCardResultLoadsPassedStemPlaybackController() {
+        let fake = FakeStemTransport(duration: 187)
+        let sut = StemPlaybackController(transport: fake)
+        let card = InferenceCard(
+            inferenceController: InferenceController(),
+            stemPlaybackController: sut,
+            inferenceInputURL: .constant(nil),
+            showingInferenceImporter: .constant(false)
+        )
+        let result = makeDummyResult(jobId: "completed-job")
+
+        card.loadCompletedResult(result)
+
+        XCTAssertTrue(card.stemPlaybackController === sut)
+        XCTAssertEqual(fake.lastLoadedResult, result)
+        XCTAssertTrue(sut.hasStems)
+        XCTAssertEqual(sut.duration, 187, accuracy: 0.001)
+    }
+
     func testLoadingClearsError() {
         let fake = FakeStemTransport(duration: 100)
         fake.shouldThrowOnLoad = true
