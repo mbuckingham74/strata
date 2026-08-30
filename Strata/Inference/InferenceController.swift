@@ -1,6 +1,15 @@
 import Foundation
 import SwiftUI
 
+// MARK: - YouTubeIngesting seam (smallest test seam)
+
+protocol YouTubeIngesting: Sendable {
+    func ingest(youTubeURL: URL) async throws -> URL
+    func cancel() async throws
+}
+
+extension YouTubeIngestClient: YouTubeIngesting {}
+
 // MARK: - InferenceController
 
 @MainActor
@@ -33,17 +42,20 @@ final class InferenceController {
     // MARK: - Ownership
 
     private let client: InferenceWorkerClient
+    private let youTubeIngest: any YouTubeIngesting
     private var currentTask: Task<Void, Never>?
     private var cleanupChainTail: Task<Void, Never>?
     private var cleanupChainId: UInt64 = 0
     private var operationGeneration: UInt64 = 0
     private var latestGeneration: UInt64 = 0
+    private var youTubeCleanupFailed: Bool = false
 
 #if DEBUG
     func debugHasPendingCancellationCleanup() -> Bool { cleanupChainTail != nil }
     func debugCurrentTask() -> Task<Void, Never>? { currentTask }
     func debugPendingCancellationTask() -> Task<Void, Never>? { cleanupChainTail }
     func debugCleanupChainTail() -> Task<Void, Never>? { cleanupChainTail }
+    func debugYouTubeCleanupFailed() -> Bool { youTubeCleanupFailed }
 #endif
 
     // Output base per spec: ~/Library/Caches/Strata/M3Separations/
@@ -54,15 +66,24 @@ final class InferenceController {
         return caches.appendingPathComponent("Strata/M3Separations", isDirectory: true)
     }
 
-    init(client: InferenceWorkerClient = InferenceWorkerClient()) {
+    static func makeDefaultYouTubeIngest() -> any YouTubeIngesting {
+        YouTubeIngestClient(
+            ytDlpURL: URL(fileURLWithPath: "/opt/homebrew/bin/yt-dlp"),
+            ffmpegURL: URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+        )
+    }
+
+    init(client: InferenceWorkerClient = InferenceWorkerClient(), youTubeIngest: (any YouTubeIngesting)? = nil) {
         self.client = client
         self.outputBaseOverride = nil
+        self.youTubeIngest = youTubeIngest ?? Self.makeDefaultYouTubeIngest()
     }
 
     // Convenience for testing injection — stores override for deterministic temp output in tests
-    init(client: InferenceWorkerClient, outputBase: URL) {
+    init(client: InferenceWorkerClient, outputBase: URL, youTubeIngest: (any YouTubeIngesting)? = nil) {
         self.client = client
         self.outputBaseOverride = outputBase
+        self.youTubeIngest = youTubeIngest ?? Self.makeDefaultYouTubeIngest()
     }
 
     deinit {
@@ -74,6 +95,7 @@ final class InferenceController {
 
     /// Start separation for a canonical WAV input URL.
     func startSeparation(inputURL: URL) {
+        if youTubeCleanupFailed { return }
         let generation = operationGeneration + 1
         operationGeneration = generation
         latestGeneration = generation
@@ -95,6 +117,7 @@ final class InferenceController {
         currentTask = Task { [previousTask] in
             if let previousTask { await previousTask.value }
             await self.drainCleanupChain()
+            if self.youTubeCleanupFailed { return }
 
             do {
                 try Task.checkCancellation()
@@ -137,6 +160,100 @@ final class InferenceController {
         }
     }
 
+    /// Start separation via YouTube URL → ingest → inference.
+    func startSeparation(youTubeURL: URL) {
+        if youTubeCleanupFailed { return }
+        let generation = operationGeneration + 1
+        operationGeneration = generation
+        latestGeneration = generation
+
+        let previousTask = currentTask
+        previousTask?.cancel()
+
+        state = .loadingModel
+        statusMessage = "Downloading…"
+        result = nil
+        errorMessage = nil
+
+        let client = self.client
+        let youTubeIngest = self.youTubeIngest
+        let base = outputBaseURL
+
+        currentTask = Task { [previousTask] in
+            if let previousTask { await previousTask.value }
+            await self.drainCleanupChain()
+            if self.youTubeCleanupFailed { return }
+
+            do {
+                try Task.checkCancellation()
+                let mixtureURL = try await youTubeIngest.ingest(youTubeURL: youTubeURL)
+
+                try Task.checkCancellation()
+                guard generation == self.latestGeneration else { return }
+                guard !Task.isCancelled else { throw CancellationError() }
+
+                // Transition status to inference phase
+                self.statusMessage = "Loading model…"
+
+                let separationResult = try await client.runSeparation(inputPath: mixtureURL, outputBaseDir: base)
+
+                guard generation == self.latestGeneration else { return }
+                guard !Task.isCancelled else { return }
+
+                self.result = separationResult
+                self.state = .completed
+                self.statusMessage = "Complete — \(separationResult.stems.count) stems"
+                self.errorMessage = nil
+
+            } catch is CancellationError {
+                guard generation == self.latestGeneration else { return }
+                self.state = .failed("Cancelled")
+                self.statusMessage = "Cancelled"
+                self.errorMessage = "Cancelled"
+            } catch let err as YouTubeIngestError {
+                if case .cleanupFailed(let msg) = err {
+                    let m = "Cleanup failed: \(msg)"
+                    self.state = .failed(m)
+                    self.statusMessage = "Cleanup failed"
+                    self.errorMessage = String(m.prefix(500))
+                    self.youTubeCleanupFailed = true
+                }
+                guard generation == self.latestGeneration else { return }
+                switch err {
+                case .cancelled:
+                    self.state = .failed("Cancelled")
+                    self.statusMessage = "Cancelled"
+                    self.errorMessage = "Cancelled"
+                case .cleanupFailed:
+                    break
+                default:
+                    let msg = err.localizedDescription
+                    self.state = .failed(msg)
+                    self.statusMessage = "Failed"
+                    self.errorMessage = String(msg.prefix(500))
+                }
+            } catch let err as InferenceError {
+                guard generation == self.latestGeneration else { return }
+                if case .cancellation = err {
+                    self.state = .failed("Cancelled")
+                    self.statusMessage = "Cancelled"
+                    self.errorMessage = "Cancelled"
+                } else {
+                    let msg = err.localizedDescription
+                    self.state = .failed(msg)
+                    self.statusMessage = "Failed"
+                    self.errorMessage = String(msg.prefix(500))
+                }
+            } catch {
+                guard generation == self.latestGeneration else { return }
+                let msg = error.localizedDescription
+                self.state = .failed(msg)
+                self.statusMessage = "Failed"
+                self.errorMessage = String(msg.prefix(500))
+            }
+        }
+    }
+
     /// Cancel active separation: semantically cancel Swift operation and terminate worker.
     /// Tracked cleanup — no forgotten Task, serialized via cleanup chain tail.
     func cancel() {
@@ -152,14 +269,42 @@ final class InferenceController {
         let previousTail = cleanupChainTail
         let previousId = cleanupChainId
         let client = self.client
+        let youTubeIngest = self.youTubeIngest
         let newId = previousId + 1
         cleanupChainId = newId
         let newTail = Task {
             if let prev = previousTail {
                 await prev.value
             }
+            var ytError: Error?
+            do {
+                try await youTubeIngest.cancel()
+                await MainActor.run { self.youTubeCleanupFailed = false }
+            } catch {
+                ytError = error
+            }
             await client.cancelActiveJob()
             if let t = taskToCancel { await t.value }
+            if let e = ytError {
+                await MainActor.run {
+                    if let yErr = e as? YouTubeIngestError, case .cleanupFailed(let msg) = yErr {
+                        let m = "Cleanup failed: \(msg)"
+                        self.state = .failed(m)
+                        self.statusMessage = "Cleanup failed"
+                        self.errorMessage = String(m.prefix(500))
+                        self.youTubeCleanupFailed = true
+                    } else if let yErr = e as? YouTubeIngestError, case .cancelled = yErr {
+                        // cancelled is already represented as Cancelled; keep existing state
+                    } else {
+                        // Generic ingest cancel error: surface as failed
+                        let m = (e as? LocalizedError)?.errorDescription ?? e.localizedDescription
+                        self.state = .failed(m)
+                        self.statusMessage = "Cleanup failed"
+                        self.errorMessage = String(m.prefix(500))
+                        self.youTubeCleanupFailed = true
+                    }
+                }
+            }
         }
         cleanupChainTail = newTail
 
@@ -188,6 +333,20 @@ final class InferenceController {
         currentTask = nil
         taskToCancel?.cancel()
 
+        var youTubeCancelThrew = false
+        do {
+            try await youTubeIngest.cancel()
+            youTubeCleanupFailed = false
+        } catch {
+            youTubeCancelThrew = true
+            // If cleanupFailed, mark flag for unsafe
+            if let yErr = error as? YouTubeIngestError, case .cleanupFailed = yErr {
+                youTubeCleanupFailed = true
+            } else {
+                youTubeCleanupFailed = true
+            }
+        }
+
         // Start the bounded client exit path immediately. The client coalesces it
         // with any cancellation cleanup already in flight for the exact Process.
         let result = await client.terminateForApplicationExit(policy: policy)
@@ -196,6 +355,14 @@ final class InferenceController {
 
         state = .idle
         statusMessage = "Ready to separate"
+        if youTubeCancelThrew {
+            return .unsafeToTerminate(reason: .cleanupIncomplete)
+        }
+        if youTubeCleanupFailed {
+            // Preserve unsafe until observed; reset for next operation
+            youTubeCleanupFailed = false
+            return .unsafeToTerminate(reason: .cleanupIncomplete)
+        }
         if case .unsafeToTerminate = result {
             // Keep errorMessage nil for exit path; do not surface premature exit
             return result

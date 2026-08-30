@@ -33,6 +33,7 @@
 		A10000000000000000000018 /* InferenceWorkerSolXHighTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000018 /* InferenceWorkerSolXHighTests.swift */; };
 		A10000000000000000000019 /* YouTubeIngestClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000019 /* YouTubeIngestClient.swift */; };
 		A1000000000000000000001A /* YouTubeIngestClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001A /* YouTubeIngestClientTests.swift */; };
+		A1000000000000000000001B /* InferenceControllerYouTubeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001B /* InferenceControllerYouTubeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -64,6 +65,7 @@
 		B10000000000000000000018 /* InferenceWorkerSolXHighTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceWorkerSolXHighTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000019 /* YouTubeIngestClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeIngestClient.swift; sourceTree = "<group>"; };
 		B1000000000000000000001A /* YouTubeIngestClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeIngestClientTests.swift; sourceTree = "<group>"; };
+		B1000000000000000000001B /* InferenceControllerYouTubeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceControllerYouTubeTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -169,6 +171,7 @@
 				B10000000000000000000017 /* InferenceControllerShutdownTests.swift */,
 				B10000000000000000000018 /* InferenceWorkerSolXHighTests.swift */,
 				B1000000000000000000001A /* YouTubeIngestClientTests.swift */,
+				B1000000000000000000001B /* InferenceControllerYouTubeTests.swift */,
 			);
 			path = StrataTests;
 			sourceTree = "<group>";
@@ -313,6 +316,7 @@
 				A10000000000000000000017 /* InferenceControllerShutdownTests.swift in Sources */,
 				A10000000000000000000018 /* InferenceWorkerSolXHighTests.swift in Sources */,
 				A1000000000000000000001A /* YouTubeIngestClientTests.swift in Sources */,
+				A1000000000000000000001B /* InferenceControllerYouTubeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
