@@ -71,6 +71,9 @@ Default verification rules:
 
 A full regression, real integration run, universal build, or other machine-disruptive verification requires explicit user approval before it begins. Reserve these checks for meaningful integration, release, or broad behavioral changes.
 
+Feature work: add/update tests for the feature and run focused verification. A full regression is not required to commit/push each task.
+
+Milestone gate: run the full regression once after the milestone’s planned features are complete, before closing the milestone.
 Previously obtained evidence remains valid until a relevant change invalidates it.
 
 ## Agents and Handoffs
