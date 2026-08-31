@@ -26,6 +26,9 @@ extension YouTubeIngesting {
 
 extension YouTubeIngestClient: YouTubeIngesting {}
 
+// LocalAudioIngesting is defined in LocalAudioIngestClient.swift and adopted there.
+// InferenceController depends on the protocol, not concrete type, for testability.
+
 // MARK: - InferenceController
 
 @MainActor
@@ -123,12 +126,14 @@ final class InferenceController {
 
     private let client: InferenceWorkerClient
     private let youTubeIngest: any YouTubeIngesting
+    private let localIngest: any LocalAudioIngesting
     private var currentTask: Task<Void, Never>?
     private var cleanupChainTail: Task<Void, Never>?
     private var cleanupChainId: UInt64 = 0
     private var operationGeneration: UInt64 = 0
     private var latestGeneration: UInt64 = 0
     private var youTubeCleanupFailed: Bool = false
+    private var localCleanupFailed: Bool = false
 
 #if DEBUG
     func debugHasPendingCancellationCleanup() -> Bool { cleanupChainTail != nil }
@@ -136,6 +141,7 @@ final class InferenceController {
     func debugPendingCancellationTask() -> Task<Void, Never>? { cleanupChainTail }
     func debugCleanupChainTail() -> Task<Void, Never>? { cleanupChainTail }
     func debugYouTubeCleanupFailed() -> Bool { youTubeCleanupFailed }
+    func debugLocalCleanupFailed() -> Bool { localCleanupFailed }
     func debugSetExportBaseName(_ name: String?) { exportBaseName = name }
 #endif
 
@@ -154,17 +160,25 @@ final class InferenceController {
         )
     }
 
-    init(client: InferenceWorkerClient = InferenceWorkerClient(), youTubeIngest: (any YouTubeIngesting)? = nil) {
+    static func makeDefaultLocalIngest() -> any LocalAudioIngesting {
+        LocalAudioIngestClient(
+            ffmpegURL: URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+        )
+    }
+
+    init(client: InferenceWorkerClient = InferenceWorkerClient(), youTubeIngest: (any YouTubeIngesting)? = nil, localIngest: (any LocalAudioIngesting)? = nil) {
         self.client = client
         self.outputBaseOverride = nil
         self.youTubeIngest = youTubeIngest ?? Self.makeDefaultYouTubeIngest()
+        self.localIngest = localIngest ?? Self.makeDefaultLocalIngest()
     }
 
     // Convenience for testing injection — stores override for deterministic temp output in tests
-    init(client: InferenceWorkerClient, outputBase: URL, youTubeIngest: (any YouTubeIngesting)? = nil) {
+    init(client: InferenceWorkerClient, outputBase: URL, youTubeIngest: (any YouTubeIngesting)? = nil, localIngest: (any LocalAudioIngesting)? = nil) {
         self.client = client
         self.outputBaseOverride = outputBase
         self.youTubeIngest = youTubeIngest ?? Self.makeDefaultYouTubeIngest()
+        self.localIngest = localIngest ?? Self.makeDefaultLocalIngest()
     }
 
     deinit {
@@ -231,6 +245,110 @@ final class InferenceController {
                     self.errorMessage = "Cancelled"
                 } else {
                     // Concise user-visible failure (no traceback)
+                    let msg = err.localizedDescription
+                    self.state = .failed(msg)
+                    self.statusMessage = "Failed"
+                    self.errorMessage = String(msg.prefix(500))
+                }
+            } catch {
+                guard generation == self.latestGeneration else { return }
+                let msg = error.localizedDescription
+                self.state = .failed(msg)
+                self.statusMessage = "Failed"
+                self.errorMessage = String(msg.prefix(500))
+            }
+        }
+    }
+
+    /// Start separation via local file URL → canonicalize → inference.
+    /// Single source: caller provides original file; we canonicalize to 44.1k stereo Float32 WAV.
+    func startSeparation(localFileURL: URL) {
+        if youTubeCleanupFailed || localCleanupFailed { return }
+        let generation = operationGeneration + 1
+        operationGeneration = generation
+        latestGeneration = generation
+
+        let previousTask = currentTask
+        previousTask?.cancel()
+
+        state = .loadingModel
+        statusMessage = "Preparing…"
+        result = nil
+        errorMessage = nil
+        exportBaseName = nil
+        youTubeExportMetadata = nil
+        youTubeExportArtworkURL = nil
+        preparedYouTubeMP3Export = nil
+        clearEditableMetadata()
+
+        let client = self.client
+        let localIngest = self.localIngest
+        let base = outputBaseURL
+
+        // Derive the current local filename (without extension) for stem export names.
+        let baseName = localFileURL.deletingPathExtension().lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        let derivedBaseName = baseName.isEmpty ? nil : baseName
+
+        currentTask = Task { [previousTask] in
+            if let previousTask { await previousTask.value }
+            await self.drainCleanupChain()
+            if self.youTubeCleanupFailed || self.localCleanupFailed { return }
+
+            do {
+                try Task.checkCancellation()
+                let canonicalURL = try await localIngest.ingest(localFileURL: localFileURL)
+
+                try Task.checkCancellation()
+                guard generation == self.latestGeneration else { return }
+                guard !Task.isCancelled else { throw CancellationError() }
+
+                self.statusMessage = "Loading model…"
+
+                let separationResult = try await client.runSeparation(inputPath: canonicalURL, outputBaseDir: base)
+
+                guard generation == self.latestGeneration else { return }
+                guard !Task.isCancelled else { return }
+
+                self.result = separationResult
+                self.exportBaseName = derivedBaseName
+                self.state = .completed
+                self.statusMessage = "Complete — \(separationResult.stems.count) stems"
+                self.errorMessage = nil
+
+            } catch is CancellationError {
+                guard generation == self.latestGeneration else { return }
+                self.state = .failed("Cancelled")
+                self.statusMessage = "Cancelled"
+                self.errorMessage = "Cancelled"
+            } catch let err as LocalAudioIngestError {
+                if case .cleanupFailed(let msg) = err {
+                    let m = "Cleanup failed: \(msg)"
+                    self.state = .failed(m)
+                    self.statusMessage = "Cleanup failed"
+                    self.errorMessage = String(m.prefix(500))
+                    self.localCleanupFailed = true
+                }
+                guard generation == self.latestGeneration else { return }
+                switch err {
+                case .cancelled:
+                    self.state = .failed("Cancelled")
+                    self.statusMessage = "Cancelled"
+                    self.errorMessage = "Cancelled"
+                case .cleanupFailed:
+                    break
+                default:
+                    let msg = err.localizedDescription
+                    self.state = .failed(msg)
+                    self.statusMessage = "Failed"
+                    self.errorMessage = String(msg.prefix(500))
+                }
+            } catch let err as InferenceError {
+                guard generation == self.latestGeneration else { return }
+                if case .cancellation = err {
+                    self.state = .failed("Cancelled")
+                    self.statusMessage = "Cancelled"
+                    self.errorMessage = "Cancelled"
+                } else {
                     let msg = err.localizedDescription
                     self.state = .failed(msg)
                     self.statusMessage = "Failed"
@@ -451,20 +569,30 @@ final class InferenceController {
         let youTubeIngest = self.youTubeIngest
         let newId = previousId + 1
         cleanupChainId = newId
+        let localIngest = self.localIngest
         let newTail = Task {
             if let prev = previousTail {
                 await prev.value
             }
             var ytError: Error?
+            var localError: Error?
             do {
                 try await youTubeIngest.cancel()
                 await MainActor.run { self.youTubeCleanupFailed = false }
             } catch {
                 ytError = error
             }
+            do {
+                try await localIngest.cancel()
+                await MainActor.run { self.localCleanupFailed = false }
+            } catch {
+                localError = error
+            }
             await client.cancelActiveJob()
             if let t = taskToCancel { await t.value }
-            if let e = ytError {
+            // Prefer YouTube error if present, else local error
+            let combinedError: Error? = ytError ?? localError
+            if let e = combinedError {
                 await MainActor.run {
                     if let yErr = e as? YouTubeIngestError, case .cleanupFailed(let msg) = yErr {
                         let m = "Cleanup failed: \(msg)"
@@ -472,7 +600,15 @@ final class InferenceController {
                         self.statusMessage = "Cleanup failed"
                         self.errorMessage = String(m.prefix(500))
                         self.youTubeCleanupFailed = true
+                    } else if let lErr = e as? LocalAudioIngestError, case .cleanupFailed(let msg) = lErr {
+                        let m = "Cleanup failed: \(msg)"
+                        self.state = .failed(m)
+                        self.statusMessage = "Cleanup failed"
+                        self.errorMessage = String(m.prefix(500))
+                        self.localCleanupFailed = true
                     } else if let yErr = e as? YouTubeIngestError, case .cancelled = yErr {
+                        // cancelled is already represented as Cancelled; keep existing state
+                    } else if let lErr = e as? LocalAudioIngestError, case .cancelled = lErr {
                         // cancelled is already represented as Cancelled; keep existing state
                     } else {
                         // Generic ingest cancel error: surface as failed
@@ -480,7 +616,15 @@ final class InferenceController {
                         self.state = .failed(m)
                         self.statusMessage = "Cleanup failed"
                         self.errorMessage = String(m.prefix(500))
-                        self.youTubeCleanupFailed = true
+                        // Attribute failure to the source that threw, if distinguishable
+                        if e is YouTubeIngestError {
+                            self.youTubeCleanupFailed = true
+                        } else if e is LocalAudioIngestError {
+                            self.localCleanupFailed = true
+                        } else {
+                            self.youTubeCleanupFailed = true
+                            self.localCleanupFailed = true
+                        }
                     }
                 }
             }
@@ -513,6 +657,7 @@ final class InferenceController {
         taskToCancel?.cancel()
 
         var youTubeCancelThrew = false
+        var localCancelThrew = false
         do {
             try await youTubeIngest.cancel()
             youTubeCleanupFailed = false
@@ -525,6 +670,17 @@ final class InferenceController {
                 youTubeCleanupFailed = true
             }
         }
+        do {
+            try await localIngest.cancel()
+            localCleanupFailed = false
+        } catch {
+            localCancelThrew = true
+            if let lErr = error as? LocalAudioIngestError, case .cleanupFailed = lErr {
+                localCleanupFailed = true
+            } else {
+                localCleanupFailed = true
+            }
+        }
 
         // Start the bounded client exit path immediately. The client coalesces it
         // with any cancellation cleanup already in flight for the exact Process.
@@ -534,12 +690,13 @@ final class InferenceController {
 
         state = .idle
         statusMessage = "Ready to separate"
-        if youTubeCancelThrew {
+        if youTubeCancelThrew || localCancelThrew {
             return .unsafeToTerminate(reason: .cleanupIncomplete)
         }
-        if youTubeCleanupFailed {
+        if youTubeCleanupFailed || localCleanupFailed {
             // Preserve unsafe until observed; reset for next operation
             youTubeCleanupFailed = false
+            localCleanupFailed = false
             return .unsafeToTerminate(reason: .cleanupIncomplete)
         }
         if case .unsafeToTerminate = result {

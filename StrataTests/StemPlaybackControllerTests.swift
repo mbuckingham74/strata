@@ -265,8 +265,8 @@ final class StemPlaybackControllerTests: XCTestCase {
         let card = InferenceCard(
             inferenceController: InferenceController(),
             stemPlaybackController: sut,
-            inferenceInputURL: .constant(nil),
-            showingInferenceImporter: .constant(false)
+            playbackController: PlaybackController(transport: FakeTransport()),
+            showingImporter: .constant(false)
         )
         let result = makeDummyResult(jobId: "completed-job")
 
@@ -388,8 +388,8 @@ final class StemPlaybackControllerTests: XCTestCase {
         let card = InferenceCard(
             inferenceController: InferenceController(),
             stemPlaybackController: sut,
-            inferenceInputURL: .constant(nil),
-            showingInferenceImporter: .constant(false)
+            playbackController: PlaybackController(transport: FakeTransport()),
+            showingImporter: .constant(false)
         )
         card.loadCompletedResult(makeDummyResult(jobId: "first"))
         let vocals = StemAudibilityControls(stemPlaybackController: sut, stem: .vocals)

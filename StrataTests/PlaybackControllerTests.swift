@@ -216,6 +216,7 @@ final class PlaybackControllerTests: XCTestCase {
         XCTAssertEqual(sut.title, "My Song - Demo")
         XCTAssertEqual(sut.duration, 187, accuracy: 0.001)
         XCTAssertEqual(sut.currentTime, 0, accuracy: 0.001)
+        XCTAssertEqual(sut.sourceURL, url)
         XCTAssertEqual(fake.loadCallCount, 1)
         XCTAssertEqual(fake.lastLoadedURL, url)
         XCTAssertNil(sut.errorMessage)
@@ -329,6 +330,7 @@ final class PlaybackControllerTests: XCTestCase {
         sut.load(url: URL(fileURLWithPath: "/tmp/bad.xyz"))
         XCTAssertNotNil(sut.errorMessage)
         XCTAssertNil(sut.title)
+        XCTAssertNil(sut.sourceURL)
         XCTAssertFalse(sut.isPlaying)
         XCTAssertFalse(sut.hasFile)
         // Recovery: load a good file after failure

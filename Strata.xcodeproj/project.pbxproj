@@ -56,6 +56,10 @@
 		A10000000000000000000030 /* StrataProjectPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000030 /* StrataProjectPersistenceTests.swift */; };
 		A10000000000000000000031 /* StrataProjectReopenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000031 /* StrataProjectReopenTests.swift */; };
 		A10000000000000000000032 /* WorkerJobIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000032 /* WorkerJobIdentityTests.swift */; };
+		A10000000000000000000033 /* LocalAudioIngestClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000033 /* LocalAudioIngestClient.swift */; };
+		A10000000000000000000034 /* LocalAudioIngestClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000034 /* LocalAudioIngestClientTests.swift */; };
+		A10000000000000000000035 /* InferenceControllerLocalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000035 /* InferenceControllerLocalTests.swift */; };
+		A10000000000000000000036 /* AudioIngestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000036 /* AudioIngestSupport.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -110,6 +114,10 @@
 		B10000000000000000000030 /* StrataProjectPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataProjectPersistenceTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000031 /* StrataProjectReopenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataProjectReopenTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000032 /* WorkerJobIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerJobIdentityTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000033 /* LocalAudioIngestClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAudioIngestClient.swift; sourceTree = "<group>"; };
+		B10000000000000000000034 /* LocalAudioIngestClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAudioIngestClientTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000035 /* InferenceControllerLocalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceControllerLocalTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000036 /* AudioIngestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioIngestSupport.swift; sourceTree = "<group>"; };
 		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -213,7 +221,9 @@
 		E0000000000000000000000A /* Ingest */ = {
 			isa = PBXGroup;
 			children = (
+				B10000000000000000000036 /* AudioIngestSupport.swift */,
 				B10000000000000000000019 /* YouTubeIngestClient.swift */,
+				B10000000000000000000033 /* LocalAudioIngestClient.swift */,
 			);
 			path = Ingest;
 			sourceTree = "<group>";
@@ -246,6 +256,8 @@
 				B10000000000000000000030 /* StrataProjectPersistenceTests.swift */,
 				B10000000000000000000031 /* StrataProjectReopenTests.swift */,
 				B10000000000000000000032 /* WorkerJobIdentityTests.swift */,
+				B10000000000000000000034 /* LocalAudioIngestClientTests.swift */,
+				B10000000000000000000035 /* InferenceControllerLocalTests.swift */,
 			);
 			path = StrataTests;
 			sourceTree = "<group>";
@@ -414,7 +426,9 @@
 				A1000000000000000000000C /* InferenceWorkerClient.swift in Sources */,
 				A1000000000000000000000D /* InferenceController.swift in Sources */,
 				A10000000000000000000015 /* TrustedInferenceIdentity.swift in Sources */,
+				A10000000000000000000036 /* AudioIngestSupport.swift in Sources */,
 				A10000000000000000000019 /* YouTubeIngestClient.swift in Sources */,
+				A10000000000000000000033 /* LocalAudioIngestClient.swift in Sources */,
 				A10000000000000000000022 /* StemExporter.swift in Sources */,
 				A10000000000000000000024 /* ExportFolderPreference.swift in Sources */,
 				A1000000000000000000002D /* StrataProject.swift in Sources */,
@@ -451,6 +465,8 @@
 				A10000000000000000000030 /* StrataProjectPersistenceTests.swift in Sources */,
 				A10000000000000000000031 /* StrataProjectReopenTests.swift in Sources */,
 				A10000000000000000000032 /* WorkerJobIdentityTests.swift in Sources */,
+				A10000000000000000000034 /* LocalAudioIngestClientTests.swift in Sources */,
+				A10000000000000000000035 /* InferenceControllerLocalTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

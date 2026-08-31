@@ -108,8 +108,8 @@ final class LoadedSourcePresentationTests: XCTestCase {
         let card = InferenceCard(
             inferenceController: ic,
             stemPlaybackController: sut,
-            inferenceInputURL: .constant(nil),
-            showingInferenceImporter: .constant(false)
+            playbackController: PlaybackController(transport: MockAudioTransport()),
+            showingImporter: .constant(false)
         )
         let result = makeDummyResult(inputPath: "/tmp/mixture.wav")
 
@@ -128,8 +128,8 @@ final class LoadedSourcePresentationTests: XCTestCase {
         let card = InferenceCard(
             inferenceController: ic,
             stemPlaybackController: sut,
-            inferenceInputURL: .constant(nil),
-            showingInferenceImporter: .constant(false)
+            playbackController: PlaybackController(transport: MockAudioTransport()),
+            showingImporter: .constant(false)
         )
         let result = makeDummyResult(inputPath: "/tmp/mixture.wav")
 
@@ -147,8 +147,8 @@ final class LoadedSourcePresentationTests: XCTestCase {
         let card = InferenceCard(
             inferenceController: ic,
             stemPlaybackController: sut,
-            inferenceInputURL: .constant(nil),
-            showingInferenceImporter: .constant(false)
+            playbackController: PlaybackController(transport: MockAudioTransport()),
+            showingImporter: .constant(false)
         )
         let result = makeDummyResult(inputPath: "/tmp/LocalFile.wav")
 
@@ -182,8 +182,8 @@ final class LoadedSourcePresentationTests: XCTestCase {
         let card = InferenceCard(
             inferenceController: ic,
             stemPlaybackController: spc,
-            inferenceInputURL: .constant(nil),
-            showingInferenceImporter: .constant(false)
+            playbackController: PlaybackController(transport: MockAudioTransport()),
+            showingImporter: .constant(false)
         )
         let result = makeDummyResult(inputPath: "/tmp/mixture.wav")
         card.loadCompletedResult(result)
@@ -234,8 +234,8 @@ final class LoadedSourcePresentationTests: XCTestCase {
         let card = InferenceCard(
             inferenceController: ic,
             stemPlaybackController: spc,
-            inferenceInputURL: .constant(nil),
-            showingInferenceImporter: .constant(false)
+            playbackController: PlaybackController(transport: MockAudioTransport()),
+            showingImporter: .constant(false)
         )
         card.loadCompletedResult(result)
         // StrataStack would be initialized with result, spc, ic – effectiveDisplayTitle would be exportBaseName
@@ -254,8 +254,8 @@ final class LoadedSourcePresentationTests: XCTestCase {
         let card = InferenceCard(
             inferenceController: ic,
             stemPlaybackController: spc,
-            inferenceInputURL: .constant(nil),
-            showingInferenceImporter: .constant(false)
+            playbackController: PlaybackController(transport: MockAudioTransport()),
+            showingImporter: .constant(false)
         )
         card.loadCompletedResult(result)
         let view = StrataStackView(result: result, stemPlaybackController: spc, inferenceController: ic)
@@ -301,8 +301,8 @@ final class LoadedSourcePresentationTests: XCTestCase {
         let card = InferenceCard(
             inferenceController: ic,
             stemPlaybackController: spc,
-            inferenceInputURL: .constant(nil),
-            showingInferenceImporter: .constant(false)
+            playbackController: PlaybackController(transport: MockAudioTransport()),
+            showingImporter: .constant(false)
         )
         card.loadCompletedResult(result)
         let view = StrataStackView(result: result, stemPlaybackController: spc, inferenceController: ic)

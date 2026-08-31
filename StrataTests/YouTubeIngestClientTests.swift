@@ -885,7 +885,7 @@ final class YouTubeIngestClientTests: XCTestCase {
             XCTAssertFalse(msg.isEmpty, "cleanupFailed should carry message")
         }
 
-        // Ownership remains: activeProcess and activeRunDirectory still set
+        // Ownership remains in the shared process runner and activeRunDirectory still set
         // Verify via attempting to start new ingest on same client — should be alreadyRunning
         do {
             _ = try await client.ingest(youTubeURL: validYouTubeURL())

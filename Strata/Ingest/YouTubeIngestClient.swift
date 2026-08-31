@@ -1,6 +1,5 @@
 import Foundation
 import AVFoundation
-import Darwin
 
 // MARK: - YouTubeIngestError
 
@@ -176,33 +175,6 @@ private struct YTDLPInfo: Decodable {
     }
 }
 
-// MARK: - TailBox
-
-private final class TailBox: @unchecked Sendable {
-    private var data = Data()
-    private let maxBytes = 32 * 1024
-
-    func append(_ d: Data) {
-        guard !d.isEmpty else { return }
-        data.append(d)
-        if data.count > maxBytes {
-            data = data.suffix(maxBytes)
-        }
-    }
-
-    func string() -> String? {
-        guard !data.isEmpty else { return nil }
-        // Keep last 32 KiB already bounded
-        if let s = String(data: data, encoding: .utf8) {
-            let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed
-        }
-        return "<non-utf8 \(data.count) bytes>"
-    }
-
-    func reset() { data = Data() }
-}
-
 // MARK: - YouTubeIngestClient
 
 actor YouTubeIngestClient {
@@ -211,26 +183,21 @@ actor YouTubeIngestClient {
     let cacheBaseURL: URL
     let fileManager: FileManager
 
-    private var activeProcess: Process?
     private var activeRunDirectory: URL?
     private var cancellationRequested = false
-    private let isRunningCheck: @Sendable (Process) -> Bool
+    private let processRunner: AudioProcessRunner
 
     init(ytDlpURL: URL, ffmpegURL: URL, cacheBaseURL: URL? = nil, fileManager: FileManager = .default, isRunningCheck: @escaping @Sendable (Process) -> Bool = { $0.isRunning }) {
         self.ytDlpURL = ytDlpURL
         self.ffmpegURL = ffmpegURL
         self.fileManager = fileManager
-        self.isRunningCheck = isRunningCheck
+        self.processRunner = AudioProcessRunner(isRunningCheck: isRunningCheck)
         if let base = cacheBaseURL {
             self.cacheBaseURL = base
         } else {
             let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
             self.cacheBaseURL = caches.appendingPathComponent("Strata/M4Ingest", isDirectory: true)
         }
-    }
-
-    private func isAlive(_ p: Process) -> Bool {
-        isRunningCheck(p)
     }
 
     // MARK: - Public
@@ -256,7 +223,7 @@ actor YouTubeIngestClient {
         }
 
         // Already running guard
-        if activeProcess != nil || activeRunDirectory != nil {
+        if await processRunner.hasActiveProcess() || activeRunDirectory != nil {
             throw YouTubeIngestError.alreadyRunning
         }
 
@@ -269,7 +236,7 @@ actor YouTubeIngestClient {
         }
         activeRunDirectory = runDir
         cancellationRequested = false
-        let tailBox = TailBox()
+        let stderrTail = AudioStderrTail()
 
         do {
             if Task.isCancelled || cancellationRequested {
@@ -285,9 +252,14 @@ actor YouTubeIngestClient {
                 "--write-info-json",
                 "--write-thumbnail",
             ]
-            let ytStatus = try await runTool(toolName: "yt-dlp", executableURL: ytDlpURL, arguments: ytArgs, tailBox: tailBox)
+            let ytStatus = try await runTool(
+                toolName: "yt-dlp",
+                executableURL: ytDlpURL,
+                arguments: ytArgs,
+                stderrTail: stderrTail
+            )
             if ytStatus != 0 {
-                throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: tailBox.string())
+                throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: stderrTail.string())
             }
 
             if Task.isCancelled || cancellationRequested {
@@ -299,7 +271,7 @@ actor YouTubeIngestClient {
             do {
                 contents = try fileManager.contentsOfDirectory(at: runDir, includingPropertiesForKeys: nil, options: [])
             } catch {
-                throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: tailBox.string())
+                throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: stderrTail.string())
             }
             let infoURLs = contents.filter { $0.lastPathComponent.hasSuffix(".info.json") }
             let thumbnailURLs = contents.filter(isThumbnailFile)
@@ -309,7 +281,7 @@ actor YouTubeIngestClient {
                     && !isThumbnailFile($0)
             }
             guard candidates.count == 1 else {
-                let tail = tailBox.string()
+                let tail = stderrTail.string()
                 throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: tail)
             }
             let sourceURL = candidates[0]
@@ -323,43 +295,24 @@ actor YouTubeIngestClient {
             // FFmpeg
             let mixtureURL = runDir.appendingPathComponent("mixture.wav")
             let ffArgs = ["-nostdin", "-y", "-i", sourceURL.path, "-ar", "44100", "-ac", "2", "-c:a", "pcm_f32le", mixtureURL.path]
-            let ffStatus = try await runTool(toolName: "ffmpeg", executableURL: ffmpegURL, arguments: ffArgs, tailBox: tailBox)
+            let ffStatus = try await runTool(
+                toolName: "ffmpeg",
+                executableURL: ffmpegURL,
+                arguments: ffArgs,
+                stderrTail: stderrTail
+            )
             if ffStatus != 0 {
-                throw YouTubeIngestError.toolFailure(tool: "ffmpeg", exitCode: ffStatus, stderrTail: tailBox.string())
+                throw YouTubeIngestError.toolFailure(tool: "ffmpeg", exitCode: ffStatus, stderrTail: stderrTail.string())
             }
 
             if Task.isCancelled || cancellationRequested {
                 throw YouTubeIngestError.cancelled
             }
 
-            // Validate mixture.wav canonical
-            guard fileManager.fileExists(atPath: mixtureURL.path) else {
-                throw YouTubeIngestError.invalidCanonicalOutput("mixture.wav missing at \(mixtureURL.path)")
-            }
-            var isDir: ObjCBool = false
-            _ = fileManager.fileExists(atPath: mixtureURL.path, isDirectory: &isDir)
-            if isDir.boolValue {
-                throw YouTubeIngestError.invalidCanonicalOutput("mixture.wav is directory")
-            }
-
-            let audioFile: AVAudioFile
             do {
-                audioFile = try AVAudioFile(forReading: mixtureURL)
-            } catch {
-                throw YouTubeIngestError.invalidCanonicalOutput("AVAudioFile open failed: \(error.localizedDescription)")
-            }
-            let fmt = audioFile.processingFormat
-            guard fmt.sampleRate == 44100 else {
-                throw YouTubeIngestError.invalidCanonicalOutput("sampleRate \(fmt.sampleRate) != 44100")
-            }
-            guard fmt.channelCount == 2 else {
-                throw YouTubeIngestError.invalidCanonicalOutput("channelCount \(fmt.channelCount) != 2")
-            }
-            guard fmt.commonFormat == .pcmFormatFloat32 else {
-                throw YouTubeIngestError.invalidCanonicalOutput("format not Float32: \(fmt.commonFormat)")
-            }
-            guard audioFile.length > 0 else {
-                throw YouTubeIngestError.invalidCanonicalOutput("frame count 0")
+                try validateCanonicalAudioFile(at: mixtureURL, fileManager: fileManager)
+            } catch let error as CanonicalAudioFileError {
+                throw YouTubeIngestError.invalidCanonicalOutput(error.reason)
             }
 
             // Success: remove intermediate source file(s) but keep mixture.wav
@@ -375,7 +328,6 @@ actor YouTubeIngestClient {
 
             // Keep the canonical mixture and any usable artwork, then clear active state.
             activeRunDirectory = nil
-            activeProcess = nil
             cancellationRequested = false
             return YouTubeIngestResult(
                 audioURL: mixtureURL,
@@ -385,7 +337,7 @@ actor YouTubeIngestClient {
 
         } catch {
             // If owned process still alive, retain ownership/state and surface failure — do not remove directory or clear state
-            if let p = activeProcess, isAlive(p) {
+            if await processRunner.hasLiveProcess() {
                 if error is CancellationError {
                     throw YouTubeIngestError.cancelled
                 }
@@ -395,7 +347,6 @@ actor YouTubeIngestClient {
             if fileManager.fileExists(atPath: runDir.path) {
                 try? fileManager.removeItem(at: runDir)
             }
-            activeProcess = nil
             activeRunDirectory = nil
             // Map Swift CancellationError to our cancelled
             if error is CancellationError {
@@ -407,9 +358,8 @@ actor YouTubeIngestClient {
 
     func cancel() async throws {
         cancellationRequested = true
-        let proc = activeProcess
         let dir = activeRunDirectory
-        guard let p = proc else {
+        if !(await processRunner.hasActiveProcess()) {
             // No active process; safe to remove directory if present (no child running)
             if let d = dir {
                 try? fileManager.removeItem(at: d)
@@ -417,27 +367,13 @@ actor YouTubeIngestClient {
             }
             return
         }
-        // Has active process — attempt bounded escalation only if still alive
-        if isAlive(p) {
-            p.terminate()
-            let deadline = ContinuousClock.now + .milliseconds(500)
-            while isAlive(p) && ContinuousClock.now < deadline {
-                try? await Task.sleep(for: .milliseconds(10))
-            }
-            if isAlive(p) {
-                kill(p.processIdentifier, SIGKILL)
-                let deadline2 = ContinuousClock.now + .milliseconds(500)
-                while isAlive(p) && ContinuousClock.now < deadline2 {
-                    try? await Task.sleep(for: .milliseconds(10))
-                }
-            }
-        }
-        if isAlive(p) {
-            // Still running after escalation — retain ownership and surface failure, do not remove directory
-            throw YouTubeIngestError.cleanupFailed("Process \(p.processIdentifier) still running after SIGTERM/SIGKILL")
+
+        do {
+            try await processRunner.cancel()
+        } catch let error as AudioProcessRunnerError {
+            throw mapProcessError(error, toolName: "process")
         }
         // Proven dead — clear ownership and remove directory
-        activeProcess = nil
         if let d = dir {
             try? fileManager.removeItem(at: d)
             activeRunDirectory = nil
@@ -498,73 +434,34 @@ actor YouTubeIngestClient {
             && bytes[8..<12].elementsEqual("WEBP".utf8)
     }
 
-    private func runTool(toolName: String, executableURL: URL, arguments: [String], tailBox: TailBox) async throws -> Int32 {
+    private func runTool(
+        toolName: String,
+        executableURL: URL,
+        arguments: [String],
+        stderrTail: AudioStderrTail
+    ) async throws -> Int32 {
         if Task.isCancelled || cancellationRequested {
             throw YouTubeIngestError.cancelled
         }
-        let process = Process()
-        process.executableURL = executableURL
-        process.arguments = arguments
-        process.standardInput = FileHandle.nullDevice
-        let stderrPipe = Pipe()
-        process.standardError = stderrPipe
-        process.standardOutput = Pipe()
-
-        let handle = stderrPipe.fileHandleForReading
-        handle.readabilityHandler = { h in
-            let d = h.availableData
-            if !d.isEmpty {
-                tailBox.append(d)
-            }
-        }
-
-        activeProcess = process
         do {
-            try process.run()
-        } catch {
-            handle.readabilityHandler = nil
-            activeProcess = nil
-            throw YouTubeIngestError.toolFailure(tool: toolName, exitCode: -1, stderrTail: tailBox.string() ?? error.localizedDescription)
+            return try await processRunner.run(
+                executableURL: executableURL,
+                arguments: arguments,
+                stderrTail: stderrTail
+            )
+        } catch let error as AudioProcessRunnerError {
+            throw mapProcessError(error, toolName: toolName)
         }
+    }
 
-        while isAlive(process) {
-            if Task.isCancelled || cancellationRequested {
-                process.terminate()
-                let deadline = ContinuousClock.now + .milliseconds(500)
-                while isAlive(process) && ContinuousClock.now < deadline {
-                    try? await Task.sleep(for: .milliseconds(10))
-                }
-                if isAlive(process) {
-                    kill(process.processIdentifier, SIGKILL)
-                    let deadline2 = ContinuousClock.now + .milliseconds(500)
-                    while isAlive(process) && ContinuousClock.now < deadline2 {
-                        try? await Task.sleep(for: .milliseconds(10))
-                    }
-                }
-                handle.readabilityHandler = nil
-                let remaining = handle.availableData
-                if !remaining.isEmpty { tailBox.append(remaining) }
-                if isAlive(process) {
-                    // Retain ownership, do not clear activeProcess, surface cleanup failure
-                    throw YouTubeIngestError.cleanupFailed("Process \(process.processIdentifier) still running after SIGTERM/SIGKILL during \(toolName)")
-                }
-                activeProcess = nil
-                throw YouTubeIngestError.cancelled
-            }
-            try? await Task.sleep(nanoseconds: 10_000_000)
+    private func mapProcessError(_ error: AudioProcessRunnerError, toolName: String) -> YouTubeIngestError {
+        switch error {
+        case .launchFailed(let message):
+            return .toolFailure(tool: toolName, exitCode: -1, stderrTail: message)
+        case .cancelled:
+            return .cancelled
+        case .cleanupFailed(let message):
+            return .cleanupFailed(message)
         }
-
-        handle.readabilityHandler = nil
-        let remaining = handle.availableData
-        if !remaining.isEmpty { tailBox.append(remaining) }
-        if let d = try? handle.readToEnd(), !d.isEmpty {
-            tailBox.append(d)
-        }
-        let status = process.terminationStatus
-        activeProcess = nil
-        if cancellationRequested || Task.isCancelled {
-            throw YouTubeIngestError.cancelled
-        }
-        return status
     }
 }

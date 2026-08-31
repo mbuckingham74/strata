@@ -14,6 +14,9 @@ final class PlaybackController {
 
     var hasFile: Bool { title != nil }
 
+    // Source identity for separation (exposed for unified local workflow)
+    private(set) var sourceURL: URL?
+
     // MARK: - Transport
 
     private var transport: AudioTransport
@@ -42,6 +45,7 @@ final class PlaybackController {
             // Derive displayed title from filename without extension.
             let name = url.deletingPathExtension().lastPathComponent
             title = name.isEmpty ? "Untitled" : name
+            sourceURL = url
             duration = transport.duration
             currentTime = 0
             isPlaying = false
@@ -50,6 +54,7 @@ final class PlaybackController {
             // Concise, recoverable error; leave in clean empty-ish state.
             // Ensure prior title is cleared if load failed.
             title = nil
+            sourceURL = nil
             duration = 0
             currentTime = 0
             isPlaying = false

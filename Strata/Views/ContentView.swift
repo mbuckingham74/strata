@@ -33,8 +33,6 @@ struct ContentView: View {
     }
 
     @State private var showingImporter = false
-    @State private var showingInferenceImporter = false
-    @State private var inferenceInputURL: URL?
     @State private var showingError = false
 
     var body: some View {
@@ -51,9 +49,7 @@ struct ContentView: View {
                 controller: playbackController,
                 showingImporter: $showingImporter,
                 inferenceController: inferenceController,
-                stemPlaybackController: stemPlaybackController,
-                inferenceInputURL: $inferenceInputURL,
-                showingInferenceImporter: $showingInferenceImporter
+                stemPlaybackController: stemPlaybackController
             )
             .background(Color(nsColor: .underPageBackgroundColor).opacity(0.0))
         }
@@ -70,24 +66,6 @@ struct ContentView: View {
                 playbackController.load(url: url)
             case .failure(let error):
                 playbackController.errorMessage = error.localizedDescription
-            }
-        }
-        .fileImporter(
-            isPresented: $showingInferenceImporter,
-            allowedContentTypes: [.wav, .audio],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                guard let url = urls.first else { return }
-                let didAccess = url.startAccessingSecurityScopedResource()
-                defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
-                // Keep a bookmark-safe copy outside sandbox
-                inferenceInputURL = url
-            case .failure(let error):
-                inferenceController.cancel()
-                // Surface via inference error state? Use status
-                break
             }
         }
         .alert("Playback Error", isPresented: Binding(
@@ -215,8 +193,6 @@ struct MainWorkspaceView: View {
     @Binding var showingImporter: Bool
     @Bindable var inferenceController: InferenceController
     @Bindable var stemPlaybackController: StemPlaybackController
-    @Binding var inferenceInputURL: URL?
-    @Binding var showingInferenceImporter: Bool
 
     var body: some View {
         ZStack {
@@ -244,12 +220,12 @@ struct MainWorkspaceView: View {
                         EmptyStateView(showingImporter: $showingImporter).frame(height: 260).padding(.top, 20)
                     }
 
-                    // M3 Inference Bridge (minimal proof UI)
+                    // M3 Inference Bridge - unified local source (playbackController is single source)
                     InferenceCard(
                         inferenceController: inferenceController,
                         stemPlaybackController: stemPlaybackController,
-                        inferenceInputURL: $inferenceInputURL,
-                        showingInferenceImporter: $showingInferenceImporter
+                        playbackController: controller,
+                        showingImporter: $showingImporter
                     ).padding(.horizontal, 20).padding(.bottom, 16)
                 }
             }
@@ -257,15 +233,13 @@ struct MainWorkspaceView: View {
     }
 }
 
-// Fallback for old call site
+// Fallback for preview-only call sites.
 extension MainWorkspaceView {
     init(controller: PlaybackController, showingImporter: Binding<Bool>) {
         self.controller = controller
         self._showingImporter = showingImporter
         self.inferenceController = InferenceController()
         self.stemPlaybackController = StemPlaybackController()
-        self._inferenceInputURL = .constant(nil)
-        self._showingInferenceImporter = .constant(false)
     }
 }
 
@@ -291,11 +265,24 @@ struct EmptyStateView: View {
 struct InferenceCard: View {
     @Bindable var inferenceController: InferenceController
     @Bindable var stemPlaybackController: StemPlaybackController
-    @Binding var inferenceInputURL: URL?
-    @Binding var showingInferenceImporter: Bool
+    @Bindable var playbackController: PlaybackController
+    @Binding var showingImporter: Bool
     private let exportFolderPreference = ExportFolderPreference()
     @State private var youTubeURLString = ""
     @State private var exportErrorMessage: String?
+
+    // Unified initializer
+    init(
+        inferenceController: InferenceController,
+        stemPlaybackController: StemPlaybackController,
+        playbackController: PlaybackController,
+        showingImporter: Binding<Bool>
+    ) {
+        self.inferenceController = inferenceController
+        self.stemPlaybackController = stemPlaybackController
+        self.playbackController = playbackController
+        self._showingImporter = showingImporter
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -317,17 +304,23 @@ struct InferenceCard: View {
             }
             Text("Local BS-RoFormer via MLX — proves Swift ownership of the inference worker.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
 
-            // Input picker
+            // Unified local source — single selection via Add Audio
             HStack(spacing: 10) {
-                Button { showingInferenceImporter = true } label: {
-                    Label(inferenceInputURL == nil ? "Choose WAV" : "Change WAV", systemImage: "doc.badge.ellipsis").font(.callout.weight(.medium))
-                }.buttonStyle(.bordered).tint(.white).disabled(inferenceController.isSeparating)
-                if let url = inferenceInputURL {
-                    Text(url.lastPathComponent).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                if playbackController.hasFile, let title = playbackController.title {
+                    Label(title, systemImage: "doc.fill").font(.caption.weight(.medium)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    if let url = playbackController.sourceURL {
+                        Text(url.lastPathComponent).font(.caption2).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
+                    }
                     Spacer()
+                    Button { showingImporter = true } label: {
+                        Label("Change", systemImage: "arrow.triangle.2.circlepath").font(.caption.weight(.medium))
+                    }.buttonStyle(.bordered).tint(.white).disabled(inferenceController.isSeparating)
                 } else {
-                    Text("No file chosen").font(.caption).foregroundStyle(.tertiary)
+                    Text("No file selected — Add audio to separate").font(.caption).foregroundStyle(.tertiary)
                     Spacer()
+                    Button { showingImporter = true } label: {
+                        Label("Add Audio", systemImage: "plus").font(.caption.weight(.medium))
+                    }.buttonStyle(.bordered).tint(.white).disabled(inferenceController.isSeparating)
                 }
             }
 
@@ -364,14 +357,14 @@ struct InferenceCard: View {
                 }
             }
 
-            // Start / Cancel
+            // Start / Cancel — uses single local source via playbackController
             HStack(spacing: 10) {
                 Button {
-                    guard let url = inferenceInputURL else { return }
-                    inferenceController.startSeparation(inputURL: url)
+                    guard let url = playbackController.sourceURL else { return }
+                    inferenceController.startSeparation(localFileURL: url)
                 } label: {
                     Label("Separate", systemImage: "play.fill").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
-                }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).disabled(inferenceInputURL == nil || inferenceController.isSeparating)
+                }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).disabled(!playbackController.hasFile || playbackController.sourceURL == nil || inferenceController.isSeparating)
 
                 if inferenceController.isSeparating {
                     Button(role: .destructive) { inferenceController.cancel() } label: { Text("Cancel").font(.callout.weight(.medium)) }.buttonStyle(.bordered).tint(.red)
