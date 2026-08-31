@@ -287,17 +287,30 @@ struct InferenceCard: View {
                     .disabled(inferenceController.isSeparating)
                     .accessibilityLabel("YouTube URL")
                     .accessibilityIdentifier("YouTubeURLField")
-                Button {
-                    let trimmed = youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return }
-                    inferenceController.startSeparation(youTubeURL: url)
-                } label: {
-                    Label("Separate from YouTube", systemImage: "link").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                HStack(spacing: 10) {
+                    Button {
+                        let trimmed = youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return }
+                        inferenceController.startSeparation(youTubeURL: url)
+                    } label: {
+                        Label("Separate from YouTube", systemImage: "link").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
+                    .disabled(youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating)
+                    .accessibilityIdentifier("SeparateFromYouTubeButton")
+
+                    Button {
+                        let trimmed = youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return }
+                        inferenceController.prepareYouTubeMP3Export(youTubeURL: url)
+                    } label: {
+                        Label("Save MP3", systemImage: "square.and.arrow.down").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating)
+                    .accessibilityIdentifier("SaveYouTubeMP3Button")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
-                .disabled(youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating)
-                .accessibilityIdentifier("SeparateFromYouTubeButton")
             }
 
             // Start / Cancel
@@ -405,6 +418,10 @@ struct InferenceCard: View {
                 guard let result else { return }
                 loadCompletedResult(result)
             }
+            .onChange(of: inferenceController.preparedYouTubeMP3Export) { _, preparation in
+                guard let preparation else { return }
+                exportYouTubeMP3(preparation)
+            }
             .alert("Export Failed", isPresented: Binding(
                 get: { exportErrorMessage != nil },
                 set: { if !$0 { exportErrorMessage = nil } }
@@ -467,10 +484,35 @@ struct InferenceCard: View {
         }
     }
 
+    private func exportYouTubeMP3(_ preparation: YouTubeIngestResult) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.mp3]
+        panel.nameFieldStringValue = StemExporter.defaultYouTubeMP3Filename(
+            metadata: preparation.metadata
+        )
+        panel.canCreateDirectories = true
+
+        panel.begin { response in
+            guard response == .OK, let destinationURL = panel.url else { return }
+            Task {
+                do {
+                    try await Task.detached(priority: .userInitiated) {
+                        try StemExporter.exportMP3(
+                            from: preparation.audioURL,
+                            to: destinationURL
+                        )
+                    }.value
+                } catch {
+                    exportErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
     private var statusText: String {
         switch inferenceController.state {
         case .idle: return "Ready"
-        case .loadingModel: return "Loading model…"
+        case .loadingModel: return inferenceController.statusMessage
         case .separating: return "Separating…"
         case .completed: return "Complete"
         case .failed(let m): return m

@@ -26,6 +26,27 @@ private actor MockYouTubeSuccess: YouTubeIngesting {
     }
 }
 
+private actor MockYouTubeMetadataSuccess: YouTubeIngesting {
+    let result: YouTubeIngestResult
+    private(set) var ingestCallCount = 0
+
+    init(result: YouTubeIngestResult) {
+        self.result = result
+    }
+
+    func ingest(youTubeURL: URL) async throws -> URL {
+        try await ingestWithMetadata(youTubeURL: youTubeURL).audioURL
+    }
+
+    func ingestWithMetadata(youTubeURL: URL) async throws -> YouTubeIngestResult {
+        ingestCallCount += 1
+        try Task.checkCancellation()
+        return result
+    }
+
+    func cancel() async throws {}
+}
+
 private actor MockYouTubeFailure: YouTubeIngesting {
     let error: YouTubeIngestError
     private(set) var cancelCallCount = 0
@@ -366,6 +387,56 @@ final class InferenceControllerYouTubeTests: XCTestCase {
     }
 
     // 2) Ingest failure → .failed, no inference started
+    func testDirectYouTubeMP3PreparationPreservesMetadataAndDoesNotStartInference() async throws {
+        let mixtureDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: mixtureDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: mixtureDirectory) }
+        let mixtureURL = mixtureDirectory.appendingPathComponent("mixture.wav")
+        try makeWAV(at: mixtureURL)
+
+        let workerDirectory = try makeFakeWorker(script: floatSuccessScript())
+        defer { try? FileManager.default.removeItem(at: workerDirectory) }
+        let client = InferenceWorkerClient(
+            readinessTimeout: .seconds(3),
+            startedTimeout: .seconds(2),
+            separationTimeout: .seconds(3),
+            workerDirectory: workerDirectory
+        )
+        let sawWorkerEvent = AtomicBool()
+        await client.setTestHook { _ in sawWorkerEvent.setTrue() }
+
+        let metadata = try XCTUnwrap(
+            YouTubeTrackMetadata(artist: "Massive Attack", title: "Teardrop")
+        )
+        let ingest = MockYouTubeMetadataSuccess(
+            result: YouTubeIngestResult(audioURL: mixtureURL, metadata: metadata)
+        )
+        let controller = InferenceController(
+            client: client,
+            outputBase: mixtureDirectory,
+            youTubeIngest: ingest
+        )
+
+        controller.prepareYouTubeMP3Export(
+            youTubeURL: URL(string: "https://www.youtube.com/watch?v=dQw4w9WgXcQ")!
+        )
+        let task = try XCTUnwrap(controller.debugCurrentTask())
+        await task.value
+
+        XCTAssertEqual(
+            controller.preparedYouTubeMP3Export,
+            YouTubeIngestResult(audioURL: mixtureURL, metadata: metadata)
+        )
+        let ingestCallCount = await ingest.ingestCallCount
+        XCTAssertEqual(ingestCallCount, 1)
+        XCTAssertEqual(controller.state, .idle)
+        XCTAssertNil(controller.result, "Direct MP3 export must not create stems")
+        XCTAssertFalse(sawWorkerEvent.value, "Direct MP3 export must not launch the inference worker")
+        let lifecycle = await client.debugLifecycleSnapshot()
+        XCTAssertFalse(lifecycle.hasOwnedLifecycleWork)
+    }
+
     func testIngestFailureDoesNotStartInference() async throws {
         let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)

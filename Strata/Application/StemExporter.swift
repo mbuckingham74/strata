@@ -43,6 +43,13 @@ enum StemExportFormat: Sendable, Equatable {
 struct StemExporter {
     private static let mixChunkFrameCount: AVAudioFrameCount = 16_384
 
+    static func defaultYouTubeMP3Filename(metadata: YouTubeTrackMetadata?) -> String {
+        if let metadata {
+            return "\(metadata.exportBaseName).mp3"
+        }
+        return "YouTube Audio.mp3"
+    }
+
     static func defaultFilename(
         for stem: StemName,
         format: StemExportFormat = .wav,
@@ -94,6 +101,19 @@ struct StemExporter {
         case .mp3:
             try encodeMP3(from: artifact.url, to: destinationURL, ffmpegURL: ffmpegURL)
         }
+    }
+
+    static func exportMP3(
+        from sourceURL: URL,
+        to destinationURL: URL,
+        ffmpegURL: URL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+    ) throws {
+        let resolvedSourceURL = sourceURL.standardizedFileURL.resolvingSymlinksInPath()
+        let resolvedDestinationURL = destinationURL.standardizedFileURL.resolvingSymlinksInPath()
+        guard resolvedSourceURL != resolvedDestinationURL else {
+            throw StemExportError.sourceAndDestinationMatch
+        }
+        try encodeMP3(from: sourceURL, to: destinationURL, ffmpegURL: ffmpegURL)
     }
 
     static func exportMix(

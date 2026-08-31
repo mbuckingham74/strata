@@ -41,6 +41,7 @@ final class InferenceController {
     private(set) var result: SeparationResult?
     private(set) var errorMessage: String?
     private(set) var exportBaseName: String?
+    private(set) var preparedYouTubeMP3Export: YouTubeIngestResult?
 
     var isSeparating: Bool {
         if case .separating = state { return true }
@@ -122,6 +123,7 @@ final class InferenceController {
         result = nil
         errorMessage = nil
         exportBaseName = nil
+        preparedYouTubeMP3Export = nil
 
         let client = self.client
         let base = outputBaseURL
@@ -187,6 +189,7 @@ final class InferenceController {
         result = nil
         errorMessage = nil
         exportBaseName = nil
+        preparedYouTubeMP3Export = nil
 
         let client = self.client
         let youTubeIngest = self.youTubeIngest
@@ -267,6 +270,79 @@ final class InferenceController {
                 self.state = .failed(msg)
                 self.statusMessage = "Failed"
                 self.errorMessage = String(msg.prefix(500))
+            }
+        }
+    }
+
+    /// Download and canonicalize YouTube audio for direct MP3 export without inference.
+    func prepareYouTubeMP3Export(youTubeURL: URL) {
+        if youTubeCleanupFailed { return }
+        let generation = operationGeneration + 1
+        operationGeneration = generation
+        latestGeneration = generation
+
+        let previousTask = currentTask
+        previousTask?.cancel()
+
+        state = .loadingModel
+        statusMessage = "Downloading…"
+        result = nil
+        errorMessage = nil
+        exportBaseName = nil
+        preparedYouTubeMP3Export = nil
+
+        let youTubeIngest = self.youTubeIngest
+        currentTask = Task { [previousTask] in
+            if let previousTask { await previousTask.value }
+            await self.drainCleanupChain()
+            if self.youTubeCleanupFailed { return }
+
+            do {
+                try Task.checkCancellation()
+                let ingestResult = try await youTubeIngest.ingestWithMetadata(youTubeURL: youTubeURL)
+
+                try Task.checkCancellation()
+                guard generation == self.latestGeneration else { return }
+                guard !Task.isCancelled else { throw CancellationError() }
+
+                self.preparedYouTubeMP3Export = ingestResult
+                self.state = .idle
+                self.statusMessage = "Ready to save MP3"
+                self.errorMessage = nil
+
+            } catch is CancellationError {
+                guard generation == self.latestGeneration else { return }
+                self.state = .failed("Cancelled")
+                self.statusMessage = "Cancelled"
+                self.errorMessage = "Cancelled"
+            } catch let err as YouTubeIngestError {
+                if case .cleanupFailed(let msg) = err {
+                    let message = "Cleanup failed: \(msg)"
+                    self.state = .failed(message)
+                    self.statusMessage = "Cleanup failed"
+                    self.errorMessage = String(message.prefix(500))
+                    self.youTubeCleanupFailed = true
+                }
+                guard generation == self.latestGeneration else { return }
+                switch err {
+                case .cancelled:
+                    self.state = .failed("Cancelled")
+                    self.statusMessage = "Cancelled"
+                    self.errorMessage = "Cancelled"
+                case .cleanupFailed:
+                    break
+                default:
+                    let message = err.localizedDescription
+                    self.state = .failed(message)
+                    self.statusMessage = "Failed"
+                    self.errorMessage = String(message.prefix(500))
+                }
+            } catch {
+                guard generation == self.latestGeneration else { return }
+                let message = error.localizedDescription
+                self.state = .failed(message)
+                self.statusMessage = "Failed"
+                self.errorMessage = String(message.prefix(500))
             }
         }
     }

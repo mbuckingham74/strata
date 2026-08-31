@@ -86,6 +86,20 @@ final class StemExporterTests: XCTestCase {
         }
     }
 
+    func testDefaultYouTubeMP3FilenameUsesReliableMetadataOrFallback() throws {
+        let metadata = try XCTUnwrap(
+            YouTubeTrackMetadata(artist: "Massive Attack", title: "Teardrop")
+        )
+        XCTAssertEqual(
+            StemExporter.defaultYouTubeMP3Filename(metadata: metadata),
+            "Massive Attack - Teardrop.mp3"
+        )
+        XCTAssertEqual(
+            StemExporter.defaultYouTubeMP3Filename(metadata: nil),
+            "YouTube Audio.mp3"
+        )
+    }
+
     func testDefaultFilenameUsesYouTubeMetadataForEveryStemAndFormat() throws {
         let metadata = try XCTUnwrap(
             YouTubeTrackMetadata(artist: "Massive Attack", title: "Teardrop")
@@ -279,6 +293,47 @@ final class StemExporterTests: XCTestCase {
         )
 
         XCTAssertEqual(try Data(contentsOf: destinationURL), Data("encoded-mp3".utf8))
+        XCTAssertEqual(try Data(contentsOf: sourceURL), sourceData)
+        XCTAssertEqual(
+            try String(contentsOf: argumentsURL, encoding: .utf8).split(separator: "\n").map(String.init),
+            [
+                "-nostdin",
+                "-y",
+                "-i", sourceURL.path,
+                "-codec:a", "libmp3lame",
+                "-q:a", "2",
+                destinationURL.path,
+            ]
+        )
+    }
+
+    func testDirectYouTubeMP3ExportEncodesPreparedAudioWithFFmpeg() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let sourceURL = directoryURL.appendingPathComponent("mixture.wav")
+        let destinationURL = directoryURL.appendingPathComponent("Massive Attack - Teardrop.mp3")
+        let argumentsURL = directoryURL.appendingPathComponent("arguments.txt")
+        let ffmpegURL = directoryURL.appendingPathComponent("ffmpeg")
+        let sourceData = Data([0x52, 0x49, 0x46, 0x46, 0x01, 0x02])
+        try sourceData.write(to: sourceURL)
+
+        try makeExecutable(at: ffmpegURL, contents: """
+        #!/bin/sh
+        printf '%s\\n' "$@" > '\(argumentsURL.path)'
+        for argument in "$@"; do output="$argument"; done
+        printf 'encoded-youtube-mp3' > "$output"
+        """)
+
+        try StemExporter.exportMP3(
+            from: sourceURL,
+            to: destinationURL,
+            ffmpegURL: ffmpegURL
+        )
+
+        XCTAssertEqual(try Data(contentsOf: destinationURL), Data("encoded-youtube-mp3".utf8))
         XCTAssertEqual(try Data(contentsOf: sourceURL), sourceData)
         XCTAssertEqual(
             try String(contentsOf: argumentsURL, encoding: .utf8).split(separator: "\n").map(String.init),
