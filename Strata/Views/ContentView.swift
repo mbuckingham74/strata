@@ -387,49 +387,14 @@ struct InferenceCard: View {
                             .font(.caption)
                             .foregroundStyle(.red.opacity(0.9))
                     }
-                    ForEach(result.sortedStems, id: \.name) { stem in
-                        HStack(spacing: 10) {
-                            Image(systemName: icon(for: stem.name)).font(.caption).foregroundStyle(.secondary).frame(width: 16)
-                            Text(stem.name.rawValue).font(.callout.weight(.medium)).foregroundStyle(.white).frame(width: 60, alignment: .leading)
-                            Text(stem.url.lastPathComponent).font(.caption.monospaced()).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
-                            Spacer()
-                            StemAudibilityControls(
-                                stemPlaybackController: stemPlaybackController,
-                                stem: stem.name
-                            )
-                            Text("\(stem.frameCount) frames").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
-                            Menu {
-                                Button("WAV") {
-                                    export(stem, as: .wav)
-                                }
-                                Button("MP3") {
-                                    export(stem, as: .mp3)
-                                }
-                            } label: {
-                                Label("Export", systemImage: "square.and.arrow.down")
-                            }
-                            .menuStyle(.button)
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .accessibilityIdentifier("ExportStem-\(stem.name.rawValue)")
-                        }.padding(.horizontal, 10).padding(.vertical, 8).background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
-                    }
-                    Menu {
-                        Button("Export Selected WAV") {
-                            exportMix(stemPlaybackController.selectedStems, as: .wav)
-                        }
-                    } label: {
-                        Label("Export Selected MP3", systemImage: "square.and.arrow.down.on.square")
-                    } primaryAction: {
-                        exportMix(stemPlaybackController.selectedStems)
-                    }
-                    .menuStyle(.button)
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
-                    .disabled(stemPlaybackController.selectedStems.count < 2)
-                    .help("Export the stems currently selected by Mute and Solo as one MP3 mix, or choose WAV")
-                    .accessibilityIdentifier("ExportSelectedStemMix")
-                    Text(result.jobDirectoryURL.path).font(.caption2.monospaced()).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
+                    // M7: six visually stacked strata sharing one horizontal timeline.
+                    // Fixed display order (Vocals▶Other), real waveforms via WaveformProvider,
+                    // shared ruler + per-waveform playhead driven by stemPlaybackController.
+                    StrataStackView(
+                        result: result,
+                        stemPlaybackController: stemPlaybackController,
+                        inferenceController: inferenceController
+                    )
                 }.padding(.top, 4)
             }
         }.padding(16).background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.06)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1)))

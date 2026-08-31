@@ -44,6 +44,10 @@
 		A10000000000000000000024 /* ExportFolderPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000024 /* ExportFolderPreference.swift */; };
 		A10000000000000000000025 /* ExportFolderPreferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000025 /* ExportFolderPreferenceTests.swift */; };
 		A10000000000000000000026 /* EditableMetadataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000026 /* EditableMetadataTests.swift */; };
+		A10000000000000000000027 /* WaveformProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000027 /* WaveformProvider.swift */; };
+		A10000000000000000000028 /* StrataStackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000028 /* StrataStackView.swift */; };
+		A10000000000000000000029 /* StrataDisplayOrderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000029 /* StrataDisplayOrderTests.swift */; };
+		A1000000000000000000002A /* WaveformProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000002A /* WaveformProviderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -86,6 +90,10 @@
 		B10000000000000000000024 /* ExportFolderPreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportFolderPreference.swift; sourceTree = "<group>"; };
 		B10000000000000000000025 /* ExportFolderPreferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportFolderPreferenceTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000026 /* EditableMetadataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditableMetadataTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000027 /* WaveformProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformProvider.swift; sourceTree = "<group>"; };
+		B10000000000000000000028 /* StrataStackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataStackView.swift; sourceTree = "<group>"; };
+		B10000000000000000000029 /* StrataDisplayOrderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataDisplayOrderTests.swift; sourceTree = "<group>"; };
+		B1000000000000000000002A /* WaveformProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformProviderTests.swift; sourceTree = "<group>"; };
 		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -145,6 +153,7 @@
 				B10000000000000000000003 /* PlaybackController.swift */,
 				B1000000000000000000001E /* MultiStemAudioTransport.swift */,
 				B10000000000000000000020 /* StemPlaybackController.swift */,
+				B10000000000000000000027 /* WaveformProvider.swift */,
 			);
 			path = Audio;
 			sourceTree = "<group>";
@@ -153,6 +162,7 @@
 			isa = PBXGroup;
 			children = (
 				B10000000000000000000004 /* ContentView.swift */,
+				B10000000000000000000028 /* StrataStackView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -210,6 +220,8 @@
 				B10000000000000000000023 /* StemExporterTests.swift */,
 				B10000000000000000000025 /* ExportFolderPreferenceTests.swift */,
 				B10000000000000000000026 /* EditableMetadataTests.swift */,
+				B10000000000000000000029 /* StrataDisplayOrderTests.swift */,
+				B1000000000000000000002A /* WaveformProviderTests.swift */,
 			);
 			path = StrataTests;
 			sourceTree = "<group>";
@@ -366,7 +378,9 @@
 				A10000000000000000000003 /* PlaybackController.swift in Sources */,
 				A1000000000000000000001E /* MultiStemAudioTransport.swift in Sources */,
 				A10000000000000000000020 /* StemPlaybackController.swift in Sources */,
+				A10000000000000000000027 /* WaveformProvider.swift in Sources */,
 				A10000000000000000000004 /* ContentView.swift in Sources */,
+				A10000000000000000000028 /* StrataStackView.swift in Sources */,
 				A10000000000000000000007 /* AppLifecycleDelegate.swift in Sources */,
 				A10000000000000000000013 /* AppTerminationCoordinator.swift in Sources */,
 				A10000000000000000000008 /* InferenceProtocol.swift in Sources */,
@@ -403,6 +417,8 @@
 				A10000000000000000000023 /* StemExporterTests.swift in Sources */,
 				A10000000000000000000025 /* ExportFolderPreferenceTests.swift in Sources */,
 				A10000000000000000000026 /* EditableMetadataTests.swift in Sources */,
+				A10000000000000000000029 /* StrataDisplayOrderTests.swift in Sources */,
+				A1000000000000000000002A /* WaveformProviderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
