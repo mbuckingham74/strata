@@ -11,6 +11,7 @@ final class FakeStemTransport: StemAudioTransport {
     var currentTime: TimeInterval = 0
     private(set) var mutedStems: Set<StemName> = []
     private(set) var soloedStems: Set<StemName> = []
+    private(set) var stemGains: [StemName: Float] = [:]
     var onCompletion: (() -> Void)?
 
     var loadCallCount = 0
@@ -61,8 +62,27 @@ final class FakeStemTransport: StemAudioTransport {
         isPlaying = false
         mutedStems.removeAll()
         soloedStems.removeAll()
+        stemGains.removeAll()
+        for s in StemName.allCases { stemGains[s] = 1.0 }
         lastScheduledFramesToPlay = nil
         didScheduleZeroLength = false
+    }
+
+    func gain(for stem: StemName) -> Float { stemGains[stem] ?? 1.0 }
+    func gainPercent(for stem: StemName) -> Double { Double(gain(for: stem) * 100) }
+    func setGain(_ gain: Float, for stem: StemName) {
+        let clamped = min(max(gain, 0), 1)
+        stemGains[stem] = clamped
+    }
+    func setGainPercent(_ percent: Double, for stem: StemName) {
+        setGain(Float(min(max(percent, 0), 100) / 100.0), for: stem)
+    }
+    func effectiveVolume(for stem: StemName) -> Float {
+        let audible: Bool = {
+            if !soloedStems.isEmpty { return soloedStems.contains(stem) }
+            return !mutedStems.contains(stem)
+        }()
+        return audible ? gain(for: stem) : 0
     }
 
     func play() {

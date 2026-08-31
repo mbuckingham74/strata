@@ -23,9 +23,40 @@ final class MultiStemAudioTransport {
 
     private(set) var mutedStems: Set<StemName> = []
     private(set) var soloedStems: Set<StemName> = []
+    private(set) var stemGains: [StemName: Float] = [:]
 
     /// Exposed for testing: current schedule generation.
     var currentGeneration: UInt64 { scheduleGeneration }
+
+    // MARK: - Gain (0...1, UI 0...100%)
+
+    /// Returns per-stem gain in 0...1 (nil means 1.0 = 100%).
+    func gain(for stem: StemName) -> Float {
+        stemGains[stem] ?? 1.0
+    }
+
+    func gainPercent(for stem: StemName) -> Double {
+        gainToPercent(gain(for: stem))
+    }
+
+    func setGain(_ gain: Float, for stem: StemName) {
+        let clamped = min(max(gain, 0), 1)
+        stemGains[stem] = clamped
+        applyStemAudibility()
+    }
+
+    func setGainPercent(_ percent: Double, for stem: StemName) {
+        setGain(uiPercentToGain(percent), for: stem)
+    }
+
+    // UI 0...100% maps to audio gain 0...1 via small localized linear conversion.
+    private func uiPercentToGain(_ percent: Double) -> Float {
+        Float(min(max(percent, 0), 100) / 100.0)
+    }
+
+    private func gainToPercent(_ gain: Float) -> Double {
+        Double(min(max(gain, 0), 1) * 100)
+    }
 
     var duration: TimeInterval {
         guard totalFrames > 0 else { return 0 }
@@ -74,6 +105,7 @@ final class MultiStemAudioTransport {
         stemNames.removeAll()
         mutedStems.removeAll()
         soloedStems.removeAll()
+        stemGains.removeAll()
         sampleRate = 44_100
         totalFrames = 0
         seekFrame = 0
@@ -153,6 +185,11 @@ final class MultiStemAudioTransport {
             files.append(file)
             stemNames.append(name)
         }
+        // Reset gains to 100% (1.0) for all six stems.
+        for name in StemName.allCases {
+            stemGains[name] = 1.0
+        }
+        applyStemAudibility()
         engine.prepare()
     }
 
@@ -285,8 +322,13 @@ final class MultiStemAudioTransport {
 
     private func applyStemAudibility() {
         for (stem, player) in zip(stemNames, players) {
-            player.volume = isAudible(stem) ? 1 : 0
+            player.volume = isAudible(stem) ? gain(for: stem) : 0
         }
+    }
+
+    /// Test helper: effective volume accounting for mute/solo and gain.
+    func effectiveVolume(for stem: StemName) -> Float {
+        isAudible(stem) ? gain(for: stem) : 0
     }
 
     private func futureHostTime(delaySeconds: Double) -> AVAudioTime? {

@@ -9,6 +9,7 @@ protocol StemAudioTransport: AnyObject {
     var currentTime: TimeInterval { get }
     var mutedStems: Set<StemName> { get }
     var soloedStems: Set<StemName> { get }
+    var stemGains: [StemName: Float] { get }
     var onCompletion: (() -> Void)? { get set }
     func load(result: SeparationResult) throws
     func play()
@@ -17,6 +18,8 @@ protocol StemAudioTransport: AnyObject {
     func stop()
     func setMuted(_ muted: Bool, for stem: StemName)
     func setSoloed(_ soloed: Bool, for stem: StemName)
+    func gain(for stem: StemName) -> Float
+    func setGain(_ gain: Float, for stem: StemName)
 }
 
 extension MultiStemAudioTransport: StemAudioTransport {}
@@ -36,6 +39,7 @@ final class StemPlaybackController {
     var isPlaying: Bool = false
     private(set) var mutedStems: Set<StemName>
     private(set) var soloedStems: Set<StemName>
+    private(set) var stemGains: [StemName: Float] = [:]
     var errorMessage: String?
 
     var hasStems: Bool { result != nil }
@@ -63,6 +67,7 @@ final class StemPlaybackController {
         self.transport = transport
         self.mutedStems = transport.mutedStems
         self.soloedStems = transport.soloedStems
+        self.stemGains = transport.stemGains
         self.transport.onCompletion = { [weak self] in
             guard let self else { return }
             let captured = self.sessionGeneration
@@ -92,6 +97,7 @@ final class StemPlaybackController {
         errorMessage = nil
         mutedStems.removeAll()
         soloedStems.removeAll()
+        stemGains.removeAll()
 
         do {
             try transport.load(result: result)
@@ -111,6 +117,7 @@ final class StemPlaybackController {
             isPlaying = false
             mutedStems = transport.mutedStems
             soloedStems = transport.soloedStems
+            stemGains = transport.stemGains
             stopTimer()
         } catch {
             self.result = nil
@@ -184,6 +191,36 @@ final class StemPlaybackController {
 
     func toggleSolo(for stem: StemName) {
         setSoloed(!soloedStems.contains(stem), for: stem)
+    }
+
+    // MARK: - Gain
+
+    func gain(for stem: StemName) -> Float {
+        stemGains[stem] ?? 1.0
+    }
+
+    func gainPercent(for stem: StemName) -> Double {
+        gainToPercent(gain(for: stem))
+    }
+
+    func setGain(_ gain: Float, for stem: StemName) {
+        guard hasStems else { return }
+        let clamped = min(max(gain, 0), 1)
+        stemGains[stem] = clamped
+        transport.setGain(clamped, for: stem)
+    }
+
+    func setGainPercent(_ percent: Double, for stem: StemName) {
+        setGain(uiPercentToGain(percent), for: stem)
+    }
+
+    // UI 0...100% -> gain 0...1 linear (small localized conversion)
+    private func uiPercentToGain(_ percent: Double) -> Float {
+        Float(min(max(percent, 0), 100) / 100.0)
+    }
+
+    private func gainToPercent(_ gain: Float) -> Double {
+        Double(min(max(gain, 0), 1) * 100)
     }
 
     // MARK: - Completion

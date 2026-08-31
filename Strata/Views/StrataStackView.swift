@@ -242,6 +242,27 @@ struct StratumRowView: View {
             .frame(height: 42)
             .frame(maxWidth: .infinity)
 
+            // Per-stem gain slider (0% silent .. 100% original, live, separate from mute/solo)
+            VStack(spacing: 2) {
+                Slider(
+                    value: Binding(
+                        get: { stemPlaybackController.gainPercent(for: artifact.name) },
+                        set: { stemPlaybackController.setGainPercent($0, for: artifact.name) }
+                    ),
+                    in: 0...100,
+                    step: 1
+                )
+                .tint(color)
+                .accessibilityIdentifier("GainSlider-\(artifact.name.rawValue)")
+                .disabled(!stemPlaybackController.hasStems)
+                Text("\(Int(stemPlaybackController.gainPercent(for: artifact.name).rounded()))%")
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+            .frame(width: 96)
+
             // Audibility controls (preserve existing mute/solo)
             StemAudibilityControls(stemPlaybackController: stemPlaybackController, stem: artifact.name)
                 .frame(width: 112)
@@ -338,7 +359,8 @@ struct StrataStackView: View {
                 )
                 .frame(height: 28)
                 .frame(maxWidth: .infinity)
-                // Match right-side fixed columns (controls + export)
+                // Match right-side fixed columns (gain slider + controls + export)
+                Spacer().frame(width: 96)
                 Spacer().frame(width: 112)
                 Color.clear.frame(width: 26, height: 28)
             }
