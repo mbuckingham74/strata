@@ -200,6 +200,8 @@ struct StratumRowView: View {
     let artifact: StemArtifact
     @Bindable var stemPlaybackController: StemPlaybackController
     var onExport: (StemArtifact, StemExportFormat) -> Void
+    var isMp3ExportReady: Bool = true
+    var isExportReady: Bool { isMp3ExportReady }
 
     private var color: Color { strataColor(for: artifact.name) }
 
@@ -263,10 +265,11 @@ struct StratumRowView: View {
             StemAudibilityControls(stemPlaybackController: stemPlaybackController, stem: artifact.name)
                 .frame(width: 112)
 
-            // Export per stem
+            // Export per stem — WAV does not require FFmpeg, MP3 does
             Menu {
                 Button("WAV") { onExport(artifact, .wav) }
                 Button("MP3") { onExport(artifact, .mp3) }
+                    .disabled(!isMp3ExportReady)
             } label: {
                 Image(systemName: "square.and.arrow.down")
                     .font(.system(size: 11, weight: .medium))
@@ -373,7 +376,8 @@ struct StrataStackView: View {
                         stemPlaybackController: stemPlaybackController,
                         onExport: { artifact, format in
                             export(artifact, as: format)
-                        }
+                        },
+                        isMp3ExportReady: inferenceController.isMp3ExportReady
                     )
                     if stem.name != orderedStems.last?.name {
                         Divider().opacity(0.06).padding(.horizontal, 10)
@@ -382,21 +386,31 @@ struct StrataStackView: View {
             }
             .background(Color.white.opacity(0.02))
 
-            // Footer: selected-mix export (kept outside per-row flow)
+            // Footer: selected-mix export (kept outside per-row flow) — WAV does not require FFmpeg
             HStack(spacing: 10) {
+                Button {
+                    exportMix(stemPlaybackController.selectedStems, as: .mp3)
+                } label: {
+                    Label("Export Selected MP3", systemImage: "square.and.arrow.down.on.square")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
+                .disabled(stemPlaybackController.selectedStems.count < 2 || !inferenceController.isMp3ExportReady)
+                .help("Export the stems currently selected by Mute and Solo as one MP3 mix")
+                .accessibilityIdentifier("ExportSelectedStemMix")
                 Menu {
                     Button("Export Selected WAV") { exportMix(stemPlaybackController.selectedStems, as: .wav) }
                 } label: {
-                    Label("Export Selected MP3", systemImage: "square.and.arrow.down.on.square")
-                } primaryAction: {
-                    exportMix(stemPlaybackController.selectedStems)
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 11, weight: .medium))
+                        .frame(width: 22, height: 22)
+                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
                 }
                 .menuStyle(.button)
-                .buttonStyle(.borderedProminent)
-                .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
+                .buttonStyle(.plain)
                 .disabled(stemPlaybackController.selectedStems.count < 2)
-                .help("Export the stems currently selected by Mute and Solo as one MP3 mix, or choose WAV")
-                .accessibilityIdentifier("ExportSelectedStemMix")
+                .help("Export Selected WAV — available without FFmpeg")
+                .accessibilityIdentifier("ExportSelectedWAVMenu")
                 Spacer()
                 Text(effectiveDisplayTitle)
                     .font(.caption2)
@@ -408,6 +422,10 @@ struct StrataStackView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(Color.white.opacity(0.03))
+            if let r = inferenceController.runtimeReadiness, !r.isMp3ExportReady {
+                Text(r.sidebarStatus).font(.caption2).foregroundStyle(.red.opacity(0.9)).padding(.horizontal, 12).padding(.bottom, 6)
+                    .accessibilityIdentifier("Mp3ExportHint")
+            }
         }
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)

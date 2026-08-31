@@ -141,6 +141,32 @@ final class InferenceController {
 
     var canStart: Bool { !isSeparating }
 
+    // MARK: - RuntimeReadiness (preflight hint/gating only)
+
+    private(set) var runtimeReadiness: RuntimeReadiness?
+    var isSeparationReady: Bool { isLocalSeparationReady }
+    var isLocalSeparationReady: Bool { runtimeReadiness?.isLocalSeparationReady ?? false }
+    var isLoadedSeparationReady: Bool { runtimeReadiness?.isLoadedSeparationReady ?? false }
+    var isWorkerReady: Bool { runtimeReadiness?.isWorkerReady ?? false }
+    var isYouTubeAcquisitionReady: Bool { runtimeReadiness?.isYouTubeAcquisitionReady ?? false }
+    var isExportReady: Bool { isMp3ExportReady }
+    var isMp3ExportReady: Bool { runtimeReadiness?.isMp3ExportReady ?? false }
+    var isWavExportReady: Bool { runtimeReadiness?.isWavExportReady ?? true }
+
+    func refreshRuntimeReadiness(
+        checker: RuntimeReadinessChecker = .live
+    ) async {
+        let readiness = await Task.detached(priority: .utility) { checker.check() }.value
+        self.runtimeReadiness = readiness
+    }
+
+    func refreshRuntimeReadiness(
+        isExecutable: @escaping @Sendable (String) -> Bool,
+        resolveWorker: @escaping @Sendable () throws -> WorkerLaunchConfiguration
+    ) async {
+        await refreshRuntimeReadiness(checker: RuntimeReadinessChecker(isExecutable: isExecutable, resolveWorker: resolveWorker))
+    }
+
     // MARK: - Ownership
 
     private let client: InferenceWorkerClient

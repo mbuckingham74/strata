@@ -160,11 +160,25 @@ struct SidebarView: View {
             }
             Spacer(minLength: 0)
             HStack(spacing: 6) {
-                Circle().fill(Color.green.opacity(0.9)).frame(width: 6, height: 6)
-                Text("Engine ready · 100% local").font(.caption2).foregroundStyle(.secondary)
+                Circle().fill(sidebarDotColor).frame(width: 6, height: 6)
+                Text(sidebarStatusText).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 Spacer()
             }.padding(.horizontal, 12).padding(.vertical, 10).background(.white.opacity(0.03)).overlay(Divider().opacity(0.1), alignment: .top)
+                .help(sidebarStatusText)
+                .accessibilityIdentifier("RuntimeReadinessStatus")
         }.background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var sidebarStatusText: String {
+        guard let r = inferenceController.runtimeReadiness else { return "Checking setup…" }
+        return r.sidebarStatus
+    }
+
+    private var sidebarDotColor: Color {
+        guard let r = inferenceController.runtimeReadiness else { return Color.orange.opacity(0.9) }
+        if r.isSeparationReady { return Color.green.opacity(0.9) }
+        if !r.ffmpegAvailable || !r.workerAvailable { return Color.red.opacity(0.9) }
+        return Color.orange.opacity(0.9)
     }
 }
 
@@ -348,8 +362,14 @@ struct InferenceCard: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
-                    .disabled(youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating)
+                    .disabled(youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating || !inferenceController.isYouTubeAcquisitionReady)
                     .accessibilityIdentifier("LoadYouTubeSourceButton")
+                }
+                if let r = inferenceController.runtimeReadiness, !r.isYouTubeAcquisitionReady {
+                    Text(r.sidebarStatus).font(.caption2).foregroundStyle(.orange.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("YouTubeReadinessHint")
+                } else if inferenceController.runtimeReadiness == nil {
+                    Text("Checking setup…").font(.caption2).foregroundStyle(.tertiary)
                 }
 
                 if inferenceController.isYouTubeSourceLoaded, let loaded = inferenceController.loadedYouTubeSource {
@@ -438,7 +458,7 @@ struct InferenceCard: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
-                            .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating)
+                            .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating || !inferenceController.isLoadedSeparationReady)
                             .accessibilityIdentifier("SeparateLoadedYouTubeButton")
 
                             Button {
@@ -449,8 +469,15 @@ struct InferenceCard: View {
                                 Label("Save MP3", systemImage: "square.and.arrow.down").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
                             }
                             .buttonStyle(.bordered)
-                            .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating)
+                            .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating || !inferenceController.isMp3ExportReady)
                             .accessibilityIdentifier("SaveYouTubeMP3Button")
+                        }
+                        if let r = inferenceController.runtimeReadiness {
+                            if !r.isLoadedSeparationReady {
+                                Text(r.sidebarStatus).font(.caption2).foregroundStyle(.red.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
+                            } else if !r.isMp3ExportReady {
+                                Text(r.sidebarStatus).font(.caption2).foregroundStyle(.red.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                         // Legacy identifier proxy for UI tests expecting SeparateFromYouTubeButton
                         Color.clear.frame(width: 0, height: 0)
@@ -463,6 +490,7 @@ struct InferenceCard: View {
             }
 
             // Start / Cancel — uses single local source via playbackController
+            VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 10) {
                 if !inferenceController.isYouTubeSourceLoaded {
                     Button {
@@ -470,7 +498,8 @@ struct InferenceCard: View {
                         inferenceController.startSeparation(localFileURL: url)
                     } label: {
                         Label("Separate", systemImage: "play.fill").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
-                    }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).disabled(!playbackController.hasFile || playbackController.sourceURL == nil || inferenceController.isSeparating)
+                    }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).disabled(!playbackController.hasFile || playbackController.sourceURL == nil || inferenceController.isSeparating || !inferenceController.isLocalSeparationReady)
+                    .accessibilityIdentifier("LocalSeparateButton")
                 }
 
                 if inferenceController.isSeparating {
@@ -478,6 +507,10 @@ struct InferenceCard: View {
                 }
                 Spacer()
                 Text(statusText).font(.caption).foregroundStyle(statusColor)
+            }
+            if let r = inferenceController.runtimeReadiness, !r.isLocalSeparationReady, !inferenceController.isYouTubeSourceLoaded {
+                Text(r.sidebarStatus).font(.caption2).foregroundStyle(.red.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
+            }
             }
 
             // Failure

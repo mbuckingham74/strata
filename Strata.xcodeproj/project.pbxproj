@@ -60,6 +60,8 @@
 		A10000000000000000000034 /* LocalAudioIngestClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000034 /* LocalAudioIngestClientTests.swift */; };
 		A10000000000000000000035 /* InferenceControllerLocalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000035 /* InferenceControllerLocalTests.swift */; };
 		A10000000000000000000036 /* AudioIngestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000036 /* AudioIngestSupport.swift */; };
+		A10000000000000000000037 /* RuntimeReadiness.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000037 /* RuntimeReadiness.swift */; };
+		A10000000000000000000038 /* RuntimeReadinessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000038 /* RuntimeReadinessTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -118,6 +120,8 @@
 		B10000000000000000000034 /* LocalAudioIngestClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAudioIngestClientTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000035 /* InferenceControllerLocalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceControllerLocalTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000036 /* AudioIngestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioIngestSupport.swift; sourceTree = "<group>"; };
+		B10000000000000000000037 /* RuntimeReadiness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeReadiness.swift; sourceTree = "<group>"; };
+		B10000000000000000000038 /* RuntimeReadinessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeReadinessTests.swift; sourceTree = "<group>"; };
 		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -214,6 +218,7 @@
 				B1000000000000000000000C /* InferenceWorkerClient.swift */,
 				B1000000000000000000000D /* InferenceController.swift */,
 				B10000000000000000000015 /* TrustedInferenceIdentity.swift */,
+				B10000000000000000000037 /* RuntimeReadiness.swift */,
 			);
 			path = Inference;
 			sourceTree = "<group>";
@@ -258,6 +263,7 @@
 				B10000000000000000000032 /* WorkerJobIdentityTests.swift */,
 				B10000000000000000000034 /* LocalAudioIngestClientTests.swift */,
 				B10000000000000000000035 /* InferenceControllerLocalTests.swift */,
+				B10000000000000000000038 /* RuntimeReadinessTests.swift */,
 			);
 			path = StrataTests;
 			sourceTree = "<group>";
@@ -429,6 +435,7 @@
 				A10000000000000000000036 /* AudioIngestSupport.swift in Sources */,
 				A10000000000000000000019 /* YouTubeIngestClient.swift in Sources */,
 				A10000000000000000000033 /* LocalAudioIngestClient.swift in Sources */,
+				A10000000000000000000037 /* RuntimeReadiness.swift in Sources */,
 				A10000000000000000000022 /* StemExporter.swift in Sources */,
 				A10000000000000000000024 /* ExportFolderPreference.swift in Sources */,
 				A1000000000000000000002D /* StrataProject.swift in Sources */,
@@ -467,6 +474,7 @@
 				A10000000000000000000032 /* WorkerJobIdentityTests.swift in Sources */,
 				A10000000000000000000034 /* LocalAudioIngestClientTests.swift in Sources */,
 				A10000000000000000000035 /* InferenceControllerLocalTests.swift in Sources */,
+				A10000000000000000000038 /* RuntimeReadinessTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

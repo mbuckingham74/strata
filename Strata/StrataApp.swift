@@ -28,6 +28,9 @@ struct StrataApp: App {
                 .onAppear {
                     appDelegate.inferenceController = inferenceController
                 }
+                .task {
+                    await inferenceController.refreshRuntimeReadiness()
+                }
                 .onDisappear {
                     // keep reference
                 }
