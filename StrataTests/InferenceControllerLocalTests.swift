@@ -445,4 +445,62 @@ final class InferenceControllerLocalTests: XCTestCase {
         XCTAssertFalse(controller.statusMessage == "Separating…")
         await controller.shutdownWorker()
     }
+
+    // MARK: - Inference Error alert dismiss (bug fix)
+
+    func testDismissErrorAlertClearsPresentationButPreservesFailedState() async throws {
+        let dir = try makeFakeWorker(script: floatSuccessScript())
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let mockFailure = MockLocalFailure(error: .invalidInput("missing file"))
+        let client = InferenceWorkerClient(readinessTimeout: .seconds(2), startedTimeout: .seconds(1), separationTimeout: .seconds(1), workerDirectory: dir)
+        let outputBase = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: outputBase, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outputBase) }
+        let controller = InferenceController(client: client, outputBase: outputBase, youTubeIngest: nil, localIngest: mockFailure)
+
+        controller.startSeparation(localFileURL: URL(fileURLWithPath: "/tmp/missing.m4a"))
+        let task = try XCTUnwrap(controller.debugCurrentTask())
+        await task.value
+
+        guard case .failed(let msg) = controller.state else { return XCTFail("Expected failed, got \(controller.state)") }
+        XCTAssertFalse(msg.isEmpty)
+        XCTAssertNotNil(controller.errorMessage)
+        XCTAssertEqual(controller.statusMessage, "Failed")
+
+        controller.dismissErrorAlert()
+
+        XCTAssertNil(controller.errorMessage, "dismiss must clear errorMessage so alert does not re-present")
+        guard case .failed(let preservedMsg) = controller.state else { return XCTFail("state must remain failed after dismiss") }
+        XCTAssertEqual(preservedMsg, msg)
+        XCTAssertEqual(controller.statusMessage, "Failed")
+        XCTAssertNil(controller.result)
+        // Alert predicate must be false after dismiss
+        let shouldPresent = controller.errorMessage != nil && controller.state != .failed("Cancelled")
+        XCTAssertFalse(shouldPresent)
+    }
+
+    func testDismissErrorAlertDoesNotAffectCancelledState() async throws {
+        let controller = InferenceController(client: InferenceWorkerClient(), outputBase: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        controller.cancel()
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(controller.state, .failed("Cancelled"))
+        XCTAssertEqual(controller.errorMessage, "Cancelled")
+        XCTAssertEqual(controller.statusMessage, "Cancelled")
+
+        controller.dismissErrorAlert()
+
+        XCTAssertNil(controller.errorMessage)
+        XCTAssertEqual(controller.state, .failed("Cancelled"))
+        XCTAssertEqual(controller.statusMessage, "Cancelled")
+    }
+
+    func testDismissErrorAlertIsNoOpWhenIdle() async throws {
+        let controller = InferenceController(client: InferenceWorkerClient(), outputBase: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        XCTAssertEqual(controller.state, .idle)
+        XCTAssertNil(controller.errorMessage)
+        controller.dismissErrorAlert()
+        XCTAssertEqual(controller.state, .idle)
+        XCTAssertNil(controller.errorMessage)
+        XCTAssertEqual(controller.statusMessage, "Ready to separate")
+    }
 }

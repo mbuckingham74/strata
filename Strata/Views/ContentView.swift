@@ -79,9 +79,9 @@ struct ContentView: View {
         }
         .alert("Inference Error", isPresented: Binding(
             get: { inferenceController.errorMessage != nil && inferenceController.state != .failed("Cancelled") },
-            set: { if !$0 { /* keep */ } }
+            set: { if !$0 { inferenceController.dismissErrorAlert() } }
         )) {
-            Button("OK") { }
+            Button("OK") { inferenceController.dismissErrorAlert() }
         } message: {
             if let msg = inferenceController.errorMessage { Text(msg) }
         }

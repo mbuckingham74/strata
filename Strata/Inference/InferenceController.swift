@@ -334,6 +334,13 @@ final class InferenceController {
         errorMessage = nil
     }
 
+    /// Dismiss the Inference Error alert without clearing inline failure/status.
+    /// Clears only the alert presentation state so it does not immediately re-present.
+    @MainActor
+    func dismissErrorAlert() {
+        errorMessage = nil
+    }
+
     /// Start separation via local file URL → canonicalize → inference.
     /// Single source: caller provides original file; we canonicalize to 44.1k stereo Float32 WAV.
     func startSeparation(localFileURL: URL) {
