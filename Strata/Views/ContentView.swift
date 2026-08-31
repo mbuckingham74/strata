@@ -412,7 +412,11 @@ struct InferenceCard: View {
     private func export(_ artifact: StemArtifact, as format: StemExportFormat) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
-        panel.nameFieldStringValue = StemExporter.defaultFilename(for: artifact.name, format: format)
+        panel.nameFieldStringValue = StemExporter.defaultFilename(
+            for: artifact.name,
+            format: format,
+            sourceBaseName: inferenceController.exportBaseName
+        )
         panel.canCreateDirectories = true
 
         panel.begin { response in

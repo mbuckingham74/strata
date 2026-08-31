@@ -35,6 +35,56 @@ final class StemExporterTests: XCTestCase {
         }
     }
 
+    func testDefaultFilenameUsesYouTubeMetadataForEveryStemAndFormat() throws {
+        let metadata = try XCTUnwrap(
+            YouTubeTrackMetadata(artist: "Massive Attack", title: "Teardrop")
+        )
+
+        for stem in StemName.allCases {
+            let stemName = stem.rawValue.capitalized
+            XCTAssertEqual(
+                StemExporter.defaultFilename(
+                    for: stem,
+                    format: .wav,
+                    sourceBaseName: metadata.exportBaseName
+                ),
+                "Massive Attack - Teardrop - \(stemName).wav"
+            )
+            XCTAssertEqual(
+                StemExporter.defaultFilename(
+                    for: stem,
+                    format: .mp3,
+                    sourceBaseName: metadata.exportBaseName
+                ),
+                "Massive Attack - Teardrop - \(stemName).mp3"
+            )
+        }
+    }
+
+    func testUnreliableYouTubeMetadataFallsBackToStemOnlyFilename() {
+        XCTAssertNil(YouTubeTrackMetadata(artist: nil, title: "Teardrop"))
+        XCTAssertNil(YouTubeTrackMetadata(artist: "Massive Attack", title: nil))
+        XCTAssertNil(YouTubeTrackMetadata(artist: "  ", title: "Teardrop"))
+        let missingArtist = YouTubeTrackMetadata(artist: "N/A", title: "Song")
+        XCTAssertNil(missingArtist)
+        XCTAssertNil(YouTubeTrackMetadata(artist: "Artist", title: "n/a"))
+        XCTAssertEqual(
+            StemExporter.defaultFilename(for: .vocals, sourceBaseName: missingArtist?.exportBaseName),
+            "vocals.wav"
+        )
+
+        for stem in StemName.allCases {
+            XCTAssertEqual(
+                StemExporter.defaultFilename(for: stem, sourceBaseName: nil),
+                "\(stem.rawValue).wav"
+            )
+            XCTAssertEqual(
+                StemExporter.defaultFilename(for: stem, format: .mp3, sourceBaseName: nil),
+                "\(stem.rawValue).mp3"
+            )
+        }
+    }
+
     func testExportCopiesArtifactBytesWithoutChangingSource() throws {
         let directoryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

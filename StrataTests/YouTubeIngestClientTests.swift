@@ -113,6 +113,7 @@ final class YouTubeIngestClientTests: XCTestCase {
         // yt-dlp args contain https URL and --no-playlist and output template with source.%(ext)s
         XCTAssertTrue(lines[0].contains(youTubeURL.absoluteString), "yt-dlp should contain URL")
         XCTAssertTrue(lines[0].contains("--no-playlist"), "yt-dlp should contain --no-playlist")
+        XCTAssertTrue(lines[0].contains("--write-info-json"), "yt-dlp should request metadata")
         XCTAssertTrue(lines[0].contains("source.%(ext)s"), "yt-dlp should contain source template")
         // Check absolute path in yt-dlp -o arg
         XCTAssertTrue(lines[0].contains(cacheBase.path) || lines[0].contains("/tmp") || lines[0].contains("/private"), "yt-dlp template should be absolute")
@@ -248,9 +249,11 @@ final class YouTubeIngestClientTests: XCTestCase {
         }
 
         let client = YouTubeIngestClient(ytDlpURL: ytURL, ffmpegURL: ffURL, cacheBaseURL: cacheBase)
-        let result = try await client.ingest(youTubeURL: shortYouTubeURL())
+        let ingestResult = try await client.ingestWithMetadata(youTubeURL: shortYouTubeURL())
+        let result = ingestResult.audioURL
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: result.path), "mixture.wav should exist")
+        XCTAssertNil(ingestResult.metadata, "Missing reliable metadata should remain a filename fallback")
         // Validate via AVAudioFile
         let file = try AVAudioFile(forReading: result)
         XCTAssertEqual(file.processingFormat.sampleRate, 44100, accuracy: 0.1)
@@ -270,6 +273,60 @@ final class YouTubeIngestClientTests: XCTestCase {
         let contents = try FileManager.default.contentsOfDirectory(at: runDir, includingPropertiesForKeys: nil)
         XCTAssertEqual(contents.count, 1, "Only mixture.wav should remain, got \(contents)")
         XCTAssertEqual(contents.first?.lastPathComponent, "mixture.wav")
+    }
+
+    func testPublishesReliableArtistAndTrackMetadata() async throws {
+        let cacheBase = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase) }
+        let logFile = try makeLogFile()
+        defer { try? FileManager.default.removeItem(at: logFile) }
+
+        let ytScript = """
+        #!/usr/bin/python3
+        import sys, os
+        args = sys.argv[1:]
+        idx = args.index("-o")
+        tmpl = args[idx+1]
+        out = tmpl.replace("%(ext)s", "webm")
+        info = out.rsplit(".", 1)[0] + ".info.json"
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        with open(out, "wb") as outf:
+            outf.write(b"\\x00" * 512)
+        with open(info, "w") as infof:
+            infof.write('{"artist":"Massive Attack","track":"Teardrop"}')
+        sys.exit(0)
+        """
+        let ffScript = writeValidWavPythonScript(
+            logPath: logFile.path,
+            frames: 1024,
+            sr: 44100,
+            ch: 2
+        )
+        let ytURL = try makeFakeExecutable(name: "yt-dlp", scriptContent: ytScript)
+        let ffURL = try makeFakeExecutable(name: "ffmpeg", scriptContent: ffScript)
+        defer {
+            try? FileManager.default.removeItem(at: ytURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: ffURL.deletingLastPathComponent())
+        }
+
+        let client = YouTubeIngestClient(
+            ytDlpURL: ytURL,
+            ffmpegURL: ffURL,
+            cacheBaseURL: cacheBase
+        )
+        let result = try await client.ingestWithMetadata(youTubeURL: validYouTubeURL())
+
+        XCTAssertEqual(
+            result.metadata,
+            YouTubeTrackMetadata(artist: "Massive Attack", title: "Teardrop")
+        )
+        XCTAssertEqual(result.metadata?.exportBaseName, "Massive Attack - Teardrop")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.audioURL.path))
+        let contents = try FileManager.default.contentsOfDirectory(
+            at: result.audioURL.deletingLastPathComponent(),
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertEqual(contents.map(\.lastPathComponent), ["mixture.wav"])
     }
 
     // MARK: - 3. nonzero tool exit

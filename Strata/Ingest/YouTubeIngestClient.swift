@@ -26,6 +26,49 @@ enum YouTubeIngestError: Error, Equatable, LocalizedError, Sendable {
     }
 }
 
+struct YouTubeTrackMetadata: Sendable, Equatable {
+    let artist: String
+    let title: String
+
+    init?(artist: String?, title: String?) {
+        guard let artist = Self.filenameComponent(artist),
+              let title = Self.filenameComponent(title) else {
+            return nil
+        }
+        self.artist = artist
+        self.title = title
+    }
+
+    var exportBaseName: String {
+        "\(artist) - \(title)"
+    }
+
+    private static func filenameComponent(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let metadataValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard metadataValue.lowercased() != "n/a" else { return nil }
+        let unsafeCharacters = CharacterSet(charactersIn: "/:")
+            .union(.controlCharacters)
+        let sanitized = value
+            .components(separatedBy: unsafeCharacters)
+            .joined(separator: "-")
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        guard !sanitized.isEmpty, sanitized.lowercased() != "na" else { return nil }
+        return sanitized
+    }
+}
+
+struct YouTubeIngestResult: Sendable, Equatable {
+    let audioURL: URL
+    let metadata: YouTubeTrackMetadata?
+}
+
+private struct YTDLPInfo: Decodable {
+    let artist: String?
+    let track: String?
+}
+
 // MARK: - TailBox
 
 private final class TailBox: @unchecked Sendable {
@@ -86,6 +129,10 @@ actor YouTubeIngestClient {
     // MARK: - Public
 
     func ingest(youTubeURL: URL) async throws -> URL {
+        try await ingestWithMetadata(youTubeURL: youTubeURL).audioURL
+    }
+
+    func ingestWithMetadata(youTubeURL: URL) async throws -> YouTubeIngestResult {
         // Validate YouTube URL
         guard let scheme = youTubeURL.scheme?.lowercased(), scheme == "https",
               let host = youTubeURL.host?.lowercased(),
@@ -124,7 +171,12 @@ actor YouTubeIngestClient {
 
             // yt-dlp
             let outputTemplate = runDir.appendingPathComponent("source.%(ext)s").path
-            let ytArgs = [youTubeURL.absoluteString, "-o", outputTemplate, "--no-playlist"]
+            let ytArgs = [
+                youTubeURL.absoluteString,
+                "-o", outputTemplate,
+                "--no-playlist",
+                "--write-info-json",
+            ]
             let ytStatus = try await runTool(toolName: "yt-dlp", executableURL: ytDlpURL, arguments: ytArgs, tailBox: tailBox)
             if ytStatus != 0 {
                 throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: tailBox.string())
@@ -141,12 +193,17 @@ actor YouTubeIngestClient {
             } catch {
                 throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: tailBox.string())
             }
-            let candidates = contents.filter { $0.lastPathComponent != "mixture.wav" }
+            let infoURLs = contents.filter { $0.lastPathComponent.hasSuffix(".info.json") }
+            let candidates = contents.filter {
+                $0.lastPathComponent != "mixture.wav"
+                    && !$0.lastPathComponent.hasSuffix(".info.json")
+            }
             guard candidates.count == 1 else {
                 let tail = tailBox.string()
                 throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: tail)
             }
             let sourceURL = candidates[0]
+            let metadata = metadata(from: infoURLs)
 
             if Task.isCancelled || cancellationRequested {
                 throw YouTubeIngestError.cancelled
@@ -198,12 +255,15 @@ actor YouTubeIngestClient {
             for url in candidates {
                 try? fileManager.removeItem(at: url)
             }
+            for url in infoURLs {
+                try? fileManager.removeItem(at: url)
+            }
 
             // Keep runDir containing only mixture.wav, clear active state
             activeRunDirectory = nil
             activeProcess = nil
             cancellationRequested = false
-            return mixtureURL
+            return YouTubeIngestResult(audioURL: mixtureURL, metadata: metadata)
 
         } catch {
             // If owned process still alive, retain ownership/state and surface failure — do not remove directory or clear state
@@ -273,6 +333,15 @@ actor YouTubeIngestClient {
 
     private func isAbsoluteFileURL(_ url: URL) -> Bool {
         return url.isFileURL && url.path.hasPrefix("/") && !url.path.isEmpty
+    }
+
+    private func metadata(from infoURLs: [URL]) -> YouTubeTrackMetadata? {
+        guard infoURLs.count == 1,
+              let data = try? Data(contentsOf: infoURLs[0]),
+              let info = try? JSONDecoder().decode(YTDLPInfo.self, from: data) else {
+            return nil
+        }
+        return YouTubeTrackMetadata(artist: info.artist, title: info.track)
     }
 
     private func runTool(toolName: String, executableURL: URL, arguments: [String], tailBox: TailBox) async throws -> Int32 {

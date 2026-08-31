@@ -5,7 +5,17 @@ import SwiftUI
 
 protocol YouTubeIngesting: Sendable {
     func ingest(youTubeURL: URL) async throws -> URL
+    func ingestWithMetadata(youTubeURL: URL) async throws -> YouTubeIngestResult
     func cancel() async throws
+}
+
+extension YouTubeIngesting {
+    func ingestWithMetadata(youTubeURL: URL) async throws -> YouTubeIngestResult {
+        YouTubeIngestResult(
+            audioURL: try await ingest(youTubeURL: youTubeURL),
+            metadata: nil
+        )
+    }
 }
 
 extension YouTubeIngestClient: YouTubeIngesting {}
@@ -30,6 +40,7 @@ final class InferenceController {
     private(set) var statusMessage: String = "Ready to separate"
     private(set) var result: SeparationResult?
     private(set) var errorMessage: String?
+    private(set) var exportBaseName: String?
 
     var isSeparating: Bool {
         if case .separating = state { return true }
@@ -110,6 +121,7 @@ final class InferenceController {
         statusMessage = "Loading model…"
         result = nil
         errorMessage = nil
+        exportBaseName = nil
 
         let client = self.client
         let base = outputBaseURL
@@ -174,6 +186,7 @@ final class InferenceController {
         statusMessage = "Downloading…"
         result = nil
         errorMessage = nil
+        exportBaseName = nil
 
         let client = self.client
         let youTubeIngest = self.youTubeIngest
@@ -186,7 +199,7 @@ final class InferenceController {
 
             do {
                 try Task.checkCancellation()
-                let mixtureURL = try await youTubeIngest.ingest(youTubeURL: youTubeURL)
+                let ingestResult = try await youTubeIngest.ingestWithMetadata(youTubeURL: youTubeURL)
 
                 try Task.checkCancellation()
                 guard generation == self.latestGeneration else { return }
@@ -195,12 +208,16 @@ final class InferenceController {
                 // Transition status to inference phase
                 self.statusMessage = "Loading model…"
 
-                let separationResult = try await client.runSeparation(inputPath: mixtureURL, outputBaseDir: base)
+                let separationResult = try await client.runSeparation(
+                    inputPath: ingestResult.audioURL,
+                    outputBaseDir: base
+                )
 
                 guard generation == self.latestGeneration else { return }
                 guard !Task.isCancelled else { return }
 
                 self.result = separationResult
+                self.exportBaseName = ingestResult.metadata?.exportBaseName
                 self.state = .completed
                 self.statusMessage = "Complete — \(separationResult.stems.count) stems"
                 self.errorMessage = nil

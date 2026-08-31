@@ -34,8 +34,15 @@ enum StemExportFormat: Sendable, Equatable {
 }
 
 struct StemExporter {
-    static func defaultFilename(for stem: StemName, format: StemExportFormat = .wav) -> String {
-        "\(stem.rawValue).\(format.filenameExtension)"
+    static func defaultFilename(
+        for stem: StemName,
+        format: StemExportFormat = .wav,
+        sourceBaseName: String? = nil
+    ) -> String {
+        if let sourceBaseName, !sourceBaseName.isEmpty {
+            return "\(sourceBaseName) - \(stem.rawValue.capitalized).\(format.filenameExtension)"
+        }
+        return "\(stem.rawValue).\(format.filenameExtension)"
     }
 
     static func export(
