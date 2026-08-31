@@ -16,6 +16,8 @@ This is a personal hobby application. Optimize for understandable code, visible 
 * Prefer existing patterns and straightforward implementations.
 * Do not introduce abstractions, coordinators, protocols, state machines, generalized infrastructure, or speculative flexibility unless the current requirement demonstrably needs them.
 * Do not redesign working code merely because another design appears cleaner.
+* Do not preserve obsolete compatibility scaffolding solely to avoid updating focused tests.
+* Do not add state or architecture merely because a future feature might use it.
 * If completing the task requires materially expanding its scope, stop and obtain approval.
 * Preserve unrelated user changes.
 
@@ -46,6 +48,18 @@ State every requirement once. Reference files, commits, and existing documentati
 
 Before using a prompt, remove every sentence that would not change the agent’s implementation, verification, or authority. A task prompt describes the current task; it does not retell the project.
 
+## Current Source vs Historical Evidence
+
+Current source code, current tests, this `AGENTS.md`, and the user’s current task instructions define the present state of the project.
+
+`docs/M2_EVIDENCE.md` is a historical milestone evidence record from the earlier Demux phase.
+
+* Treat `docs/M2_EVIDENCE.md` as historical reference, not as a current product specification, workflow mandate, or default verification plan.
+* Do not reproduce or rerun its historical build, test, DerivedData, parity, or inference commands unless the current task specifically requires that evidence.
+* Do not expand task scope because historical evidence describes broader validation or older architecture.
+* Consult it when a task specifically concerns the historical M2 inference/model proof, provenance, parity contract, or when the user explicitly asks for it.
+* When historical documentation conflicts with current source, current tests, `AGENTS.md`, or the user’s current instructions, follow the current state.
+
 ## Verification
 
 Verification must be proportional to the change.
@@ -71,10 +85,21 @@ Default verification rules:
 
 A full regression, real integration run, universal build, or other machine-disruptive verification requires explicit user approval before it begins. Reserve these checks for meaningful integration, release, or broad behavioral changes.
 
-Feature work: add/update tests for the feature and run focused verification. A full regression is not required to commit/push each task.
+Feature work: add or update tests for the feature and run focused verification. A full regression is not required to commit or push each task.
 
 Milestone gate: run the full regression once after the milestone’s planned features are complete, before closing the milestone.
+
 Previously obtained evidence remains valid until a relevant change invalidates it.
+
+## Xcode Build and Test Hygiene
+
+* Use Xcode's default DerivedData unless a task specifically requires isolation.
+* If isolation is required, use a path outside the repository, for example `/tmp/StrataDerivedData`.
+* Never use repo-local `build/`, `DerivedData/`, `.build/`, or similar directories for Xcode output.
+* Do not create, rely on, or preserve repo-local Xcode build artifacts.
+* If an ignored repo-local `build/` directory already exists from earlier work, do not treat it as a new source change or stop work because of it.
+* Hosted XCTest runs may launch `Strata.app`; after such a run, verify that the test-host process exits when process cleanup is directly relevant to the task.
+* Do not use `pkill`, `killall`, or broad process termination as routine test cleanup. A test or verification command that launches a process should clean up the process it owns.
 
 ## Agents and Handoffs
 
@@ -113,12 +138,3 @@ Stop and ask before proceeding when:
 * the work would exceed the user’s stated authority or budget.
 
 The user’s current explicit instruction overrides this policy.
-
-
-## Xcode build artifacts
-
-- Use Xcode's default DerivedData unless a task specifically requires isolation.
-- If isolation is required, use a path outside the repository, e.g. `/tmp/StrataDerivedData`.
-- Never use repo-local `build/`, `DerivedData/`, `.build/`, or similar directories for Xcode output.
-- Do not stop work merely because the known ignored `build/` directory exists.
-
