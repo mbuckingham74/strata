@@ -114,6 +114,7 @@ final class YouTubeIngestClientTests: XCTestCase {
         XCTAssertTrue(lines[0].contains(youTubeURL.absoluteString), "yt-dlp should contain URL")
         XCTAssertTrue(lines[0].contains("--no-playlist"), "yt-dlp should contain --no-playlist")
         XCTAssertTrue(lines[0].contains("--write-info-json"), "yt-dlp should request metadata")
+        XCTAssertTrue(lines[0].contains("--write-thumbnail"), "yt-dlp should request artwork")
         XCTAssertTrue(lines[0].contains("source.%(ext)s"), "yt-dlp should contain source template")
         // Check absolute path in yt-dlp -o arg
         XCTAssertTrue(lines[0].contains(cacheBase.path) || lines[0].contains("/tmp") || lines[0].contains("/private"), "yt-dlp template should be absolute")
@@ -293,7 +294,9 @@ final class YouTubeIngestClientTests: XCTestCase {
         with open(out, "wb") as outf:
             outf.write(b"\\x00" * 512)
         with open(info, "w") as infof:
-            infof.write('{"artist":"Massive Attack","track":"Teardrop"}')
+            infof.write('{"artist":"Massive Attack","track":"Teardrop","album":"Mezzanine","album_artist":"Massive Attack","release_year":1998,"genre":"Trip Hop","track_number":3}')
+        with open(out.rsplit(".", 1)[0] + ".jpg", "wb") as artwork:
+            artwork.write(b"\\xff\\xd8\\xff\\xe0thumbnail")
         sys.exit(0)
         """
         let ffScript = writeValidWavPythonScript(
@@ -318,15 +321,29 @@ final class YouTubeIngestClientTests: XCTestCase {
 
         XCTAssertEqual(
             result.metadata,
-            YouTubeTrackMetadata(artist: "Massive Attack", title: "Teardrop")
+            YouTubeTrackMetadata(
+                artist: "Massive Attack",
+                title: "Teardrop",
+                album: "Mezzanine",
+                albumArtist: "Massive Attack",
+                year: "1998",
+                genre: "Trip Hop",
+                trackNumber: "3"
+            )
         )
         XCTAssertEqual(result.metadata?.exportBaseName, "Massive Attack - Teardrop")
+        let artworkURL = try XCTUnwrap(result.artworkURL)
+        XCTAssertEqual(artworkURL.lastPathComponent, "source.jpg")
+        XCTAssertEqual(
+            try Data(contentsOf: artworkURL),
+            Data([0xFF, 0xD8, 0xFF, 0xE0]) + Data("thumbnail".utf8)
+        )
         XCTAssertTrue(FileManager.default.fileExists(atPath: result.audioURL.path))
         let contents = try FileManager.default.contentsOfDirectory(
             at: result.audioURL.deletingLastPathComponent(),
             includingPropertiesForKeys: nil
         )
-        XCTAssertEqual(contents.map(\.lastPathComponent), ["mixture.wav"])
+        XCTAssertEqual(Set(contents.map(\.lastPathComponent)), ["mixture.wav", "source.jpg"])
     }
 
     // MARK: - 3. nonzero tool exit

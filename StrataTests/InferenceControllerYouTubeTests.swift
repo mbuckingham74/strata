@@ -29,6 +29,7 @@ private actor MockYouTubeSuccess: YouTubeIngesting {
 private actor MockYouTubeMetadataSuccess: YouTubeIngesting {
     let result: YouTubeIngestResult
     private(set) var ingestCallCount = 0
+    private(set) var ingestedURLs: [URL] = []
 
     init(result: YouTubeIngestResult) {
         self.result = result
@@ -40,6 +41,7 @@ private actor MockYouTubeMetadataSuccess: YouTubeIngesting {
 
     func ingestWithMetadata(youTubeURL: URL) async throws -> YouTubeIngestResult {
         ingestCallCount += 1
+        ingestedURLs.append(youTubeURL)
         try Task.checkCancellation()
         return result
     }
@@ -348,6 +350,11 @@ final class InferenceControllerYouTubeTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: mixtureDir) }
         let mixtureURL = mixtureDir.appendingPathComponent("mixture.wav")
         try makeWAV(at: mixtureURL, frames: 1024)
+        let artworkURL = mixtureDir.appendingPathComponent("thumbnail.jpg")
+        try Data([0xFF, 0xD8, 0xFF, 0xE0]).write(to: artworkURL)
+        let metadata = try XCTUnwrap(
+            YouTubeTrackMetadata(artist: "Massive Attack", title: "Teardrop")
+        )
 
         let captured = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".txt")
         defer { try? FileManager.default.removeItem(at: captured) }
@@ -355,7 +362,13 @@ final class InferenceControllerYouTubeTests: XCTestCase {
         let dir = try makeFakeWorker(script: floatSuccessScript(capturedInputPathFile: captured))
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let mockIngest = MockYouTubeSuccess(mixtureURL: mixtureURL)
+        let mockIngest = MockYouTubeMetadataSuccess(
+            result: YouTubeIngestResult(
+                audioURL: mixtureURL,
+                metadata: metadata,
+                artworkURL: artworkURL
+            )
+        )
         let client = InferenceWorkerClient(readinessTimeout: .seconds(3), startedTimeout: .seconds(2), separationTimeout: .seconds(5), workerDirectory: dir)
         let outputBase = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: outputBase, withIntermediateDirectories: true)
@@ -373,6 +386,8 @@ final class InferenceControllerYouTubeTests: XCTestCase {
         XCTAssertEqual(controller.state, .completed, "YouTube success should complete, got \(controller.state)")
         XCTAssertNotNil(controller.result)
         XCTAssertEqual(controller.result?.stems.count, 6)
+        XCTAssertEqual(controller.youTubeExportMetadata, metadata)
+        XCTAssertEqual(controller.youTubeExportArtworkURL, artworkURL)
         let ingestCount = await mockIngest.ingestCallCount
         XCTAssertEqual(ingestCount, 1)
         let ingested = await mockIngest.ingestedURLs
@@ -407,10 +422,20 @@ final class InferenceControllerYouTubeTests: XCTestCase {
         await client.setTestHook { _ in sawWorkerEvent.setTrue() }
 
         let metadata = try XCTUnwrap(
-            YouTubeTrackMetadata(artist: "Massive Attack", title: "Teardrop")
+            YouTubeTrackMetadata(
+                artist: "Massive Attack",
+                title: "Teardrop",
+                album: "Mezzanine"
+            )
         )
+        let artworkURL = mixtureDirectory.appendingPathComponent("thumbnail.jpg")
+        try Data([0xFF, 0xD8, 0xFF, 0xE0]).write(to: artworkURL)
         let ingest = MockYouTubeMetadataSuccess(
-            result: YouTubeIngestResult(audioURL: mixtureURL, metadata: metadata)
+            result: YouTubeIngestResult(
+                audioURL: mixtureURL,
+                metadata: metadata,
+                artworkURL: artworkURL
+            )
         )
         let controller = InferenceController(
             client: client,
@@ -426,7 +451,11 @@ final class InferenceControllerYouTubeTests: XCTestCase {
 
         XCTAssertEqual(
             controller.preparedYouTubeMP3Export,
-            YouTubeIngestResult(audioURL: mixtureURL, metadata: metadata)
+            YouTubeIngestResult(
+                audioURL: mixtureURL,
+                metadata: metadata,
+                artworkURL: artworkURL
+            )
         )
         let ingestCallCount = await ingest.ingestCallCount
         XCTAssertEqual(ingestCallCount, 1)

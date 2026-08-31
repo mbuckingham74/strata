@@ -475,6 +475,8 @@ struct InferenceCard: View {
     }
 
     private func export(_ artifact: StemArtifact, as format: StemExportFormat) {
+        let metadata = format == .mp3 ? inferenceController.youTubeExportMetadata : nil
+        let artworkURL = format == .mp3 ? inferenceController.youTubeExportArtworkURL : nil
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
         panel.nameFieldStringValue = StemExporter.defaultFilename(
@@ -492,7 +494,13 @@ struct InferenceCard: View {
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
-                            try StemExporter.export(artifact, to: destinationURL, format: format)
+                            try StemExporter.export(
+                                artifact,
+                                to: destinationURL,
+                                format: format,
+                                metadata: metadata,
+                                artworkURL: artworkURL
+                            )
                         }.value
                     } catch {
                         exportErrorMessage = error.localizedDescription
@@ -507,6 +515,8 @@ struct InferenceCard: View {
         as format: StemExportFormat = .mp3
     ) {
         guard artifacts.count >= 2 else { return }
+        let metadata = format == .mp3 ? inferenceController.youTubeExportMetadata : nil
+        let artworkURL = format == .mp3 ? inferenceController.youTubeExportArtworkURL : nil
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
         panel.nameFieldStringValue = StemExporter.defaultMixFilename(
@@ -524,7 +534,13 @@ struct InferenceCard: View {
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
-                            try StemExporter.exportMix(artifacts, to: destinationURL, format: format)
+                            try StemExporter.exportMix(
+                                artifacts,
+                                to: destinationURL,
+                                format: format,
+                                metadata: metadata,
+                                artworkURL: artworkURL
+                            )
                         }.value
                     } catch {
                         exportErrorMessage = error.localizedDescription
@@ -552,7 +568,9 @@ struct InferenceCard: View {
                         try await Task.detached(priority: .userInitiated) {
                             try StemExporter.exportMP3(
                                 from: preparation.audioURL,
-                                to: destinationURL
+                                to: destinationURL,
+                                metadata: preparation.metadata,
+                                artworkURL: preparation.artworkURL
                             )
                         }.value
                     } catch {

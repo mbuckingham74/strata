@@ -127,12 +127,11 @@ final class StemExporterTests: XCTestCase {
     }
 
     func testUnreliableYouTubeMetadataFallsBackToStemOnlyFilename() {
-        XCTAssertNil(YouTubeTrackMetadata(artist: nil, title: "Teardrop"))
-        XCTAssertNil(YouTubeTrackMetadata(artist: "Massive Attack", title: nil))
-        XCTAssertNil(YouTubeTrackMetadata(artist: "  ", title: "Teardrop"))
         let missingArtist = YouTubeTrackMetadata(artist: "N/A", title: "Song")
-        XCTAssertNil(missingArtist)
-        XCTAssertNil(YouTubeTrackMetadata(artist: "Artist", title: "n/a"))
+        XCTAssertEqual(missingArtist?.title, "Song")
+        XCTAssertNil(missingArtist?.artist)
+        XCTAssertNil(missingArtist?.exportBaseName)
+        XCTAssertNil(YouTubeTrackMetadata(artist: "  ", title: "n/a"))
         XCTAssertEqual(
             StemExporter.defaultFilename(for: .vocals, sourceBaseName: missingArtist?.exportBaseName),
             "vocals.wav"
@@ -253,14 +252,21 @@ final class StemExporterTests: XCTestCase {
 
         let destinationURL = directoryURL.appendingPathComponent("selected-mix.mp3")
         let capturedMixURL = directoryURL.appendingPathComponent("captured-mix.wav")
+        let argumentsURL = directoryURL.appendingPathComponent("arguments.txt")
+        let artworkURL = directoryURL.appendingPathComponent("thumbnail.jpg")
         let ffmpegURL = directoryURL.appendingPathComponent("ffmpeg")
+        try Data("artwork".utf8).write(to: artworkURL)
+        let sourceMetadata = try XCTUnwrap(
+            YouTubeTrackMetadata(artist: "Massive Attack", title: "Teardrop")
+        )
         try makeExecutable(at: ffmpegURL, contents: """
         #!/bin/sh
         input=''
         output=''
         previous=''
+        printf '%s\\n' "$@" > '\(argumentsURL.path)'
         for argument in "$@"; do
-            if [ "$previous" = '-i' ]; then input="$argument"; fi
+            if [ "$previous" = '-i' ] && [ -z "$input" ]; then input="$argument"; fi
             previous="$argument"
             output="$argument"
         done
@@ -271,10 +277,18 @@ final class StemExporterTests: XCTestCase {
         try StemExporter.exportMix(
             [drums, bass],
             to: destinationURL,
+            metadata: sourceMetadata,
+            artworkURL: artworkURL,
             ffmpegURL: ffmpegURL
         )
 
         XCTAssertEqual(try Data(contentsOf: destinationURL), Data("encoded-selected-mix".utf8))
+        let arguments = try String(contentsOf: argumentsURL, encoding: .utf8)
+            .split(separator: "\n")
+            .map(String.init)
+        XCTAssertTrue(arguments.contains(artworkURL.path))
+        XCTAssertTrue(arguments.contains("artist=Massive Attack"))
+        XCTAssertTrue(arguments.contains("title=Teardrop"))
         let metadata = try validateAudioFile(at: capturedMixURL, expectedFrames: 6)
         XCTAssertEqual(metadata.sampleRate, canonicalSampleRate)
         XCTAssertEqual(metadata.channels, canonicalChannels)
@@ -357,9 +371,14 @@ final class StemExporterTests: XCTestCase {
         let sourceURL = directoryURL.appendingPathComponent("guitar.wav")
         let destinationURL = directoryURL.appendingPathComponent("chosen-guitar.mp3")
         let argumentsURL = directoryURL.appendingPathComponent("arguments.txt")
+        let artworkURL = directoryURL.appendingPathComponent("thumbnail.jpg")
         let ffmpegURL = directoryURL.appendingPathComponent("ffmpeg")
         let sourceData = Data([0x52, 0x49, 0x46, 0x46, 0x01, 0x02])
         let artifact = try makeArtifact(name: .guitar, url: sourceURL, data: sourceData)
+        try Data("artwork".utf8).write(to: artworkURL)
+        let metadata = try XCTUnwrap(
+            YouTubeTrackMetadata(artist: "Massive Attack", title: "Teardrop")
+        )
 
         try makeExecutable(at: ffmpegURL, contents: """
         #!/bin/sh
@@ -372,6 +391,8 @@ final class StemExporterTests: XCTestCase {
             artifact,
             to: destinationURL,
             format: .mp3,
+            metadata: metadata,
+            artworkURL: artworkURL,
             ffmpegURL: ffmpegURL
         )
 
@@ -383,8 +404,18 @@ final class StemExporterTests: XCTestCase {
                 "-nostdin",
                 "-y",
                 "-i", sourceURL.path,
+                "-i", artworkURL.path,
+                "-map", "0:a:0",
+                "-map", "1:v:0",
                 "-codec:a", "libmp3lame",
                 "-q:a", "2",
+                "-codec:v", "mjpeg",
+                "-disposition:v:0", "attached_pic",
+                "-metadata:s:v:0", "title=Album cover",
+                "-metadata:s:v:0", "comment=Cover (front)",
+                "-id3v2_version", "3",
+                "-metadata", "artist=Massive Attack",
+                "-metadata", "title=Teardrop",
                 destinationURL.path,
             ]
         )
@@ -399,9 +430,20 @@ final class StemExporterTests: XCTestCase {
         let sourceURL = directoryURL.appendingPathComponent("mixture.wav")
         let destinationURL = directoryURL.appendingPathComponent("Massive Attack - Teardrop.mp3")
         let argumentsURL = directoryURL.appendingPathComponent("arguments.txt")
+        let artworkURL = directoryURL.appendingPathComponent("thumbnail.webp")
         let ffmpegURL = directoryURL.appendingPathComponent("ffmpeg")
         let sourceData = Data([0x52, 0x49, 0x46, 0x46, 0x01, 0x02])
         try sourceData.write(to: sourceURL)
+        try Data("artwork".utf8).write(to: artworkURL)
+        let metadata = try XCTUnwrap(YouTubeTrackMetadata(
+            artist: "Massive Attack",
+            title: "Teardrop",
+            album: "Mezzanine",
+            albumArtist: "Massive Attack",
+            year: "1998",
+            genre: "Trip Hop",
+            trackNumber: "3"
+        ))
 
         try makeExecutable(at: ffmpegURL, contents: """
         #!/bin/sh
@@ -413,6 +455,8 @@ final class StemExporterTests: XCTestCase {
         try StemExporter.exportMP3(
             from: sourceURL,
             to: destinationURL,
+            metadata: metadata,
+            artworkURL: artworkURL,
             ffmpegURL: ffmpegURL
         )
 
@@ -424,8 +468,71 @@ final class StemExporterTests: XCTestCase {
                 "-nostdin",
                 "-y",
                 "-i", sourceURL.path,
+                "-i", artworkURL.path,
+                "-map", "0:a:0",
+                "-map", "1:v:0",
                 "-codec:a", "libmp3lame",
                 "-q:a", "2",
+                "-codec:v", "mjpeg",
+                "-disposition:v:0", "attached_pic",
+                "-metadata:s:v:0", "title=Album cover",
+                "-metadata:s:v:0", "comment=Cover (front)",
+                "-id3v2_version", "3",
+                "-metadata", "artist=Massive Attack",
+                "-metadata", "title=Teardrop",
+                "-metadata", "album=Mezzanine",
+                "-metadata", "album_artist=Massive Attack",
+                "-metadata", "date=1998",
+                "-metadata", "genre=Trip Hop",
+                "-metadata", "track=3",
+                destinationURL.path,
+            ]
+        )
+    }
+
+    func testMP3MetadataOmitsMissingAndUnusableFields() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let sourceURL = directoryURL.appendingPathComponent("mixture.wav")
+        let destinationURL = directoryURL.appendingPathComponent("audio.mp3")
+        let argumentsURL = directoryURL.appendingPathComponent("arguments.txt")
+        let ffmpegURL = directoryURL.appendingPathComponent("ffmpeg")
+        try Data("audio".utf8).write(to: sourceURL)
+        let metadata = try XCTUnwrap(YouTubeTrackMetadata(
+            artist: "N/A",
+            title: "Teardrop",
+            album: "  ",
+            year: "unknown",
+            trackNumber: "0"
+        ))
+
+        try makeExecutable(at: ffmpegURL, contents: """
+        #!/bin/sh
+        printf '%s\\n' "$@" > '\(argumentsURL.path)'
+        for argument in "$@"; do output="$argument"; done
+        printf 'encoded-mp3' > "$output"
+        """)
+
+        try StemExporter.exportMP3(
+            from: sourceURL,
+            to: destinationURL,
+            metadata: metadata,
+            ffmpegURL: ffmpegURL
+        )
+
+        XCTAssertEqual(
+            try String(contentsOf: argumentsURL, encoding: .utf8).split(separator: "\n").map(String.init),
+            [
+                "-nostdin",
+                "-y",
+                "-i", sourceURL.path,
+                "-codec:a", "libmp3lame",
+                "-q:a", "2",
+                "-id3v2_version", "3",
+                "-metadata", "title=Teardrop",
                 destinationURL.path,
             ]
         )

@@ -44,8 +44,8 @@ struct StemExporter {
     private static let mixChunkFrameCount: AVAudioFrameCount = 16_384
 
     static func defaultYouTubeMP3Filename(metadata: YouTubeTrackMetadata?) -> String {
-        if let metadata {
-            return "\(metadata.exportBaseName).mp3"
+        if let exportBaseName = metadata?.exportBaseName {
+            return "\(exportBaseName).mp3"
         }
         return "YouTube Audio.mp3"
     }
@@ -83,6 +83,8 @@ struct StemExporter {
         _ artifact: StemArtifact,
         to destinationURL: URL,
         format: StemExportFormat = .wav,
+        metadata: YouTubeTrackMetadata? = nil,
+        artworkURL: URL? = nil,
         ffmpegURL: URL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg"),
         fileManager: FileManager = .default
     ) throws {
@@ -100,13 +102,21 @@ struct StemExporter {
             }
             try fileManager.copyItem(at: artifact.url, to: destinationURL)
         case .mp3:
-            try encodeMP3(from: artifact.url, to: destinationURL, ffmpegURL: ffmpegURL)
+            try encodeMP3(
+                from: artifact.url,
+                to: destinationURL,
+                metadata: metadata,
+                artworkURL: artworkURL,
+                ffmpegURL: ffmpegURL
+            )
         }
     }
 
     static func exportMP3(
         from sourceURL: URL,
         to destinationURL: URL,
+        metadata: YouTubeTrackMetadata? = nil,
+        artworkURL: URL? = nil,
         ffmpegURL: URL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
     ) throws {
         let resolvedSourceURL = sourceURL.standardizedFileURL.resolvingSymlinksInPath()
@@ -114,13 +124,21 @@ struct StemExporter {
         guard resolvedSourceURL != resolvedDestinationURL else {
             throw StemExportError.sourceAndDestinationMatch
         }
-        try encodeMP3(from: sourceURL, to: destinationURL, ffmpegURL: ffmpegURL)
+        try encodeMP3(
+            from: sourceURL,
+            to: destinationURL,
+            metadata: metadata,
+            artworkURL: artworkURL,
+            ffmpegURL: ffmpegURL
+        )
     }
 
     static func exportMix(
         _ artifacts: [StemArtifact],
         to destinationURL: URL,
         format: StemExportFormat = .mp3,
+        metadata: YouTubeTrackMetadata? = nil,
+        artworkURL: URL? = nil,
         ffmpegURL: URL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg"),
         fileManager: FileManager = .default
     ) throws {
@@ -150,7 +168,13 @@ struct StemExporter {
 
             let temporaryWAVURL = temporaryDirectoryURL.appendingPathComponent("mix.wav")
             try writeAlignedMix(artifacts, to: temporaryWAVURL, fileManager: fileManager)
-            try encodeMP3(from: temporaryWAVURL, to: destinationURL, ffmpegURL: ffmpegURL)
+            try encodeMP3(
+                from: temporaryWAVURL,
+                to: destinationURL,
+                metadata: metadata,
+                artworkURL: artworkURL,
+                ffmpegURL: ffmpegURL
+            )
         }
     }
 
@@ -284,17 +308,60 @@ struct StemExporter {
         }
     }
 
-    private static func encodeMP3(from sourceURL: URL, to destinationURL: URL, ffmpegURL: URL) throws {
+    private static func encodeMP3(
+        from sourceURL: URL,
+        to destinationURL: URL,
+        metadata: YouTubeTrackMetadata?,
+        artworkURL: URL?,
+        ffmpegURL: URL
+    ) throws {
         let process = Process()
         process.executableURL = ffmpegURL
-        process.arguments = [
+        var arguments = [
             "-nostdin",
             "-y",
             "-i", sourceURL.path,
+        ]
+        if let artworkURL {
+            arguments += [
+                "-i", artworkURL.path,
+                "-map", "0:a:0",
+                "-map", "1:v:0",
+            ]
+        }
+        arguments += [
             "-codec:a", "libmp3lame",
             "-q:a", "2",
-            destinationURL.path,
         ]
+        if artworkURL != nil {
+            arguments += [
+                "-codec:v", "mjpeg",
+                "-disposition:v:0", "attached_pic",
+                "-metadata:s:v:0", "title=Album cover",
+                "-metadata:s:v:0", "comment=Cover (front)",
+            ]
+        }
+        if metadata != nil || artworkURL != nil {
+            arguments += ["-id3v2_version", "3"]
+        }
+        if let metadata {
+            let fields: [(String, String?)] = [
+                ("artist", metadata.artist),
+                ("title", metadata.title),
+                ("album", metadata.album),
+                ("album_artist", metadata.albumArtist),
+                ("date", metadata.year),
+                ("genre", metadata.genre),
+                ("track", metadata.trackNumber),
+            ]
+            for (key, value) in fields {
+                if let value {
+                    arguments += ["-metadata", "\(key)=\(value)"]
+                }
+            }
+        }
+        arguments.append(destinationURL.path)
+        process.arguments = arguments
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice
 

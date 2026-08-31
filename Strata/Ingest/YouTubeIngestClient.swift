@@ -27,46 +27,153 @@ enum YouTubeIngestError: Error, Equatable, LocalizedError, Sendable {
 }
 
 struct YouTubeTrackMetadata: Sendable, Equatable {
-    let artist: String
-    let title: String
+    let artist: String?
+    let title: String?
+    let album: String?
+    let albumArtist: String?
+    let year: String?
+    let genre: String?
+    let trackNumber: String?
 
-    init?(artist: String?, title: String?) {
+    init?(
+        artist: String? = nil,
+        title: String? = nil,
+        album: String? = nil,
+        albumArtist: String? = nil,
+        year: String? = nil,
+        genre: String? = nil,
+        trackNumber: String? = nil
+    ) {
+        self.artist = Self.metadataValue(artist)
+        self.title = Self.metadataValue(title)
+        self.album = Self.metadataValue(album)
+        self.albumArtist = Self.metadataValue(albumArtist)
+        self.year = Self.yearValue(year)
+        self.genre = Self.metadataValue(genre)
+        self.trackNumber = Self.trackNumberValue(trackNumber)
+
+        guard self.artist != nil
+                || self.title != nil
+                || self.album != nil
+                || self.albumArtist != nil
+                || self.year != nil
+                || self.genre != nil
+                || self.trackNumber != nil else {
+            return nil
+        }
+    }
+
+    var exportBaseName: String? {
         guard let artist = Self.filenameComponent(artist),
               let title = Self.filenameComponent(title) else {
             return nil
         }
-        self.artist = artist
-        self.title = title
+        return "\(artist) - \(title)"
     }
 
-    var exportBaseName: String {
-        "\(artist) - \(title)"
+    private static func metadataValue(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let metadataValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !metadataValue.isEmpty,
+              metadataValue.lowercased() != "n/a",
+              metadataValue.lowercased() != "na" else {
+            return nil
+        }
+        return metadataValue
     }
 
     private static func filenameComponent(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let metadataValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard metadataValue.lowercased() != "n/a" else { return nil }
+        guard let metadataValue = metadataValue(value) else { return nil }
         let unsafeCharacters = CharacterSet(charactersIn: "/:")
             .union(.controlCharacters)
-        let sanitized = value
+        let sanitized = metadataValue
             .components(separatedBy: unsafeCharacters)
             .joined(separator: "-")
             .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
-        guard !sanitized.isEmpty, sanitized.lowercased() != "na" else { return nil }
+        guard !sanitized.isEmpty else { return nil }
         return sanitized
+    }
+
+    private static func yearValue(_ value: String?) -> String? {
+        guard let value = metadataValue(value),
+              value.count == 4,
+              value.allSatisfy(\.isNumber),
+              let numericYear = Int(value),
+              numericYear > 0 else {
+            return nil
+        }
+        return value
+    }
+
+    private static func trackNumberValue(_ value: String?) -> String? {
+        guard let value = metadataValue(value) else { return nil }
+        let components = value.split(separator: "/", omittingEmptySubsequences: false)
+        guard (1...2).contains(components.count),
+              components.allSatisfy({ component in
+                  guard let number = Int(component) else { return false }
+                  return number > 0
+              }) else {
+            return nil
+        }
+        return value
     }
 }
 
 struct YouTubeIngestResult: Sendable, Equatable {
     let audioURL: URL
     let metadata: YouTubeTrackMetadata?
+    let artworkURL: URL?
+
+    init(audioURL: URL, metadata: YouTubeTrackMetadata?, artworkURL: URL? = nil) {
+        self.audioURL = audioURL
+        self.metadata = metadata
+        self.artworkURL = artworkURL
+    }
 }
 
 private struct YTDLPInfo: Decodable {
     let artist: String?
     let track: String?
+    let album: String?
+    let albumArtist: String?
+    let releaseYear: Int?
+    let genre: String?
+    let trackNumber: Int?
+
+    private enum CodingKeys: String, CodingKey {
+        case artist
+        case track
+        case album
+        case albumArtist = "album_artist"
+        case releaseYear = "release_year"
+        case genre
+        case trackNumber = "track_number"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        artist = try? container.decode(String.self, forKey: .artist)
+        track = try? container.decode(String.self, forKey: .track)
+        album = try? container.decode(String.self, forKey: .album)
+        albumArtist = try? container.decode(String.self, forKey: .albumArtist)
+        releaseYear = Self.integer(forKey: .releaseYear, in: container)
+        genre = try? container.decode(String.self, forKey: .genre)
+        trackNumber = Self.integer(forKey: .trackNumber, in: container)
+    }
+
+    private static func integer(
+        forKey key: CodingKeys,
+        in container: KeyedDecodingContainer<CodingKeys>
+    ) -> Int? {
+        if let value = try? container.decode(Int.self, forKey: key) {
+            return value
+        }
+        if let value = try? container.decode(String.self, forKey: key) {
+            return Int(value)
+        }
+        return nil
+    }
 }
 
 // MARK: - TailBox
@@ -176,6 +283,7 @@ actor YouTubeIngestClient {
                 "-o", outputTemplate,
                 "--no-playlist",
                 "--write-info-json",
+                "--write-thumbnail",
             ]
             let ytStatus = try await runTool(toolName: "yt-dlp", executableURL: ytDlpURL, arguments: ytArgs, tailBox: tailBox)
             if ytStatus != 0 {
@@ -194,9 +302,11 @@ actor YouTubeIngestClient {
                 throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: tailBox.string())
             }
             let infoURLs = contents.filter { $0.lastPathComponent.hasSuffix(".info.json") }
+            let thumbnailURLs = contents.filter(isThumbnailFile)
             let candidates = contents.filter {
                 $0.lastPathComponent != "mixture.wav"
                     && !$0.lastPathComponent.hasSuffix(".info.json")
+                    && !isThumbnailFile($0)
             }
             guard candidates.count == 1 else {
                 let tail = tailBox.string()
@@ -204,6 +314,7 @@ actor YouTubeIngestClient {
             }
             let sourceURL = candidates[0]
             let metadata = metadata(from: infoURLs)
+            let artworkURL = artwork(from: thumbnailURLs)
 
             if Task.isCancelled || cancellationRequested {
                 throw YouTubeIngestError.cancelled
@@ -258,12 +369,19 @@ actor YouTubeIngestClient {
             for url in infoURLs {
                 try? fileManager.removeItem(at: url)
             }
+            for url in thumbnailURLs where url != artworkURL {
+                try? fileManager.removeItem(at: url)
+            }
 
-            // Keep runDir containing only mixture.wav, clear active state
+            // Keep the canonical mixture and any usable artwork, then clear active state.
             activeRunDirectory = nil
             activeProcess = nil
             cancellationRequested = false
-            return YouTubeIngestResult(audioURL: mixtureURL, metadata: metadata)
+            return YouTubeIngestResult(
+                audioURL: mixtureURL,
+                metadata: metadata,
+                artworkURL: artworkURL
+            )
 
         } catch {
             // If owned process still alive, retain ownership/state and surface failure — do not remove directory or clear state
@@ -341,7 +459,43 @@ actor YouTubeIngestClient {
               let info = try? JSONDecoder().decode(YTDLPInfo.self, from: data) else {
             return nil
         }
-        return YouTubeTrackMetadata(artist: info.artist, title: info.track)
+        return YouTubeTrackMetadata(
+            artist: info.artist,
+            title: info.track,
+            album: info.album,
+            albumArtist: info.albumArtist,
+            year: info.releaseYear.map(String.init),
+            genre: info.genre,
+            trackNumber: info.trackNumber.map(String.init)
+        )
+    }
+
+    private func isThumbnailFile(_ url: URL) -> Bool {
+        ["avif", "bmp", "gif", "jpeg", "jpg", "png", "webp"]
+            .contains(url.pathExtension.lowercased())
+    }
+
+    private func artwork(from thumbnailURLs: [URL]) -> URL? {
+        let usableURLs = thumbnailURLs.filter(isUsableArtwork)
+        guard usableURLs.count == 1 else { return nil }
+        return usableURLs[0]
+    }
+
+    private func isUsableArtwork(_ url: URL) -> Bool {
+        guard let data = try? Data(contentsOf: url), !data.isEmpty else { return false }
+        let bytes = [UInt8](data.prefix(12))
+        if bytes.starts(with: [0xFF, 0xD8, 0xFF]) {
+            return true
+        }
+        if bytes.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
+            return true
+        }
+        if bytes.starts(with: Array("GIF8".utf8)) || bytes.starts(with: Array("BM".utf8)) {
+            return true
+        }
+        return bytes.count >= 12
+            && bytes[0..<4].elementsEqual("RIFF".utf8)
+            && bytes[8..<12].elementsEqual("WEBP".utf8)
     }
 
     private func runTool(toolName: String, executableURL: URL, arguments: [String], tailBox: TailBox) async throws -> Int32 {

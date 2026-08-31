@@ -41,6 +41,8 @@ final class InferenceController {
     private(set) var result: SeparationResult?
     private(set) var errorMessage: String?
     private(set) var exportBaseName: String?
+    private(set) var youTubeExportMetadata: YouTubeTrackMetadata?
+    private(set) var youTubeExportArtworkURL: URL?
     private(set) var preparedYouTubeMP3Export: YouTubeIngestResult?
 
     var isSeparating: Bool {
@@ -123,6 +125,8 @@ final class InferenceController {
         result = nil
         errorMessage = nil
         exportBaseName = nil
+        youTubeExportMetadata = nil
+        youTubeExportArtworkURL = nil
         preparedYouTubeMP3Export = nil
 
         let client = self.client
@@ -189,6 +193,8 @@ final class InferenceController {
         result = nil
         errorMessage = nil
         exportBaseName = nil
+        youTubeExportMetadata = nil
+        youTubeExportArtworkURL = nil
         preparedYouTubeMP3Export = nil
 
         let client = self.client
@@ -221,6 +227,8 @@ final class InferenceController {
 
                 self.result = separationResult
                 self.exportBaseName = ingestResult.metadata?.exportBaseName
+                self.youTubeExportMetadata = ingestResult.metadata
+                self.youTubeExportArtworkURL = ingestResult.artworkURL
                 self.state = .completed
                 self.statusMessage = "Complete — \(separationResult.stems.count) stems"
                 self.errorMessage = nil
@@ -289,6 +297,8 @@ final class InferenceController {
         result = nil
         errorMessage = nil
         exportBaseName = nil
+        youTubeExportMetadata = nil
+        youTubeExportArtworkURL = nil
         preparedYouTubeMP3Export = nil
 
         let youTubeIngest = self.youTubeIngest
