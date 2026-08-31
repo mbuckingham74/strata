@@ -150,16 +150,28 @@ final class StemExporterTests: XCTestCase {
         }
     }
 
-    func testDefaultMixFilenameUsesCanonicalStemOrderAndYouTubeMetadata() {
+    func testDefaultMixFilenameUsesMP3CanonicalStemOrderAndYouTubeMetadata() {
         XCTAssertEqual(
             StemExporter.defaultMixFilename(
                 for: [.bass, .drums],
                 sourceBaseName: "Artist - Song Title"
             ),
-            "Artist - Song Title - Drums + Bass.wav"
+            "Artist - Song Title - Drums + Bass.mp3"
         )
         XCTAssertEqual(
             StemExporter.defaultMixFilename(for: [.bass, .drums]),
+            "Drums + Bass.mp3"
+        )
+        XCTAssertEqual(
+            StemExporter.defaultMixFilename(
+                for: [.bass, .drums],
+                format: .wav,
+                sourceBaseName: "Artist - Song Title"
+            ),
+            "Artist - Song Title - Drums + Bass.wav"
+        )
+        XCTAssertEqual(
+            StemExporter.defaultMixFilename(for: [.bass, .drums], format: .wav),
             "Drums + Bass.wav"
         )
     }
@@ -190,7 +202,7 @@ final class StemExporterTests: XCTestCase {
         )
         let destinationURL = directoryURL.appendingPathComponent("selected-mix.wav")
 
-        try StemExporter.exportMix([drums, bass], to: destinationURL)
+        try StemExporter.exportMix([drums, bass], to: destinationURL, format: .wav)
 
         let metadata = try validateAudioFile(at: destinationURL, expectedFrames: 6)
         XCTAssertEqual(metadata.sampleRate, canonicalSampleRate)
@@ -198,6 +210,77 @@ final class StemExporterTests: XCTestCase {
         XCTAssertEqual(metadata.frames, 6)
 
         let outputFile = try AVAudioFile(forReading: destinationURL)
+        guard let outputBuffer = AVAudioPCMBuffer(
+            pcmFormat: outputFile.processingFormat,
+            frameCapacity: AVAudioFrameCount(outputFile.length)
+        ) else {
+            return XCTFail("Could not allocate output verification buffer")
+        }
+        try outputFile.read(into: outputBuffer)
+        let outputChannels = try XCTUnwrap(outputBuffer.floatChannelData)
+        let expectedLeft: [Float] = [0, 0.25, 0.30, 0, 0.40, 0]
+        let expectedRight: [Float] = [0.30, 0, 0.25, 0, 0, 0.20]
+        for frame in 0..<expectedLeft.count {
+            XCTAssertEqual(outputChannels[0][frame], expectedLeft[frame], accuracy: 0.000_01)
+            XCTAssertEqual(outputChannels[1][frame], expectedRight[frame], accuracy: 0.000_01)
+        }
+    }
+
+    func testCombinedMP3ExportDefaultsToAlignedSelectedStemMixBeforeEncoding() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let drums = try makeWAVArtifact(
+            name: .drums,
+            url: directoryURL.appendingPathComponent("drums.wav"),
+            leftSamples: [0, 0.25, 0.10, 0, 0, 0],
+            rightSamples: [0, 0, 0.15, 0, 0, 0.20]
+        )
+        let bass = try makeWAVArtifact(
+            name: .bass,
+            url: directoryURL.appendingPathComponent("bass.wav"),
+            leftSamples: [0, 0, 0.20, 0, 0.40, 0],
+            rightSamples: [0.30, 0, 0.10, 0, 0, 0]
+        )
+        _ = try makeWAVArtifact(
+            name: .vocals,
+            url: directoryURL.appendingPathComponent("vocals.wav"),
+            leftSamples: [0.75, 0.75, 0.75, 0.75, 0.75, 0.75],
+            rightSamples: [0.75, 0.75, 0.75, 0.75, 0.75, 0.75]
+        )
+
+        let destinationURL = directoryURL.appendingPathComponent("selected-mix.mp3")
+        let capturedMixURL = directoryURL.appendingPathComponent("captured-mix.wav")
+        let ffmpegURL = directoryURL.appendingPathComponent("ffmpeg")
+        try makeExecutable(at: ffmpegURL, contents: """
+        #!/bin/sh
+        input=''
+        output=''
+        previous=''
+        for argument in "$@"; do
+            if [ "$previous" = '-i' ]; then input="$argument"; fi
+            previous="$argument"
+            output="$argument"
+        done
+        cp "$input" '\(capturedMixURL.path)'
+        printf 'encoded-selected-mix' > "$output"
+        """)
+
+        try StemExporter.exportMix(
+            [drums, bass],
+            to: destinationURL,
+            ffmpegURL: ffmpegURL
+        )
+
+        XCTAssertEqual(try Data(contentsOf: destinationURL), Data("encoded-selected-mix".utf8))
+        let metadata = try validateAudioFile(at: capturedMixURL, expectedFrames: 6)
+        XCTAssertEqual(metadata.sampleRate, canonicalSampleRate)
+        XCTAssertEqual(metadata.channels, canonicalChannels)
+        XCTAssertEqual(metadata.frames, 6)
+
+        let outputFile = try AVAudioFile(forReading: capturedMixURL)
         guard let outputBuffer = AVAudioPCMBuffer(
             pcmFormat: outputFile.processingFormat,
             frameCapacity: AVAudioFrameCount(outputFile.length)

@@ -63,6 +63,7 @@ struct StemExporter {
 
     static func defaultMixFilename(
         for stems: [StemName],
+        format: StemExportFormat = .mp3,
         sourceBaseName: String? = nil
     ) -> String {
         let selectedStems = Set(stems)
@@ -73,9 +74,9 @@ struct StemExporter {
         let mixDescription = stemDescription.isEmpty ? "Stems" : stemDescription
 
         if let sourceBaseName, !sourceBaseName.isEmpty {
-            return "\(sourceBaseName) - \(mixDescription).wav"
+            return "\(sourceBaseName) - \(mixDescription).\(format.filenameExtension)"
         }
-        return "\(mixDescription).wav"
+        return "\(mixDescription).\(format.filenameExtension)"
     }
 
     static func export(
@@ -119,6 +120,8 @@ struct StemExporter {
     static func exportMix(
         _ artifacts: [StemArtifact],
         to destinationURL: URL,
+        format: StemExportFormat = .mp3,
+        ffmpegURL: URL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg"),
         fileManager: FileManager = .default
     ) throws {
         guard artifacts.count >= 2 else {
@@ -136,6 +139,26 @@ struct StemExporter {
             }
         }
 
+        switch format {
+        case .wav:
+            try writeAlignedMix(artifacts, to: destinationURL, fileManager: fileManager)
+        case .mp3:
+            let temporaryDirectoryURL = fileManager.temporaryDirectory
+                .appendingPathComponent("Strata-Mix-\(UUID().uuidString)", isDirectory: true)
+            try fileManager.createDirectory(at: temporaryDirectoryURL, withIntermediateDirectories: true)
+            defer { try? fileManager.removeItem(at: temporaryDirectoryURL) }
+
+            let temporaryWAVURL = temporaryDirectoryURL.appendingPathComponent("mix.wav")
+            try writeAlignedMix(artifacts, to: temporaryWAVURL, fileManager: fileManager)
+            try encodeMP3(from: temporaryWAVURL, to: destinationURL, ffmpegURL: ffmpegURL)
+        }
+    }
+
+    private static func writeAlignedMix(
+        _ artifacts: [StemArtifact],
+        to destinationURL: URL,
+        fileManager: FileManager
+    ) throws {
         var files: [AVAudioFile] = []
         var commonFrameCount: UInt64?
         for artifact in artifacts {

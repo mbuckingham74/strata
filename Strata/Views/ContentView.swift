@@ -400,15 +400,20 @@ struct InferenceCard: View {
                             .accessibilityIdentifier("ExportStem-\(stem.name.rawValue)")
                         }.padding(.horizontal, 10).padding(.vertical, 8).background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
                     }
-                    Button {
-                        exportMix(stemPlaybackController.selectedStems)
+                    Menu {
+                        Button("Export Selected WAV") {
+                            exportMix(stemPlaybackController.selectedStems, as: .wav)
+                        }
                     } label: {
-                        Label("Export Selected WAV", systemImage: "square.and.arrow.down.on.square")
+                        Label("Export Selected MP3", systemImage: "square.and.arrow.down.on.square")
+                    } primaryAction: {
+                        exportMix(stemPlaybackController.selectedStems)
                     }
+                    .menuStyle(.button)
                     .buttonStyle(.borderedProminent)
                     .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
                     .disabled(stemPlaybackController.selectedStems.count < 2)
-                    .help("Export the stems currently selected by Mute and Solo as one WAV mix")
+                    .help("Export the stems currently selected by Mute and Solo as one MP3 mix, or choose WAV")
                     .accessibilityIdentifier("ExportSelectedStemMix")
                     Text(result.jobDirectoryURL.path).font(.caption2.monospaced()).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
                 }.padding(.top, 4)
@@ -460,12 +465,16 @@ struct InferenceCard: View {
         }
     }
 
-    private func exportMix(_ artifacts: [StemArtifact]) {
+    private func exportMix(
+        _ artifacts: [StemArtifact],
+        as format: StemExportFormat = .mp3
+    ) {
         guard artifacts.count >= 2 else { return }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.wav]
+        panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
         panel.nameFieldStringValue = StemExporter.defaultMixFilename(
             for: artifacts.map(\.name),
+            format: format,
             sourceBaseName: inferenceController.exportBaseName
         )
         panel.canCreateDirectories = true
@@ -475,7 +484,7 @@ struct InferenceCard: View {
             Task {
                 do {
                     try await Task.detached(priority: .userInitiated) {
-                        try StemExporter.exportMix(artifacts, to: destinationURL)
+                        try StemExporter.exportMix(artifacts, to: destinationURL, format: format)
                     }.value
                 } catch {
                     exportErrorMessage = error.localizedDescription
