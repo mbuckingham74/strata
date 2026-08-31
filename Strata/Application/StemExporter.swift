@@ -1,8 +1,11 @@
+import AVFoundation
 import Foundation
 import Synchronization
 
 enum StemExportError: Error, LocalizedError, Equatable {
     case sourceAndDestinationMatch
+    case combinedExportRequiresMultipleStems
+    case invalidMix(String)
     case ffmpegLaunchFailed(String)
     case ffmpegFailed(exitCode: Int32, message: String?)
 
@@ -10,6 +13,10 @@ enum StemExportError: Error, LocalizedError, Equatable {
         switch self {
         case .sourceAndDestinationMatch:
             return "Choose a location other than the original stem file."
+        case .combinedExportRequiresMultipleStems:
+            return "Select at least two stems to export a combined mix."
+        case .invalidMix(let message):
+            return "Could not export the stem mix: \(message)"
         case .ffmpegLaunchFailed(let message):
             return "Could not start MP3 encoding: \(message)"
         case .ffmpegFailed(let exitCode, let message):
@@ -34,6 +41,8 @@ enum StemExportFormat: Sendable, Equatable {
 }
 
 struct StemExporter {
+    private static let mixChunkFrameCount: AVAudioFrameCount = 16_384
+
     static func defaultFilename(
         for stem: StemName,
         format: StemExportFormat = .wav,
@@ -43,6 +52,23 @@ struct StemExporter {
             return "\(sourceBaseName) - \(stem.rawValue.capitalized).\(format.filenameExtension)"
         }
         return "\(stem.rawValue).\(format.filenameExtension)"
+    }
+
+    static func defaultMixFilename(
+        for stems: [StemName],
+        sourceBaseName: String? = nil
+    ) -> String {
+        let selectedStems = Set(stems)
+        let stemDescription = StemName.allCases
+            .filter { selectedStems.contains($0) }
+            .map { $0.rawValue.capitalized }
+            .joined(separator: " + ")
+        let mixDescription = stemDescription.isEmpty ? "Stems" : stemDescription
+
+        if let sourceBaseName, !sourceBaseName.isEmpty {
+            return "\(sourceBaseName) - \(mixDescription).wav"
+        }
+        return "\(mixDescription).wav"
     }
 
     static func export(
@@ -67,6 +93,151 @@ struct StemExporter {
             try fileManager.copyItem(at: artifact.url, to: destinationURL)
         case .mp3:
             try encodeMP3(from: artifact.url, to: destinationURL, ffmpegURL: ffmpegURL)
+        }
+    }
+
+    static func exportMix(
+        _ artifacts: [StemArtifact],
+        to destinationURL: URL,
+        fileManager: FileManager = .default
+    ) throws {
+        guard artifacts.count >= 2 else {
+            throw StemExportError.combinedExportRequiresMultipleStems
+        }
+        guard Set(artifacts.map(\.name)).count == artifacts.count else {
+            throw StemExportError.invalidMix("Each selected stem must be unique.")
+        }
+
+        let resolvedDestinationURL = destinationURL.standardizedFileURL.resolvingSymlinksInPath()
+        for artifact in artifacts {
+            let sourceURL = artifact.url.standardizedFileURL.resolvingSymlinksInPath()
+            guard sourceURL != resolvedDestinationURL else {
+                throw StemExportError.sourceAndDestinationMatch
+            }
+        }
+
+        var files: [AVAudioFile] = []
+        var commonFrameCount: UInt64?
+        for artifact in artifacts {
+            guard artifact.sampleRate == canonicalSampleRate,
+                  artifact.channels == canonicalChannels,
+                  artifact.frameCount > 0 else {
+                throw StemExportError.invalidMix("\(artifact.name.rawValue.capitalized) is not canonical 44.1 kHz stereo audio.")
+            }
+
+            let metadata: (sampleRate: UInt32, channels: UInt32, frames: UInt64)
+            do {
+                metadata = try validateAudioFile(at: artifact.url, expectedFrames: artifact.frameCount)
+            } catch {
+                throw StemExportError.invalidMix(error.localizedDescription)
+            }
+            guard metadata.sampleRate == canonicalSampleRate,
+                  metadata.channels == canonicalChannels,
+                  metadata.frames == artifact.frameCount else {
+                throw StemExportError.invalidMix("\(artifact.name.rawValue.capitalized) does not match its validated audio metadata.")
+            }
+            if let commonFrameCount, commonFrameCount != artifact.frameCount {
+                throw StemExportError.invalidMix("Selected stems must have equal frame counts.")
+            }
+            commonFrameCount = artifact.frameCount
+
+            do {
+                let file = try AVAudioFile(forReading: artifact.url)
+                guard file.processingFormat.commonFormat == .pcmFormatFloat32,
+                      file.processingFormat.sampleRate == Double(canonicalSampleRate),
+                      file.processingFormat.channelCount == canonicalChannels,
+                      UInt64(file.length) == artifact.frameCount else {
+                    throw StemExportError.invalidMix("\(artifact.name.rawValue.capitalized) could not be read as canonical audio.")
+                }
+                files.append(file)
+            } catch let error as StemExportError {
+                throw error
+            } catch {
+                throw StemExportError.invalidMix(error.localizedDescription)
+            }
+        }
+
+        guard let totalFrameCount = commonFrameCount else {
+            throw StemExportError.combinedExportRequiresMultipleStems
+        }
+
+        if fileManager.fileExists(atPath: destinationURL.path) {
+            try fileManager.removeItem(at: destinationURL)
+        }
+
+        let outputSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: Double(canonicalSampleRate),
+            AVNumberOfChannelsKey: canonicalChannels,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ]
+        let outputFile: AVAudioFile
+        do {
+            outputFile = try AVAudioFile(
+                forWriting: destinationURL,
+                settings: outputSettings,
+                commonFormat: .pcmFormatFloat32,
+                interleaved: false
+            )
+        } catch {
+            throw StemExportError.invalidMix(error.localizedDescription)
+        }
+
+        let outputFormat = outputFile.processingFormat
+        var framesWritten: UInt64 = 0
+        while framesWritten < totalFrameCount {
+            let remainingFrames = totalFrameCount - framesWritten
+            let frameCount = AVAudioFrameCount(min(UInt64(mixChunkFrameCount), remainingFrames))
+            guard let mixBuffer = AVAudioPCMBuffer(
+                pcmFormat: outputFormat,
+                frameCapacity: frameCount
+            ), let mixChannels = mixBuffer.floatChannelData else {
+                throw StemExportError.invalidMix("Could not allocate an output audio buffer.")
+            }
+            mixBuffer.frameLength = frameCount
+            for channel in 0..<Int(canonicalChannels) {
+                mixChannels[channel].update(repeating: 0, count: Int(frameCount))
+            }
+
+            for file in files {
+                guard let inputBuffer = AVAudioPCMBuffer(
+                    pcmFormat: file.processingFormat,
+                    frameCapacity: frameCount
+                ) else {
+                    throw StemExportError.invalidMix("Could not allocate an input audio buffer.")
+                }
+                do {
+                    try file.read(into: inputBuffer, frameCount: frameCount)
+                } catch {
+                    throw StemExportError.invalidMix(error.localizedDescription)
+                }
+                guard inputBuffer.frameLength == frameCount,
+                      let inputChannels = inputBuffer.floatChannelData else {
+                    throw StemExportError.invalidMix("A selected stem ended before the expected aligned frame count.")
+                }
+
+                for channel in 0..<Int(canonicalChannels) {
+                    for frame in 0..<Int(frameCount) {
+                        mixChannels[channel][frame] += inputChannels[channel][frame]
+                    }
+                }
+            }
+
+            for channel in 0..<Int(canonicalChannels) {
+                for frame in 0..<Int(frameCount) {
+                    mixChannels[channel][frame] = min(max(mixChannels[channel][frame], -1), 1)
+                }
+            }
+
+            do {
+                try outputFile.write(from: mixBuffer)
+            } catch {
+                throw StemExportError.invalidMix(error.localizedDescription)
+            }
+            framesWritten += UInt64(frameCount)
         }
     }
 

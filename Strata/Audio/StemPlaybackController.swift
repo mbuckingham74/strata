@@ -39,6 +39,19 @@ final class StemPlaybackController {
     var errorMessage: String?
 
     var hasStems: Bool { result != nil }
+    var selectedStems: [StemArtifact] {
+        guard let result else { return [] }
+        let selectedNames: Set<StemName>
+        if soloedStems.isEmpty {
+            selectedNames = Set(result.stems.keys).subtracting(mutedStems)
+        } else {
+            selectedNames = soloedStems
+        }
+        return StemName.allCases.compactMap { name in
+            guard selectedNames.contains(name) else { return nil }
+            return result.stem(name)
+        }
+    }
 
     // MARK: - Transport
 

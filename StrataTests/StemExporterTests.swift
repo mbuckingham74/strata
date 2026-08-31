@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import Strata
 
@@ -17,6 +18,56 @@ final class StemExporterTests: XCTestCase {
             frameCount: 1,
             channels: 2,
             sampleRate: 44_100
+        )
+    }
+
+    private func makeWAVArtifact(
+        name: StemName,
+        url: URL,
+        leftSamples: [Float],
+        rightSamples: [Float]
+    ) throws -> StemArtifact {
+        guard leftSamples.count == rightSamples.count, !leftSamples.isEmpty else {
+            throw NSError(domain: "StemExporterTests", code: 1)
+        }
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: Double(canonicalSampleRate),
+            AVNumberOfChannelsKey: canonicalChannels,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ]
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: settings,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+        let frameCount = AVAudioFrameCount(leftSamples.count)
+        guard let buffer = AVAudioPCMBuffer(
+            pcmFormat: file.processingFormat,
+            frameCapacity: frameCount
+        ), let channels = buffer.floatChannelData else {
+            throw NSError(domain: "StemExporterTests", code: 2)
+        }
+        buffer.frameLength = frameCount
+        for frame in 0..<leftSamples.count {
+            channels[0][frame] = leftSamples[frame]
+            channels[1][frame] = rightSamples[frame]
+        }
+        try file.write(from: buffer)
+
+        let data = try Data(contentsOf: url)
+        return StemArtifact(
+            name: name,
+            url: url,
+            sha256: sha256Hex(of: data),
+            fileSize: UInt64(data.count),
+            frameCount: UInt64(frameCount),
+            channels: canonicalChannels,
+            sampleRate: canonicalSampleRate
         )
     }
 
@@ -82,6 +133,70 @@ final class StemExporterTests: XCTestCase {
                 StemExporter.defaultFilename(for: stem, format: .mp3, sourceBaseName: nil),
                 "\(stem.rawValue).mp3"
             )
+        }
+    }
+
+    func testDefaultMixFilenameUsesCanonicalStemOrderAndYouTubeMetadata() {
+        XCTAssertEqual(
+            StemExporter.defaultMixFilename(
+                for: [.bass, .drums],
+                sourceBaseName: "Artist - Song Title"
+            ),
+            "Artist - Song Title - Drums + Bass.wav"
+        )
+        XCTAssertEqual(
+            StemExporter.defaultMixFilename(for: [.bass, .drums]),
+            "Drums + Bass.wav"
+        )
+    }
+
+    func testCombinedWAVExportIncludesSelectedStemsAndPreservesAlignment() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let drums = try makeWAVArtifact(
+            name: .drums,
+            url: directoryURL.appendingPathComponent("drums.wav"),
+            leftSamples: [0, 0.25, 0.10, 0, 0, 0],
+            rightSamples: [0, 0, 0.15, 0, 0, 0.20]
+        )
+        let bass = try makeWAVArtifact(
+            name: .bass,
+            url: directoryURL.appendingPathComponent("bass.wav"),
+            leftSamples: [0, 0, 0.20, 0, 0.40, 0],
+            rightSamples: [0.30, 0, 0.10, 0, 0, 0]
+        )
+        _ = try makeWAVArtifact(
+            name: .vocals,
+            url: directoryURL.appendingPathComponent("vocals.wav"),
+            leftSamples: [0.75, 0.75, 0.75, 0.75, 0.75, 0.75],
+            rightSamples: [0.75, 0.75, 0.75, 0.75, 0.75, 0.75]
+        )
+        let destinationURL = directoryURL.appendingPathComponent("selected-mix.wav")
+
+        try StemExporter.exportMix([drums, bass], to: destinationURL)
+
+        let metadata = try validateAudioFile(at: destinationURL, expectedFrames: 6)
+        XCTAssertEqual(metadata.sampleRate, canonicalSampleRate)
+        XCTAssertEqual(metadata.channels, canonicalChannels)
+        XCTAssertEqual(metadata.frames, 6)
+
+        let outputFile = try AVAudioFile(forReading: destinationURL)
+        guard let outputBuffer = AVAudioPCMBuffer(
+            pcmFormat: outputFile.processingFormat,
+            frameCapacity: AVAudioFrameCount(outputFile.length)
+        ) else {
+            return XCTFail("Could not allocate output verification buffer")
+        }
+        try outputFile.read(into: outputBuffer)
+        let outputChannels = try XCTUnwrap(outputBuffer.floatChannelData)
+        let expectedLeft: [Float] = [0, 0.25, 0.30, 0, 0.40, 0]
+        let expectedRight: [Float] = [0.30, 0, 0.25, 0, 0, 0.20]
+        for frame in 0..<expectedLeft.count {
+            XCTAssertEqual(outputChannels[0][frame], expectedLeft[frame], accuracy: 0.000_01)
+            XCTAssertEqual(outputChannels[1][frame], expectedRight[frame], accuracy: 0.000_01)
         }
     }
 

@@ -298,6 +298,23 @@ final class StemPlaybackControllerTests: XCTestCase {
         XCTAssertEqual(sut.soloedStems, [.bass])
     }
 
+    func testSelectedStemsFollowMuteAndSoloAudibility() {
+        let fake = FakeStemTransport()
+        let sut = StemPlaybackController(transport: fake)
+        sut.load(result: makeDummyResult())
+
+        sut.setMuted(true, for: .vocals)
+        sut.setMuted(true, for: .piano)
+        XCTAssertEqual(
+            sut.selectedStems.map(\.name),
+            [.drums, .bass, .guitar, .other]
+        )
+
+        sut.setSoloed(true, for: .bass)
+        sut.setSoloed(true, for: .drums)
+        XCTAssertEqual(sut.selectedStems.map(\.name), [.drums, .bass])
+    }
+
     func testLoadingNewResultClearsMuteAndSoloState() {
         let fake = FakeStemTransport()
         let sut = StemPlaybackController(transport: fake)

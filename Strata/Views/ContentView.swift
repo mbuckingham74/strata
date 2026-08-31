@@ -387,6 +387,16 @@ struct InferenceCard: View {
                             .accessibilityIdentifier("ExportStem-\(stem.name.rawValue)")
                         }.padding(.horizontal, 10).padding(.vertical, 8).background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
                     }
+                    Button {
+                        exportMix(stemPlaybackController.selectedStems)
+                    } label: {
+                        Label("Export Selected WAV", systemImage: "square.and.arrow.down.on.square")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
+                    .disabled(stemPlaybackController.selectedStems.count < 2)
+                    .help("Export the stems currently selected by Mute and Solo as one WAV mix")
+                    .accessibilityIdentifier("ExportSelectedStemMix")
                     Text(result.jobDirectoryURL.path).font(.caption2.monospaced()).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
                 }.padding(.top, 4)
             }
@@ -425,6 +435,30 @@ struct InferenceCard: View {
                 do {
                     try await Task.detached(priority: .userInitiated) {
                         try StemExporter.export(artifact, to: destinationURL, format: format)
+                    }.value
+                } catch {
+                    exportErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func exportMix(_ artifacts: [StemArtifact]) {
+        guard artifacts.count >= 2 else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.wav]
+        panel.nameFieldStringValue = StemExporter.defaultMixFilename(
+            for: artifacts.map(\.name),
+            sourceBaseName: inferenceController.exportBaseName
+        )
+        panel.canCreateDirectories = true
+
+        panel.begin { response in
+            guard response == .OK, let destinationURL = panel.url else { return }
+            Task {
+                do {
+                    try await Task.detached(priority: .userInitiated) {
+                        try StemExporter.exportMix(artifacts, to: destinationURL)
                     }.value
                 } catch {
                     exportErrorMessage = error.localizedDescription
