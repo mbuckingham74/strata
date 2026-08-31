@@ -41,6 +41,8 @@
 		A10000000000000000000021 /* StemPlaybackControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000021 /* StemPlaybackControllerTests.swift */; };
 		A10000000000000000000022 /* StemExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000022 /* StemExporter.swift */; };
 		A10000000000000000000023 /* StemExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000023 /* StemExporterTests.swift */; };
+		A10000000000000000000024 /* ExportFolderPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000024 /* ExportFolderPreference.swift */; };
+		A10000000000000000000025 /* ExportFolderPreferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000025 /* ExportFolderPreferenceTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -80,6 +82,8 @@
 		B10000000000000000000021 /* StemPlaybackControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StemPlaybackControllerTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000022 /* StemExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StemExporter.swift; sourceTree = "<group>"; };
 		B10000000000000000000023 /* StemExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StemExporterTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000024 /* ExportFolderPreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportFolderPreference.swift; sourceTree = "<group>"; };
+		B10000000000000000000025 /* ExportFolderPreferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportFolderPreferenceTests.swift; sourceTree = "<group>"; };
 		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -157,6 +161,7 @@
 				B10000000000000000000007 /* AppLifecycleDelegate.swift */,
 				B10000000000000000000013 /* AppTerminationCoordinator.swift */,
 				B10000000000000000000022 /* StemExporter.swift */,
+				B10000000000000000000024 /* ExportFolderPreference.swift */,
 			);
 			path = Application;
 			sourceTree = "<group>";
@@ -201,6 +206,7 @@
 				B1000000000000000000001F /* MultiStemAudioTransportTests.swift */,
 				B10000000000000000000021 /* StemPlaybackControllerTests.swift */,
 				B10000000000000000000023 /* StemExporterTests.swift */,
+				B10000000000000000000025 /* ExportFolderPreferenceTests.swift */,
 			);
 			path = StrataTests;
 			sourceTree = "<group>";
@@ -369,6 +375,7 @@
 				A10000000000000000000015 /* TrustedInferenceIdentity.swift in Sources */,
 				A10000000000000000000019 /* YouTubeIngestClient.swift in Sources */,
 				A10000000000000000000022 /* StemExporter.swift in Sources */,
+				A10000000000000000000024 /* ExportFolderPreference.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -391,6 +398,7 @@
 				A1000000000000000000001F /* MultiStemAudioTransportTests.swift in Sources */,
 				A10000000000000000000021 /* StemPlaybackControllerTests.swift in Sources */,
 				A10000000000000000000023 /* StemExporterTests.swift in Sources */,
+				A10000000000000000000025 /* ExportFolderPreferenceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

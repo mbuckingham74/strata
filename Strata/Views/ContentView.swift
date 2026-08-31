@@ -252,6 +252,7 @@ struct InferenceCard: View {
     @Bindable var stemPlaybackController: StemPlaybackController
     @Binding var inferenceInputURL: URL?
     @Binding var showingInferenceImporter: Bool
+    private let exportFolderPreference = ExportFolderPreference()
     @State private var youTubeURLString = ""
     @State private var exportErrorMessage: String?
 
@@ -260,6 +261,15 @@ struct InferenceCard: View {
             HStack {
                 Label("Separation", systemImage: "waveform.path.badge.magnifyingglass").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
                 Spacer()
+                Button {
+                    chooseDefaultExportFolder()
+                } label: {
+                    Label("Export Folder…", systemImage: "folder")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .help("Choose the default folder shown by export save panels")
+                .accessibilityIdentifier("ChooseDefaultExportFolder")
                 if inferenceController.isSeparating {
                     ProgressView().scaleEffect(0.7).tint(.white)
                 }
@@ -441,6 +451,29 @@ struct InferenceCard: View {
         stemPlaybackController.load(result: result)
     }
 
+    private func chooseDefaultExportFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = false
+        panel.prompt = "Choose"
+        panel.message = "Choose the default folder for future exports."
+        let defaultDirectoryAccess = exportFolderPreference.resolvedDefaultDirectory()
+        panel.directoryURL = defaultDirectoryAccess?.url
+
+        panel.begin { response in
+            withExtendedLifetime(defaultDirectoryAccess) {
+                guard response == .OK, let directoryURL = panel.url else { return }
+                do {
+                    try exportFolderPreference.setDefaultDirectory(directoryURL)
+                } catch {
+                    exportErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
     private func export(_ artifact: StemArtifact, as format: StemExportFormat) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
@@ -450,16 +483,20 @@ struct InferenceCard: View {
             sourceBaseName: inferenceController.exportBaseName
         )
         panel.canCreateDirectories = true
+        let defaultDirectoryAccess = exportFolderPreference.applyDefaultDirectory(to: panel)
 
         panel.begin { response in
-            guard response == .OK, let destinationURL = panel.url else { return }
-            Task {
-                do {
-                    try await Task.detached(priority: .userInitiated) {
-                        try StemExporter.export(artifact, to: destinationURL, format: format)
-                    }.value
-                } catch {
-                    exportErrorMessage = error.localizedDescription
+            withExtendedLifetime(defaultDirectoryAccess) {
+                guard response == .OK, let destinationURL = panel.url else { return }
+                Task { [defaultDirectoryAccess] in
+                    defer { withExtendedLifetime(defaultDirectoryAccess) {} }
+                    do {
+                        try await Task.detached(priority: .userInitiated) {
+                            try StemExporter.export(artifact, to: destinationURL, format: format)
+                        }.value
+                    } catch {
+                        exportErrorMessage = error.localizedDescription
+                    }
                 }
             }
         }
@@ -478,16 +515,20 @@ struct InferenceCard: View {
             sourceBaseName: inferenceController.exportBaseName
         )
         panel.canCreateDirectories = true
+        let defaultDirectoryAccess = exportFolderPreference.applyDefaultDirectory(to: panel)
 
         panel.begin { response in
-            guard response == .OK, let destinationURL = panel.url else { return }
-            Task {
-                do {
-                    try await Task.detached(priority: .userInitiated) {
-                        try StemExporter.exportMix(artifacts, to: destinationURL, format: format)
-                    }.value
-                } catch {
-                    exportErrorMessage = error.localizedDescription
+            withExtendedLifetime(defaultDirectoryAccess) {
+                guard response == .OK, let destinationURL = panel.url else { return }
+                Task { [defaultDirectoryAccess] in
+                    defer { withExtendedLifetime(defaultDirectoryAccess) {} }
+                    do {
+                        try await Task.detached(priority: .userInitiated) {
+                            try StemExporter.exportMix(artifacts, to: destinationURL, format: format)
+                        }.value
+                    } catch {
+                        exportErrorMessage = error.localizedDescription
+                    }
                 }
             }
         }
@@ -500,19 +541,23 @@ struct InferenceCard: View {
             metadata: preparation.metadata
         )
         panel.canCreateDirectories = true
+        let defaultDirectoryAccess = exportFolderPreference.applyDefaultDirectory(to: panel)
 
         panel.begin { response in
-            guard response == .OK, let destinationURL = panel.url else { return }
-            Task {
-                do {
-                    try await Task.detached(priority: .userInitiated) {
-                        try StemExporter.exportMP3(
-                            from: preparation.audioURL,
-                            to: destinationURL
-                        )
-                    }.value
-                } catch {
-                    exportErrorMessage = error.localizedDescription
+            withExtendedLifetime(defaultDirectoryAccess) {
+                guard response == .OK, let destinationURL = panel.url else { return }
+                Task { [defaultDirectoryAccess] in
+                    defer { withExtendedLifetime(defaultDirectoryAccess) {} }
+                    do {
+                        try await Task.detached(priority: .userInitiated) {
+                            try StemExporter.exportMP3(
+                                from: preparation.audioURL,
+                                to: destinationURL
+                            )
+                        }.value
+                    } catch {
+                        exportErrorMessage = error.localizedDescription
+                    }
                 }
             }
         }
