@@ -371,11 +371,17 @@ struct InferenceCard: View {
                                 stem: stem.name
                             )
                             Text("\(stem.frameCount) frames").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
-                            Button {
-                                export(stem)
+                            Menu {
+                                Button("WAV") {
+                                    export(stem, as: .wav)
+                                }
+                                Button("MP3") {
+                                    export(stem, as: .mp3)
+                                }
                             } label: {
                                 Label("Export", systemImage: "square.and.arrow.down")
                             }
+                            .menuStyle(.button)
                             .buttonStyle(.bordered)
                             .controlSize(.small)
                             .accessibilityIdentifier("ExportStem-\(stem.name.rawValue)")
@@ -403,18 +409,22 @@ struct InferenceCard: View {
         stemPlaybackController.load(result: result)
     }
 
-    private func export(_ artifact: StemArtifact) {
+    private func export(_ artifact: StemArtifact, as format: StemExportFormat) {
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.wav]
-        panel.nameFieldStringValue = StemExporter.defaultFilename(for: artifact.name)
+        panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
+        panel.nameFieldStringValue = StemExporter.defaultFilename(for: artifact.name, format: format)
         panel.canCreateDirectories = true
 
         panel.begin { response in
             guard response == .OK, let destinationURL = panel.url else { return }
-            do {
-                try StemExporter.export(artifact, to: destinationURL)
-            } catch {
-                exportErrorMessage = error.localizedDescription
+            Task {
+                do {
+                    try await Task.detached(priority: .userInitiated) {
+                        try StemExporter.export(artifact, to: destinationURL, format: format)
+                    }.value
+                } catch {
+                    exportErrorMessage = error.localizedDescription
+                }
             }
         }
     }
