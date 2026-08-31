@@ -3,7 +3,7 @@ import Foundation
 // MARK: - StemName
 
 /// Closed set of six stems. Raw values match Python VALID_STEMS.
-enum StemName: String, CaseIterable, Codable, Sendable, Hashable {
+enum StemName: String, CaseIterable, Codable, Sendable, Hashable, CodingKeyRepresentable {
     case vocals
     case drums
     case bass

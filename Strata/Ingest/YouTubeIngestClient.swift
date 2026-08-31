@@ -26,7 +26,7 @@ enum YouTubeIngestError: Error, Equatable, LocalizedError, Sendable {
     }
 }
 
-struct YouTubeTrackMetadata: Sendable, Equatable {
+struct YouTubeTrackMetadata: Sendable, Equatable, Codable {
     let artist: String?
     let title: String?
     let album: String?

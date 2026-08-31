@@ -50,6 +50,12 @@
 		A1000000000000000000002A /* WaveformProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000002A /* WaveformProviderTests.swift */; };
 		A1000000000000000000002B /* LoadedSourcePresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000002B /* LoadedSourcePresentationTests.swift */; };
 		A1000000000000000000002C /* StemGainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000002C /* StemGainTests.swift */; };
+		A1000000000000000000002D /* StrataProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000002D /* StrataProject.swift */; };
+		A1000000000000000000002E /* StrataProjectPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000002E /* StrataProjectPersistence.swift */; };
+		A1000000000000000000002F /* StrataProjectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000002F /* StrataProjectTests.swift */; };
+		A10000000000000000000030 /* StrataProjectPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000030 /* StrataProjectPersistenceTests.swift */; };
+		A10000000000000000000031 /* StrataProjectReopenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000031 /* StrataProjectReopenTests.swift */; };
+		A10000000000000000000032 /* WorkerJobIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000032 /* WorkerJobIdentityTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -98,6 +104,12 @@
 		B1000000000000000000002A /* WaveformProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformProviderTests.swift; sourceTree = "<group>"; };
 		B1000000000000000000002B /* LoadedSourcePresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadedSourcePresentationTests.swift; sourceTree = "<group>"; };
 		B1000000000000000000002C /* StemGainTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StemGainTests.swift; sourceTree = "<group>"; };
+		B1000000000000000000002D /* StrataProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataProject.swift; sourceTree = "<group>"; };
+		B1000000000000000000002E /* StrataProjectPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataProjectPersistence.swift; sourceTree = "<group>"; };
+		B1000000000000000000002F /* StrataProjectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataProjectTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000030 /* StrataProjectPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataProjectPersistenceTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000031 /* StrataProjectReopenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataProjectReopenTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000032 /* WorkerJobIdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerJobIdentityTests.swift; sourceTree = "<group>"; };
 		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -178,6 +190,8 @@
 				B10000000000000000000013 /* AppTerminationCoordinator.swift */,
 				B10000000000000000000022 /* StemExporter.swift */,
 				B10000000000000000000024 /* ExportFolderPreference.swift */,
+				B1000000000000000000002D /* StrataProject.swift */,
+				B1000000000000000000002E /* StrataProjectPersistence.swift */,
 			);
 			path = Application;
 			sourceTree = "<group>";
@@ -228,6 +242,10 @@
 				B1000000000000000000002A /* WaveformProviderTests.swift */,
 				B1000000000000000000002B /* LoadedSourcePresentationTests.swift */,
 				B1000000000000000000002C /* StemGainTests.swift */,
+				B1000000000000000000002F /* StrataProjectTests.swift */,
+				B10000000000000000000030 /* StrataProjectPersistenceTests.swift */,
+				B10000000000000000000031 /* StrataProjectReopenTests.swift */,
+				B10000000000000000000032 /* WorkerJobIdentityTests.swift */,
 			);
 			path = StrataTests;
 			sourceTree = "<group>";
@@ -399,6 +417,8 @@
 				A10000000000000000000019 /* YouTubeIngestClient.swift in Sources */,
 				A10000000000000000000022 /* StemExporter.swift in Sources */,
 				A10000000000000000000024 /* ExportFolderPreference.swift in Sources */,
+				A1000000000000000000002D /* StrataProject.swift in Sources */,
+				A1000000000000000000002E /* StrataProjectPersistence.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -427,6 +447,10 @@
 				A1000000000000000000002A /* WaveformProviderTests.swift in Sources */,
 				A1000000000000000000002B /* LoadedSourcePresentationTests.swift in Sources */,
 				A1000000000000000000002C /* StemGainTests.swift in Sources */,
+				A1000000000000000000002F /* StrataProjectTests.swift in Sources */,
+				A10000000000000000000030 /* StrataProjectPersistenceTests.swift in Sources */,
+				A10000000000000000000031 /* StrataProjectReopenTests.swift in Sources */,
+				A10000000000000000000032 /* WorkerJobIdentityTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

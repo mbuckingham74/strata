@@ -207,16 +207,28 @@ actor InferenceWorkerClient {
         try await runSeparationImpl(inputPath: inputPath, outputBaseDir: outputBaseDir)
     }
 
+    func separate(inputPath: URL, outputBaseDir: URL, projectId: String) async throws -> SeparationResult {
+        try await runSeparationImpl(inputPath: inputPath, outputBaseDir: outputBaseDir, projectId: projectId)
+    }
+
     /// Backward-compatible entry used by the controller and M3 tests.
     func separateWithJobTracking(inputPath: URL, outputBaseDir: URL) async throws -> SeparationResult {
         try await runSeparationImpl(inputPath: inputPath, outputBaseDir: outputBaseDir)
+    }
+
+    func separateWithJobTracking(inputPath: URL, outputBaseDir: URL, projectId: String) async throws -> SeparationResult {
+        try await runSeparationImpl(inputPath: inputPath, outputBaseDir: outputBaseDir, projectId: projectId)
     }
 
     func runSeparation(inputPath: URL, outputBaseDir: URL) async throws -> SeparationResult {
         try await runSeparationImpl(inputPath: inputPath, outputBaseDir: outputBaseDir)
     }
 
-    private func runSeparationImpl(inputPath: URL, outputBaseDir: URL) async throws -> SeparationResult {
+    func runSeparation(inputPath: URL, outputBaseDir: URL, projectId: String) async throws -> SeparationResult {
+        try await runSeparationImpl(inputPath: inputPath, outputBaseDir: outputBaseDir, projectId: projectId)
+    }
+
+    private func runSeparationImpl(inputPath: URL, outputBaseDir: URL, projectId: String? = nil) async throws -> SeparationResult {
         guard !separationReserved, activeJob == nil else { throw InferenceError.alreadyRunningJob }
         separationReserved = true
         defer { separationReserved = false }
@@ -241,7 +253,13 @@ actor InferenceWorkerClient {
 
         try await ensureWorkerReady()
 
-        let jobId = UUID().uuidString.lowercased()
+        let jobId: String
+        if let pid = projectId {
+            try StrataProject.validateProjectID(pid)
+            jobId = pid
+        } else {
+            jobId = UUID().uuidString.lowercased()
+        }
         let jobDir = outputBaseDir.appendingPathComponent(jobId, isDirectory: true)
         if fm.fileExists(atPath: jobDir.path) {
             throw InferenceError.manifestValidationFailure("final job directory already exists: \(jobDir.path)")
