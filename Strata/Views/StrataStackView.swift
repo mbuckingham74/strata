@@ -220,10 +220,6 @@ struct StratumRowView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                    Text("\(artifact.frameCount) frames")
-                        .font(.system(size: 9, weight: .regular, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
                 }
             }
             .frame(width: 110, alignment: .leading)
