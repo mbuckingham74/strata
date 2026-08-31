@@ -364,6 +364,10 @@ struct InferenceCard: View {
                             Text(stem.name.rawValue).font(.callout.weight(.medium)).foregroundStyle(.white).frame(width: 60, alignment: .leading)
                             Text(stem.url.lastPathComponent).font(.caption.monospaced()).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
                             Spacer()
+                            StemAudibilityControls(
+                                stemPlaybackController: stemPlaybackController,
+                                stem: stem.name
+                            )
                             Text("\(stem.frameCount) frames").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                         }.padding(.horizontal, 10).padding(.vertical, 8).background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
                     }
@@ -408,6 +412,48 @@ struct InferenceCard: View {
         case .piano: return "pianokeys"
         case .other: return "music.note"
         }
+    }
+}
+
+struct StemAudibilityControls: View {
+    @Bindable var stemPlaybackController: StemPlaybackController
+    let stem: StemName
+
+    var isMuted: Bool {
+        stemPlaybackController.mutedStems.contains(stem)
+    }
+
+    var isSoloed: Bool {
+        stemPlaybackController.soloedStems.contains(stem)
+    }
+
+    var muteBinding: Binding<Bool> {
+        Binding(
+            get: { isMuted },
+            set: { stemPlaybackController.setMuted($0, for: stem) }
+        )
+    }
+
+    var soloBinding: Binding<Bool> {
+        Binding(
+            get: { isSoloed },
+            set: { stemPlaybackController.setSoloed($0, for: stem) }
+        )
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Toggle("Mute", isOn: muteBinding)
+                .toggleStyle(.button)
+                .tint(.red)
+                .accessibilityIdentifier("StemMute-\(stem.rawValue)")
+            Toggle("Solo", isOn: soloBinding)
+                .toggleStyle(.button)
+                .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
+                .accessibilityIdentifier("StemSolo-\(stem.rawValue)")
+        }
+        .controlSize(.small)
+        .disabled(!stemPlaybackController.hasStems)
     }
 }
 

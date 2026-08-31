@@ -313,6 +313,63 @@ final class StemPlaybackControllerTests: XCTestCase {
         XCTAssertTrue(fake.soloedStems.isEmpty)
     }
 
+    func testStemAudibilityControlsReflectControllerStateAndWireActions() {
+        let fake = FakeStemTransport()
+        let sut = StemPlaybackController(transport: fake)
+        sut.load(result: makeDummyResult())
+        let vocals = StemAudibilityControls(stemPlaybackController: sut, stem: .vocals)
+        let drums = StemAudibilityControls(stemPlaybackController: sut, stem: .drums)
+
+        XCTAssertFalse(vocals.isMuted)
+        XCTAssertFalse(vocals.isSoloed)
+        XCTAssertFalse(drums.isSoloed)
+
+        var vocalsMute = vocals.muteBinding
+        var vocalsSolo = vocals.soloBinding
+        var drumsSolo = drums.soloBinding
+        vocalsMute.wrappedValue = true
+        vocalsSolo.wrappedValue = true
+        drumsSolo.wrappedValue = true
+
+        XCTAssertTrue(vocals.isMuted)
+        XCTAssertTrue(vocals.isSoloed)
+        XCTAssertTrue(drums.isSoloed)
+        XCTAssertEqual(sut.mutedStems, [.vocals])
+        XCTAssertEqual(sut.soloedStems, [.vocals, .drums])
+        XCTAssertEqual(fake.mutedStems, sut.mutedStems)
+        XCTAssertEqual(fake.soloedStems, sut.soloedStems)
+
+        vocalsMute.wrappedValue = false
+        XCTAssertFalse(vocals.isMuted)
+        XCTAssertTrue(vocals.isSoloed)
+        XCTAssertTrue(drums.isSoloed)
+    }
+
+    func testStemAudibilityControlsReflectResetAfterNewCompletedResult() {
+        let fake = FakeStemTransport()
+        let sut = StemPlaybackController(transport: fake)
+        let card = InferenceCard(
+            inferenceController: InferenceController(),
+            stemPlaybackController: sut,
+            inferenceInputURL: .constant(nil),
+            showingInferenceImporter: .constant(false)
+        )
+        card.loadCompletedResult(makeDummyResult(jobId: "first"))
+        let vocals = StemAudibilityControls(stemPlaybackController: sut, stem: .vocals)
+        let drums = StemAudibilityControls(stemPlaybackController: sut, stem: .drums)
+        var vocalsMute = vocals.muteBinding
+        var drumsSolo = drums.soloBinding
+        vocalsMute.wrappedValue = true
+        drumsSolo.wrappedValue = true
+
+        card.loadCompletedResult(makeDummyResult(jobId: "second"))
+
+        XCTAssertFalse(vocals.isMuted)
+        XCTAssertFalse(drums.isSoloed)
+        XCTAssertTrue(sut.mutedStems.isEmpty)
+        XCTAssertTrue(sut.soloedStems.isEmpty)
+    }
+
     // 3. Play updates state
     func testPlayUpdatesStateAndInvokesTransport() {
         let fake = FakeStemTransport(duration: 120)
