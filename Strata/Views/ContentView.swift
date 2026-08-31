@@ -289,6 +289,9 @@ struct InferenceCard: View {
     @State private var exportErrorMessage: String?
     @State private var youTubeSliderValue: Double = 0
     @State private var isYouTubeDragging = false
+    @State private var exportingFileName: String?
+    @State private var savedFileName: String?
+    private var isExporting: Bool { exportingFileName != nil }
 
     // Unified initializer
     init(
@@ -469,8 +472,21 @@ struct InferenceCard: View {
                                 Label("Save MP3", systemImage: "square.and.arrow.down").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
                             }
                             .buttonStyle(.bordered)
-                            .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating || !inferenceController.isMp3ExportReady)
+                            .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating || !inferenceController.isMp3ExportReady || isExporting)
                             .accessibilityIdentifier("SaveYouTubeMP3Button")
+                        }
+                        if let exportingFileName {
+                            HStack(spacing: 6) {
+                                ProgressView().scaleEffect(0.6).tint(.white)
+                                Text("Exporting \(exportingFileName)…").font(.caption).foregroundStyle(.secondary)
+                            }
+                            .accessibilityIdentifier("YouTubeExportStatus")
+                        } else if let savedFileName {
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).font(.caption)
+                                Text("Saved \(savedFileName)").font(.caption).foregroundStyle(.secondary)
+                            }
+                            .accessibilityIdentifier("YouTubeExportStatus")
                         }
                         if let r = inferenceController.runtimeReadiness {
                             if !r.isLoadedSeparationReady {
@@ -641,6 +657,7 @@ struct InferenceCard: View {
     }
 
     private func export(_ artifact: StemArtifact, as format: StemExportFormat) {
+        guard !isExporting else { return }
         let metadata = format == .mp3 ? inferenceController.effectiveYouTubeMetadata : nil
         let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
         let panel = NSSavePanel()
@@ -656,20 +673,30 @@ struct InferenceCard: View {
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
                 guard response == .OK, let destinationURL = panel.url else { return }
+                let dest = destinationURL
+                exportingFileName = dest.lastPathComponent
+                savedFileName = nil
                 Task { [defaultDirectoryAccess] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
                             try StemExporter.export(
                                 artifact,
-                                to: destinationURL,
+                                to: dest,
                                 format: format,
                                 metadata: metadata,
                                 artworkURL: artworkURL
                             )
                         }.value
+                        await MainActor.run {
+                            exportingFileName = nil
+                            savedFileName = dest.lastPathComponent
+                        }
                     } catch {
-                        exportErrorMessage = error.localizedDescription
+                        await MainActor.run {
+                            exportingFileName = nil
+                            exportErrorMessage = error.localizedDescription
+                        }
                     }
                 }
             }
@@ -680,6 +707,7 @@ struct InferenceCard: View {
         _ artifacts: [StemArtifact],
         as format: StemExportFormat = .mp3
     ) {
+        guard !isExporting else { return }
         guard artifacts.count >= 2 else { return }
         let metadata = format == .mp3 ? inferenceController.effectiveYouTubeMetadata : nil
         let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
@@ -697,21 +725,31 @@ struct InferenceCard: View {
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
                 guard response == .OK, let destinationURL = panel.url else { return }
+                let dest = destinationURL
+                exportingFileName = dest.lastPathComponent
+                savedFileName = nil
                 Task { [defaultDirectoryAccess] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
                             try StemExporter.exportMix(
                                 artifacts,
-                                to: destinationURL,
+                                to: dest,
                                 gains: gains,
                                 format: format,
                                 metadata: metadata,
                                 artworkURL: artworkURL
                             )
                         }.value
+                        await MainActor.run {
+                            exportingFileName = nil
+                            savedFileName = dest.lastPathComponent
+                        }
                     } catch {
-                        exportErrorMessage = error.localizedDescription
+                        await MainActor.run {
+                            exportingFileName = nil
+                            exportErrorMessage = error.localizedDescription
+                        }
                     }
                 }
             }
@@ -719,6 +757,7 @@ struct InferenceCard: View {
     }
 
     private func exportYouTubeMP3(_ preparation: YouTubeIngestResult) {
+        guard !isExporting else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.mp3]
         let effectiveMetadata = inferenceController.effectiveYouTubeMetadata
@@ -732,20 +771,32 @@ struct InferenceCard: View {
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
                 guard response == .OK, let destinationURL = panel.url else { return }
+                let dest = destinationURL
                 let effectiveArtwork = self.inferenceController.effectiveArtworkURL
+                let capturedMetadata = effectiveMetadata
+                let capturedPreparationAudioURL = preparation.audioURL
+                exportingFileName = dest.lastPathComponent
+                savedFileName = nil
                 Task { [defaultDirectoryAccess] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
                             try StemExporter.exportMP3(
-                                from: preparation.audioURL,
-                                to: destinationURL,
-                                metadata: effectiveMetadata,
+                                from: capturedPreparationAudioURL,
+                                to: dest,
+                                metadata: capturedMetadata,
                                 artworkURL: effectiveArtwork
                             )
                         }.value
+                        await MainActor.run {
+                            exportingFileName = nil
+                            savedFileName = dest.lastPathComponent
+                        }
                     } catch {
-                        exportErrorMessage = error.localizedDescription
+                        await MainActor.run {
+                            exportingFileName = nil
+                            exportErrorMessage = error.localizedDescription
+                        }
                     }
                 }
             }

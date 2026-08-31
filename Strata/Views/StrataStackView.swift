@@ -201,6 +201,7 @@ struct StratumRowView: View {
     @Bindable var stemPlaybackController: StemPlaybackController
     var onExport: (StemArtifact, StemExportFormat) -> Void
     var isMp3ExportReady: Bool = true
+    var isExporting: Bool = false
     var isExportReady: Bool { isMp3ExportReady }
 
     private var color: Color { strataColor(for: artifact.name) }
@@ -280,6 +281,7 @@ struct StratumRowView: View {
             .menuStyle(.button)
             .buttonStyle(.plain)
             .accessibilityIdentifier("ExportStem-\(artifact.name.rawValue)")
+            .disabled(isExporting)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
@@ -294,6 +296,9 @@ struct StrataStackView: View {
     @Bindable var inferenceController: InferenceController
 
     @State private var exportErrorMessage: String?
+    @State private var exportingFileName: String?
+    @State private var savedFileName: String?
+    private var isExporting: Bool { exportingFileName != nil }
 
     private var orderedStems: [StemArtifact] {
         strataDisplayOrder.compactMap { result.stems[$0] }
@@ -377,7 +382,8 @@ struct StrataStackView: View {
                         onExport: { artifact, format in
                             export(artifact, as: format)
                         },
-                        isMp3ExportReady: inferenceController.isMp3ExportReady
+                        isMp3ExportReady: inferenceController.isMp3ExportReady,
+                        isExporting: isExporting
                     )
                     if stem.name != orderedStems.last?.name {
                         Divider().opacity(0.06).padding(.horizontal, 10)
@@ -395,7 +401,7 @@ struct StrataStackView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
-                .disabled(stemPlaybackController.selectedStems.count < 2 || !inferenceController.isMp3ExportReady)
+                .disabled(stemPlaybackController.selectedStems.count < 2 || !inferenceController.isMp3ExportReady || isExporting)
                 .help("Export the stems currently selected by Mute and Solo as one MP3 mix")
                 .accessibilityIdentifier("ExportSelectedStemMix")
                 Menu {
@@ -408,7 +414,7 @@ struct StrataStackView: View {
                 }
                 .menuStyle(.button)
                 .buttonStyle(.plain)
-                .disabled(stemPlaybackController.selectedStems.count < 2)
+                .disabled(stemPlaybackController.selectedStems.count < 2 || isExporting)
                 .help("Export Selected WAV — available without FFmpeg")
                 .accessibilityIdentifier("ExportSelectedWAVMenu")
                 Spacer()
@@ -422,6 +428,23 @@ struct StrataStackView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(Color.white.opacity(0.03))
+            if let exportingFileName {
+                HStack(spacing: 6) {
+                    ProgressView().scaleEffect(0.6).tint(.white)
+                    Text("Exporting \(exportingFileName)…").font(.caption).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .accessibilityIdentifier("StrataExportStatus")
+            } else if let savedFileName {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    Text("Saved \(savedFileName)").font(.caption).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .accessibilityIdentifier("StrataExportStatus")
+            }
             if let r = inferenceController.runtimeReadiness, !r.isMp3ExportReady {
                 Text(r.sidebarStatus).font(.caption2).foregroundStyle(.red.opacity(0.9)).padding(.horizontal, 12).padding(.bottom, 6)
                     .accessibilityIdentifier("Mp3ExportHint")
@@ -448,6 +471,7 @@ struct StrataStackView: View {
     private var exportFolderPreference: ExportFolderPreference { ExportFolderPreference() }
 
     private func export(_ artifact: StemArtifact, as format: StemExportFormat) {
+        guard !isExporting else { return }
         let metadata = format == .mp3 ? inferenceController.effectiveYouTubeMetadata : nil
         let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
         let panel = NSSavePanel()
@@ -458,13 +482,24 @@ struct StrataStackView: View {
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
                 guard response == .OK, let dest = panel.url else { return }
+                exportingFileName = dest.lastPathComponent
+                savedFileName = nil
                 Task { [defaultDirectoryAccess] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
                             try StemExporter.export(artifact, to: dest, format: format, metadata: metadata, artworkURL: artworkURL)
                         }.value
-                    } catch { exportErrorMessage = error.localizedDescription }
+                        await MainActor.run {
+                            exportingFileName = nil
+                            savedFileName = dest.lastPathComponent
+                        }
+                    } catch {
+                        await MainActor.run {
+                            exportingFileName = nil
+                            exportErrorMessage = error.localizedDescription
+                        }
+                    }
                 }
             }
         }
@@ -472,6 +507,7 @@ struct StrataStackView: View {
 
     private func exportMix(_ artifacts: [StemArtifact], as format: StemExportFormat = .mp3) {
         guard artifacts.count >= 2 else { return }
+        guard !isExporting else { return }
         let metadata = format == .mp3 ? inferenceController.effectiveYouTubeMetadata : nil
         let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
         let gains = stemPlaybackController.stemGains
@@ -483,13 +519,24 @@ struct StrataStackView: View {
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
                 guard response == .OK, let dest = panel.url else { return }
+                exportingFileName = dest.lastPathComponent
+                savedFileName = nil
                 Task { [defaultDirectoryAccess] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
                             try StemExporter.exportMix(artifacts, to: dest, gains: gains, format: format, metadata: metadata, artworkURL: artworkURL)
                         }.value
-                    } catch { exportErrorMessage = error.localizedDescription }
+                        await MainActor.run {
+                            exportingFileName = nil
+                            savedFileName = dest.lastPathComponent
+                        }
+                    } catch {
+                        await MainActor.run {
+                            exportingFileName = nil
+                            exportErrorMessage = error.localizedDescription
+                        }
+                    }
                 }
             }
         }
