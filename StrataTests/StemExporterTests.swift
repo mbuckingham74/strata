@@ -576,4 +576,246 @@ final class StemExporterTests: XCTestCase {
             XCTAssertTrue(message?.hasSuffix("test encoding failure") == true)
         }
     }
+
+    // MARK: - Gain-aware selected-mix export (matches audible stem mix)
+
+    func testCombinedWAVExportWithZeroGainContributesSilence() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let drums = try makeWAVArtifact(
+            name: .drums,
+            url: directoryURL.appendingPathComponent("drums.wav"),
+            leftSamples: [0.5, 0.0, 0.25],
+            rightSamples: [0.0, 0.5, 0.25]
+        )
+        let bass = try makeWAVArtifact(
+            name: .bass,
+            url: directoryURL.appendingPathComponent("bass.wav"),
+            leftSamples: [0.4, 0.2, 0.0],
+            rightSamples: [0.0, 0.4, 0.0]
+        )
+        let destinationURL = directoryURL.appendingPathComponent("selected-mix.wav")
+
+        try StemExporter.exportMix([drums, bass], to: destinationURL, gains: [.drums: 0, .bass: 1.0], format: .wav)
+
+        let outputFile = try AVAudioFile(forReading: destinationURL)
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFile.processingFormat, frameCapacity: AVAudioFrameCount(outputFile.length)) else {
+            return XCTFail("Could not allocate output verification buffer")
+        }
+        try outputFile.read(into: outputBuffer)
+        let outputChannels = try XCTUnwrap(outputBuffer.floatChannelData)
+        // 0% gain must be silent: drums contributes nothing, mix equals bass alone
+        let expectedLeft: [Float] = [0.4, 0.2, 0.0]
+        let expectedRight: [Float] = [0.0, 0.4, 0.0]
+        for frame in 0..<expectedLeft.count {
+            XCTAssertEqual(outputChannels[0][frame], expectedLeft[frame], accuracy: 0.000_01)
+            XCTAssertEqual(outputChannels[1][frame], expectedRight[frame], accuracy: 0.000_01)
+        }
+    }
+
+    func testCombinedWAVExportAppliesNonUnityGainScaling() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let drums = try makeWAVArtifact(
+            name: .drums,
+            url: directoryURL.appendingPathComponent("drums.wav"),
+            leftSamples: [0.6, 0.0, 0.4],
+            rightSamples: [0.0, 0.6, 0.4]
+        )
+        let bass = try makeWAVArtifact(
+            name: .bass,
+            url: directoryURL.appendingPathComponent("bass.wav"),
+            leftSamples: [0.4, 0.2, 0.0],
+            rightSamples: [0.0, 0.4, 0.2]
+        )
+        let destinationURL = directoryURL.appendingPathComponent("selected-mix.wav")
+
+        // drums at 50%, bass at 100% -> drums contribution halved
+        try StemExporter.exportMix([drums, bass], to: destinationURL, gains: [.drums: 0.5, .bass: 1.0], format: .wav)
+
+        let outputFile = try AVAudioFile(forReading: destinationURL)
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFile.processingFormat, frameCapacity: AVAudioFrameCount(outputFile.length)) else {
+            return XCTFail("Could not allocate output verification buffer")
+        }
+        try outputFile.read(into: outputBuffer)
+        let outputChannels = try XCTUnwrap(outputBuffer.floatChannelData)
+        // 0.6*0.5+0.4=0.7, 0+0.2=0.2, 0.4*0.5+0=0.2
+        let expectedLeft: [Float] = [0.7, 0.2, 0.2]
+        // 0*0.5+0=0, 0.6*0.5+0.4=0.7, 0.4*0.5+0.2=0.4
+        let expectedRight: [Float] = [0.0, 0.7, 0.4]
+        for frame in 0..<expectedLeft.count {
+            XCTAssertEqual(outputChannels[0][frame], expectedLeft[frame], accuracy: 0.000_01)
+            XCTAssertEqual(outputChannels[1][frame], expectedRight[frame], accuracy: 0.000_01)
+        }
+    }
+
+    func testCombinedWAVExportAppliesIndependentGainsToEachStem() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let vocals = try makeWAVArtifact(
+            name: .vocals,
+            url: directoryURL.appendingPathComponent("vocals.wav"),
+            leftSamples: [0.8, 0.0],
+            rightSamples: [0.0, 0.8]
+        )
+        let guitar = try makeWAVArtifact(
+            name: .guitar,
+            url: directoryURL.appendingPathComponent("guitar.wav"),
+            leftSamples: [0.2, 0.4],
+            rightSamples: [0.2, 0.4]
+        )
+        let destinationURL = directoryURL.appendingPathComponent("selected-mix.wav")
+
+        try StemExporter.exportMix([vocals, guitar], to: destinationURL, gains: [.vocals: 0.25, .guitar: 0.5], format: .wav)
+
+        let outputFile = try AVAudioFile(forReading: destinationURL)
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFile.processingFormat, frameCapacity: AVAudioFrameCount(outputFile.length)) else {
+            return XCTFail("Could not allocate output verification buffer")
+        }
+        try outputFile.read(into: outputBuffer)
+        let outputChannels = try XCTUnwrap(outputBuffer.floatChannelData)
+        // frame0 left: 0.8*0.25 + 0.2*0.5 = 0.2+0.1=0.3 ; right: 0*0.25+0.2*0.5=0.1
+        // frame1 left: 0*0.25+0.4*0.5=0.2 ; right: 0.8*0.25+0.4*0.5=0.2+0.2=0.4
+        XCTAssertEqual(outputChannels[0][0], 0.3, accuracy: 0.000_01)
+        XCTAssertEqual(outputChannels[1][0], 0.1, accuracy: 0.000_01)
+        XCTAssertEqual(outputChannels[0][1], 0.2, accuracy: 0.000_01)
+        XCTAssertEqual(outputChannels[1][1], 0.4, accuracy: 0.000_01)
+    }
+
+    func testCombinedWAVExportMissingGainDefaultsToUnity() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let drums = try makeWAVArtifact(
+            name: .drums,
+            url: directoryURL.appendingPathComponent("drums.wav"),
+            leftSamples: [0.1, 0.2],
+            rightSamples: [0.3, 0.4]
+        )
+        let bass = try makeWAVArtifact(
+            name: .bass,
+            url: directoryURL.appendingPathComponent("bass.wav"),
+            leftSamples: [0.5, 0.1],
+            rightSamples: [0.1, 0.5]
+        )
+        let destinationURL = directoryURL.appendingPathComponent("selected-mix.wav")
+
+        // Only drums has explicit gain, bass missing must default to 1.0
+        try StemExporter.exportMix([drums, bass], to: destinationURL, gains: [.drums: 0.5], format: .wav)
+
+        let outputFile = try AVAudioFile(forReading: destinationURL)
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFile.processingFormat, frameCapacity: AVAudioFrameCount(outputFile.length)) else {
+            return XCTFail("Could not allocate output verification buffer")
+        }
+        try outputFile.read(into: outputBuffer)
+        let outputChannels = try XCTUnwrap(outputBuffer.floatChannelData)
+        // left: 0.1*0.5+0.5=0.55, 0.2*0.5+0.1=0.2
+        XCTAssertEqual(outputChannels[0][0], 0.55, accuracy: 0.000_01)
+        XCTAssertEqual(outputChannels[0][1], 0.2, accuracy: 0.000_01)
+        // right: 0.3*0.5+0.1=0.25, 0.4*0.5+0.5=0.7
+        XCTAssertEqual(outputChannels[1][0], 0.25, accuracy: 0.000_01)
+        XCTAssertEqual(outputChannels[1][1], 0.7, accuracy: 0.000_01)
+    }
+
+    func testCombinedMP3ExportAppliesGainBeforeEncoding() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let drums = try makeWAVArtifact(
+            name: .drums,
+            url: directoryURL.appendingPathComponent("drums.wav"),
+            leftSamples: [0.6, 0.0, 0.4],
+            rightSamples: [0.0, 0.6, 0.4]
+        )
+        let bass = try makeWAVArtifact(
+            name: .bass,
+            url: directoryURL.appendingPathComponent("bass.wav"),
+            leftSamples: [0.4, 0.2, 0.0],
+            rightSamples: [0.0, 0.4, 0.2]
+        )
+        let destinationURL = directoryURL.appendingPathComponent("selected-mix.mp3")
+        let capturedMixURL = directoryURL.appendingPathComponent("captured-mix.wav")
+        let ffmpegURL = directoryURL.appendingPathComponent("ffmpeg")
+        try makeExecutable(at: ffmpegURL, contents: """
+        #!/bin/sh
+        input=''
+        output=''
+        previous=''
+        for argument in "$@"; do
+            if [ "$previous" = '-i' ] && [ -z "$input" ]; then input="$argument"; fi
+            previous="$argument"
+            output="$argument"
+        done
+        cp "$input" '\(capturedMixURL.path)'
+        printf 'encoded-selected-mix' > "$output"
+        """)
+
+        try StemExporter.exportMix(
+            [drums, bass],
+            to: destinationURL,
+            gains: [.drums: 0.5, .bass: 1.0],
+            format: .mp3,
+            ffmpegURL: ffmpegURL
+        )
+
+        let outputFile = try AVAudioFile(forReading: capturedMixURL)
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFile.processingFormat, frameCapacity: AVAudioFrameCount(outputFile.length)) else {
+            return XCTFail("Could not allocate output verification buffer")
+        }
+        try outputFile.read(into: outputBuffer)
+        let outputChannels = try XCTUnwrap(outputBuffer.floatChannelData)
+        let expectedLeft: [Float] = [0.7, 0.2, 0.2]
+        let expectedRight: [Float] = [0.0, 0.7, 0.4]
+        for frame in 0..<expectedLeft.count {
+            XCTAssertEqual(outputChannels[0][frame], expectedLeft[frame], accuracy: 0.000_01)
+            XCTAssertEqual(outputChannels[1][frame], expectedRight[frame], accuracy: 0.000_01)
+        }
+    }
+
+    func testExportMixClampsGainToZeroAndOne() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let drums = try makeWAVArtifact(
+            name: .drums,
+            url: directoryURL.appendingPathComponent("drums.wav"),
+            leftSamples: [0.5],
+            rightSamples: [0.5]
+        )
+        let bass = try makeWAVArtifact(
+            name: .bass,
+            url: directoryURL.appendingPathComponent("bass.wav"),
+            leftSamples: [0.5],
+            rightSamples: [0.5]
+        )
+        let destinationURL = directoryURL.appendingPathComponent("selected-mix.wav")
+
+        // Negative must clamp to 0 (silence), >1 must clamp to 1 (unity)
+        try StemExporter.exportMix([drums, bass], to: destinationURL, gains: [.drums: -0.5, .bass: 2.0], format: .wav)
+
+        let outputFile = try AVAudioFile(forReading: destinationURL)
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFile.processingFormat, frameCapacity: AVAudioFrameCount(outputFile.length)) else {
+            return XCTFail("Could not allocate output verification buffer")
+        }
+        try outputFile.read(into: outputBuffer)
+        let outputChannels = try XCTUnwrap(outputBuffer.floatChannelData)
+        // drums 0 + bass 1.0 => 0.5
+        XCTAssertEqual(outputChannels[0][0], 0.5, accuracy: 0.000_01)
+        XCTAssertEqual(outputChannels[1][0], 0.5, accuracy: 0.000_01)
+    }
 }

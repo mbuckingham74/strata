@@ -650,6 +650,7 @@ struct InferenceCard: View {
         guard artifacts.count >= 2 else { return }
         let metadata = format == .mp3 ? inferenceController.effectiveYouTubeMetadata : nil
         let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
+        let gains = stemPlaybackController.stemGains
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
         panel.nameFieldStringValue = StemExporter.defaultMixFilename(
@@ -670,6 +671,7 @@ struct InferenceCard: View {
                             try StemExporter.exportMix(
                                 artifacts,
                                 to: destinationURL,
+                                gains: gains,
                                 format: format,
                                 metadata: metadata,
                                 artworkURL: artworkURL

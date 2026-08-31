@@ -136,6 +136,7 @@ struct StemExporter {
     static func exportMix(
         _ artifacts: [StemArtifact],
         to destinationURL: URL,
+        gains: [StemName: Float] = [:],
         format: StemExportFormat = .mp3,
         metadata: YouTubeTrackMetadata? = nil,
         artworkURL: URL? = nil,
@@ -159,7 +160,7 @@ struct StemExporter {
 
         switch format {
         case .wav:
-            try writeAlignedMix(artifacts, to: destinationURL, fileManager: fileManager)
+            try writeAlignedMix(artifacts, gains: gains, to: destinationURL, fileManager: fileManager)
         case .mp3:
             let temporaryDirectoryURL = fileManager.temporaryDirectory
                 .appendingPathComponent("Strata-Mix-\(UUID().uuidString)", isDirectory: true)
@@ -167,7 +168,7 @@ struct StemExporter {
             defer { try? fileManager.removeItem(at: temporaryDirectoryURL) }
 
             let temporaryWAVURL = temporaryDirectoryURL.appendingPathComponent("mix.wav")
-            try writeAlignedMix(artifacts, to: temporaryWAVURL, fileManager: fileManager)
+            try writeAlignedMix(artifacts, gains: gains, to: temporaryWAVURL, fileManager: fileManager)
             try encodeMP3(
                 from: temporaryWAVURL,
                 to: destinationURL,
@@ -180,10 +181,11 @@ struct StemExporter {
 
     private static func writeAlignedMix(
         _ artifacts: [StemArtifact],
+        gains: [StemName: Float] = [:],
         to destinationURL: URL,
         fileManager: FileManager
     ) throws {
-        var files: [AVAudioFile] = []
+        var files: [(file: AVAudioFile, gain: Float)] = []
         var commonFrameCount: UInt64?
         for artifact in artifacts {
             guard artifact.sampleRate == canonicalSampleRate,
@@ -216,7 +218,9 @@ struct StemExporter {
                       UInt64(file.length) == artifact.frameCount else {
                     throw StemExportError.invalidMix("\(artifact.name.rawValue.capitalized) could not be read as canonical audio.")
                 }
-                files.append(file)
+                let rawGain = gains[artifact.name] ?? 1.0
+                let clampedGain = min(max(rawGain, 0), 1)
+                files.append((file: file, gain: clampedGain))
             } catch let error as StemExportError {
                 throw error
             } catch {
@@ -269,7 +273,7 @@ struct StemExporter {
                 mixChannels[channel].update(repeating: 0, count: Int(frameCount))
             }
 
-            for file in files {
+            for (file, gain) in files {
                 guard let inputBuffer = AVAudioPCMBuffer(
                     pcmFormat: file.processingFormat,
                     frameCapacity: frameCount
@@ -286,9 +290,10 @@ struct StemExporter {
                     throw StemExportError.invalidMix("A selected stem ended before the expected aligned frame count.")
                 }
 
+                if gain == 0 { continue }
                 for channel in 0..<Int(canonicalChannels) {
                     for frame in 0..<Int(frameCount) {
-                        mixChannels[channel][frame] += inputChannels[channel][frame]
+                        mixChannels[channel][frame] += inputChannels[channel][frame] * gain
                     }
                 }
             }

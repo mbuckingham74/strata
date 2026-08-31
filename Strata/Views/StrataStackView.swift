@@ -456,6 +456,7 @@ struct StrataStackView: View {
         guard artifacts.count >= 2 else { return }
         let metadata = format == .mp3 ? inferenceController.effectiveYouTubeMetadata : nil
         let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
+        let gains = stemPlaybackController.stemGains
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
         panel.nameFieldStringValue = StemExporter.defaultMixFilename(for: artifacts.map(\.name), format: format, sourceBaseName: inferenceController.effectiveExportBaseName)
@@ -468,7 +469,7 @@ struct StrataStackView: View {
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
-                            try StemExporter.exportMix(artifacts, to: dest, format: format, metadata: metadata, artworkURL: artworkURL)
+                            try StemExporter.exportMix(artifacts, to: dest, gains: gains, format: format, metadata: metadata, artworkURL: artworkURL)
                         }.value
                     } catch { exportErrorMessage = error.localizedDescription }
                 }
