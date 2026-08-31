@@ -279,6 +279,38 @@ struct StrataStackView: View {
         strataDisplayOrder.compactMap { result.stems[$0] }
     }
 
+    var effectiveDisplayTitle: String {
+        // Preserve local behavior: local sources must show jobDirectoryURL.path exactly as before.
+        // YouTube sources have human-readable metadata available via InferenceController state.
+        let isYouTubeSource: Bool = {
+            if let base = inferenceController.exportBaseName, !base.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return true
+            }
+            if inferenceController.youTubeExportMetadata != nil {
+                return true
+            }
+            if inferenceController.youTubeExportArtworkURL != nil {
+                return true
+            }
+            let editable = inferenceController.editableTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !editable.isEmpty { return true }
+            return false
+        }()
+        if isYouTubeSource {
+            if let base = inferenceController.exportBaseName, !base.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return base
+            }
+            let editable = inferenceController.editableTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !editable.isEmpty { return editable }
+            if let t = stemPlaybackController.title, !t.isEmpty { return t }
+            let fallback = result.inputURL.deletingPathExtension().lastPathComponent
+            if !fallback.isEmpty && fallback != "/" { return fallback }
+            return result.jobId.isEmpty ? result.jobDirectoryURL.lastPathComponent : result.jobId
+        } else {
+            return result.jobDirectoryURL.path
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Card header: subtle strata label + transport hint
@@ -348,11 +380,12 @@ struct StrataStackView: View {
                 .help("Export the stems currently selected by Mute and Solo as one MP3 mix, or choose WAV")
                 .accessibilityIdentifier("ExportSelectedStemMix")
                 Spacer()
-                Text(result.jobDirectoryURL.path)
-                    .font(.caption2.monospaced())
+                Text(effectiveDisplayTitle)
+                    .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .accessibilityIdentifier("StrataDisplayTitle")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)

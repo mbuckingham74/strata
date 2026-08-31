@@ -81,6 +81,10 @@ final class StemPlaybackController {
     // MARK: - Loading
 
     func load(result: SeparationResult) {
+        load(result: result, displayName: nil)
+    }
+
+    func load(result: SeparationResult, displayName: String?) {
         if hasStems || isPlaying {
             stopSession()
         }
@@ -92,11 +96,15 @@ final class StemPlaybackController {
         do {
             try transport.load(result: result)
             self.result = result
-            let name = result.inputURL.deletingPathExtension().lastPathComponent
-            if name.isEmpty || name == "/" {
-                title = result.jobId.isEmpty ? "Untitled" : result.jobId
+            if let displayName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines), !displayName.isEmpty {
+                title = displayName
             } else {
-                title = name
+                let name = result.inputURL.deletingPathExtension().lastPathComponent
+                if name.isEmpty || name == "/" {
+                    title = result.jobId.isEmpty ? "Untitled" : result.jobId
+                } else {
+                    title = name
+                }
             }
             duration = transport.duration
             currentTime = 0

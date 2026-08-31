@@ -39,8 +39,13 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            SidebarView(controller: playbackController, showingImporter: $showingImporter)
-                .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 300)
+            SidebarView(
+                controller: playbackController,
+                stemPlaybackController: stemPlaybackController,
+                inferenceController: inferenceController,
+                showingImporter: $showingImporter
+            )
+            .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 300)
         } detail: {
             MainWorkspaceView(
                 controller: playbackController,
@@ -109,11 +114,47 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Sidebar (unchanged)
+// MARK: - Sidebar (YouTube-aware: reflects PlaybackController OR StemPlaybackController)
 
 struct SidebarView: View {
     @Bindable var controller: PlaybackController
+    @Bindable var stemPlaybackController: StemPlaybackController
+    @Bindable var inferenceController: InferenceController
     @Binding var showingImporter: Bool
+
+    // Primary initializer (YouTube-aware)
+    init(
+        controller: PlaybackController,
+        stemPlaybackController: StemPlaybackController,
+        inferenceController: InferenceController,
+        showingImporter: Binding<Bool>
+    ) {
+        self.controller = controller
+        self.stemPlaybackController = stemPlaybackController
+        self.inferenceController = inferenceController
+        self._showingImporter = showingImporter
+    }
+
+    var effectiveHasFile: Bool {
+        controller.hasFile || stemPlaybackController.hasStems
+    }
+
+    var effectiveTitle: String? {
+        if controller.hasFile, let t = controller.title { return t }
+        if stemPlaybackController.hasStems {
+            if let t = stemPlaybackController.title, !t.isEmpty { return t }
+            if let base = inferenceController.exportBaseName, !base.isEmpty { return base }
+            let editable = inferenceController.editableTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !editable.isEmpty { return editable }
+        }
+        return nil
+    }
+
+    var effectiveDuration: String {
+        if controller.hasFile { return controller.formattedDuration }
+        if stemPlaybackController.hasStems { return stemPlaybackController.formattedDuration }
+        return controller.formattedDuration
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -126,8 +167,8 @@ struct SidebarView: View {
                 }.buttonStyle(.plain).help("Add Audio").accessibilityLabel("Add Audio")
             }.padding(.horizontal, 14).padding(.vertical, 12)
             Divider().opacity(0.15)
-            if controller.hasFile, let title = controller.title {
-                ScrollView { VStack(spacing: 6) { SidebarEntry(title: title, duration: controller.formattedDuration, isSelected: true).padding(.horizontal, 8).padding(.top, 8) } }
+            if effectiveHasFile, let title = effectiveTitle {
+                ScrollView { VStack(spacing: 6) { SidebarEntry(title: title, duration: effectiveDuration, isSelected: true).padding(.horizontal, 8).padding(.top, 8) } }
             } else {
                 VStack(spacing: 12) {
                     Spacer()
@@ -417,7 +458,20 @@ struct InferenceCard: View {
     }
 
     func loadCompletedResult(_ result: SeparationResult) {
-        stemPlaybackController.load(result: result)
+        // Prefer already-available ingest metadata ("Snow Patrol - Run") over raw inputURL ("mixture")
+        let displayName: String? = {
+            if let base = inferenceController.exportBaseName, !base.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return base
+            }
+            let editable = inferenceController.editableTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !editable.isEmpty { return editable }
+            return nil
+        }()
+        if let displayName {
+            stemPlaybackController.load(result: result, displayName: displayName)
+        } else {
+            stemPlaybackController.load(result: result)
+        }
     }
 
     private func chooseDefaultExportFolder() {

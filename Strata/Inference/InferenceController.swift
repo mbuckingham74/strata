@@ -136,6 +136,7 @@ final class InferenceController {
     func debugPendingCancellationTask() -> Task<Void, Never>? { cleanupChainTail }
     func debugCleanupChainTail() -> Task<Void, Never>? { cleanupChainTail }
     func debugYouTubeCleanupFailed() -> Bool { youTubeCleanupFailed }
+    func debugSetExportBaseName(_ name: String?) { exportBaseName = name }
 #endif
 
     // Output base per spec: ~/Library/Caches/Strata/M3Separations/
