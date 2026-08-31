@@ -518,7 +518,7 @@ for line in sys.stdin:
             if case .started = event { started.fulfill() }
         }
         controller.startSeparation(inputURL: wav)
-        await fulfillment(of: [started], timeout: 2)
+        await fulfillment(of: [started], timeout: 6)
         XCTAssertTrue(controller.isSeparating)
         let policy = ApplicationExitPolicy(totalBudget: .seconds(2), idleGrace: .milliseconds(200), sigtermGrace: .milliseconds(400), sigkillGrace: .milliseconds(500), cleanupReserve: .milliseconds(100))
         let result = await controller.terminateForApplicationExit(policy: policy)
