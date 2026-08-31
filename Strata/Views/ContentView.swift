@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import AppKit
 
 struct ContentView: View {
     @Bindable var playbackController: PlaybackController
@@ -252,6 +253,7 @@ struct InferenceCard: View {
     @Binding var inferenceInputURL: URL?
     @Binding var showingInferenceImporter: Bool
     @State private var youTubeURLString = ""
+    @State private var exportErrorMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -369,6 +371,14 @@ struct InferenceCard: View {
                                 stem: stem.name
                             )
                             Text("\(stem.frameCount) frames").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                            Button {
+                                export(stem)
+                            } label: {
+                                Label("Export", systemImage: "square.and.arrow.down")
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .accessibilityIdentifier("ExportStem-\(stem.name.rawValue)")
                         }.padding(.horizontal, 10).padding(.vertical, 8).background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
                     }
                     Text(result.jobDirectoryURL.path).font(.caption2.monospaced()).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
@@ -379,10 +389,34 @@ struct InferenceCard: View {
                 guard let result else { return }
                 loadCompletedResult(result)
             }
+            .alert("Export Failed", isPresented: Binding(
+                get: { exportErrorMessage != nil },
+                set: { if !$0 { exportErrorMessage = nil } }
+            )) {
+                Button("OK") { exportErrorMessage = nil }
+            } message: {
+                if let exportErrorMessage { Text(exportErrorMessage) }
+            }
     }
 
     func loadCompletedResult(_ result: SeparationResult) {
         stemPlaybackController.load(result: result)
+    }
+
+    private func export(_ artifact: StemArtifact) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.wav]
+        panel.nameFieldStringValue = StemExporter.defaultFilename(for: artifact.name)
+        panel.canCreateDirectories = true
+
+        panel.begin { response in
+            guard response == .OK, let destinationURL = panel.url else { return }
+            do {
+                try StemExporter.export(artifact, to: destinationURL)
+            } catch {
+                exportErrorMessage = error.localizedDescription
+            }
+        }
     }
 
     private var statusText: String {
