@@ -434,7 +434,7 @@ struct StrataStackView: View {
         let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
-        panel.nameFieldStringValue = StemExporter.defaultFilename(for: artifact.name, format: format, sourceBaseName: inferenceController.exportBaseName)
+        panel.nameFieldStringValue = StemExporter.defaultFilename(for: artifact.name, format: format, sourceBaseName: inferenceController.effectiveExportBaseName)
         panel.canCreateDirectories = true
         let defaultDirectoryAccess = exportFolderPreference.applyDefaultDirectory(to: panel)
         panel.begin { response in
@@ -458,7 +458,7 @@ struct StrataStackView: View {
         let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
-        panel.nameFieldStringValue = StemExporter.defaultMixFilename(for: artifacts.map(\.name), format: format, sourceBaseName: inferenceController.exportBaseName)
+        panel.nameFieldStringValue = StemExporter.defaultMixFilename(for: artifacts.map(\.name), format: format, sourceBaseName: inferenceController.effectiveExportBaseName)
         panel.canCreateDirectories = true
         let defaultDirectoryAccess = exportFolderPreference.applyDefaultDirectory(to: panel)
         panel.begin { response in

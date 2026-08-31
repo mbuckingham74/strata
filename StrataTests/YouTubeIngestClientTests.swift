@@ -294,7 +294,7 @@ final class YouTubeIngestClientTests: XCTestCase {
         with open(out, "wb") as outf:
             outf.write(b"\\x00" * 512)
         with open(info, "w") as infof:
-            infof.write('{"artist":"Massive Attack","track":"Teardrop","album":"Mezzanine","album_artist":"Massive Attack","release_year":1998,"genre":"Trip Hop","track_number":3}')
+            infof.write('{"artist":"Massive Attack","track":"Teardrop","title":"Ignored video title","channel":"Massive Attack Official","album":"Mezzanine","album_artist":"Massive Attack","release_year":1998,"genre":"Trip Hop","track_number":3}')
         with open(out.rsplit(".", 1)[0] + ".jpg", "wb") as artwork:
             artwork.write(b"\\xff\\xd8\\xff\\xe0thumbnail")
         sys.exit(0)
@@ -328,7 +328,8 @@ final class YouTubeIngestClientTests: XCTestCase {
                 albumArtist: "Massive Attack",
                 year: "1998",
                 genre: "Trip Hop",
-                trackNumber: "3"
+                trackNumber: "3",
+                channel: "Massive Attack Official"
             )
         )
         XCTAssertEqual(result.metadata?.exportBaseName, "Massive Attack - Teardrop")

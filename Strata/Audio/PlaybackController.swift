@@ -34,6 +34,10 @@ final class PlaybackController {
     // MARK: - Loading
 
     func load(url: URL) {
+        load(url: url, displayTitle: nil)
+    }
+
+    func load(url: URL, displayTitle: String?) {
         // Stop prior session cleanly before loading new file.
         if hasFile || isPlaying {
             stopSession()
@@ -42,9 +46,13 @@ final class PlaybackController {
 
         do {
             try transport.load(url: url)
-            // Derive displayed title from filename without extension.
-            let name = url.deletingPathExtension().lastPathComponent
-            title = name.isEmpty ? "Untitled" : name
+            if let displayTitle = displayTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !displayTitle.isEmpty {
+                title = displayTitle
+            } else {
+                // Derive displayed title from filename without extension.
+                let name = url.deletingPathExtension().lastPathComponent
+                title = name.isEmpty ? "Untitled" : name
+            }
             sourceURL = url
             duration = transport.duration
             currentTime = 0
@@ -60,6 +68,11 @@ final class PlaybackController {
             isPlaying = false
             errorMessage = "Couldn’t open “\(url.lastPathComponent)”. \(error.localizedDescription)"
         }
+    }
+
+    /// Convenience for YouTube source display.
+    func loadYouTubeSource(url: URL, displayTitle: String?) {
+        load(url: url, displayTitle: displayTitle)
     }
 
     // MARK: - Playback Controls

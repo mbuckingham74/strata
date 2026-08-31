@@ -33,6 +33,7 @@ struct YouTubeTrackMetadata: Sendable, Equatable, Codable {
     let year: String?
     let genre: String?
     let trackNumber: String?
+    let channel: String?
 
     init?(
         artist: String? = nil,
@@ -41,7 +42,8 @@ struct YouTubeTrackMetadata: Sendable, Equatable, Codable {
         albumArtist: String? = nil,
         year: String? = nil,
         genre: String? = nil,
-        trackNumber: String? = nil
+        trackNumber: String? = nil,
+        channel: String? = nil
     ) {
         self.artist = Self.metadataValue(artist)
         self.title = Self.metadataValue(title)
@@ -50,6 +52,7 @@ struct YouTubeTrackMetadata: Sendable, Equatable, Codable {
         self.year = Self.yearValue(year)
         self.genre = Self.metadataValue(genre)
         self.trackNumber = Self.trackNumberValue(trackNumber)
+        self.channel = Self.metadataValue(channel)
 
         guard self.artist != nil
                 || self.title != nil
@@ -57,7 +60,8 @@ struct YouTubeTrackMetadata: Sendable, Equatable, Codable {
                 || self.albumArtist != nil
                 || self.year != nil
                 || self.genre != nil
-                || self.trackNumber != nil else {
+                || self.trackNumber != nil
+                || self.channel != nil else {
             return nil
         }
     }
@@ -134,31 +138,43 @@ struct YouTubeIngestResult: Sendable, Equatable {
 private struct YTDLPInfo: Decodable {
     let artist: String?
     let track: String?
+    let title: String?
     let album: String?
     let albumArtist: String?
     let releaseYear: Int?
     let genre: String?
     let trackNumber: Int?
+    let channel: String?
+    let uploader: String?
+    let channelName: String?
 
     private enum CodingKeys: String, CodingKey {
         case artist
         case track
+        case title
         case album
         case albumArtist = "album_artist"
         case releaseYear = "release_year"
         case genre
         case trackNumber = "track_number"
+        case channel
+        case uploader
+        case channelName = "channel_name"
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         artist = try? container.decode(String.self, forKey: .artist)
         track = try? container.decode(String.self, forKey: .track)
+        title = try? container.decode(String.self, forKey: .title)
         album = try? container.decode(String.self, forKey: .album)
         albumArtist = try? container.decode(String.self, forKey: .albumArtist)
         releaseYear = Self.integer(forKey: .releaseYear, in: container)
         genre = try? container.decode(String.self, forKey: .genre)
         trackNumber = Self.integer(forKey: .trackNumber, in: container)
+        channel = try? container.decode(String.self, forKey: .channel)
+        uploader = try? container.decode(String.self, forKey: .uploader)
+        channelName = try? container.decode(String.self, forKey: .channelName)
     }
 
     private static func integer(
@@ -395,14 +411,31 @@ actor YouTubeIngestClient {
               let info = try? JSONDecoder().decode(YTDLPInfo.self, from: data) else {
             return nil
         }
+        let rawChannel: String? = {
+            for candidate in [info.channel, info.uploader, info.channelName] {
+                if let c = candidate?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty {
+                    return c
+                }
+            }
+            return nil
+        }()
+        let rawTitle: String? = {
+            for candidate in [info.track, info.title] {
+                if let value = candidate?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty {
+                    return value
+                }
+            }
+            return nil
+        }()
         return YouTubeTrackMetadata(
             artist: info.artist,
-            title: info.track,
+            title: rawTitle,
             album: info.album,
             albumArtist: info.albumArtist,
             year: info.releaseYear.map(String.init),
             genre: info.genre,
-            trackNumber: info.trackNumber.map(String.init)
+            trackNumber: info.trackNumber.map(String.init),
+            channel: rawChannel
         )
     }
 

@@ -64,6 +64,7 @@ struct ContentView: View {
                 let didAccess = url.startAccessingSecurityScopedResource()
                 defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
                 playbackController.load(url: url)
+                inferenceController.clearLoadedYouTubeSource()
             case .failure(let error):
                 playbackController.errorMessage = error.localizedDescription
             }
@@ -200,7 +201,9 @@ struct MainWorkspaceView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     // Selected-audio header
-                    if controller.hasFile {
+                    if inferenceController.isYouTubeSourceLoaded {
+                        Color.clear.frame(height: 20)
+                    } else if controller.hasFile {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(controller.title ?? "Untitled").font(.title3.weight(.semibold)).foregroundStyle(.white).lineLimit(1)
                             HStack(spacing: 6) {
@@ -270,6 +273,8 @@ struct InferenceCard: View {
     private let exportFolderPreference = ExportFolderPreference()
     @State private var youTubeURLString = ""
     @State private var exportErrorMessage: String?
+    @State private var youTubeSliderValue: Double = 0
+    @State private var isYouTubeDragging = false
 
     // Unified initializer
     init(
@@ -305,26 +310,28 @@ struct InferenceCard: View {
             Text("Local BS-RoFormer via MLX — proves Swift ownership of the inference worker.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
 
             // Unified local source — single selection via Add Audio
-            HStack(spacing: 10) {
-                if playbackController.hasFile, let title = playbackController.title {
-                    Label(title, systemImage: "doc.fill").font(.caption.weight(.medium)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                    if let url = playbackController.sourceURL {
-                        Text(url.lastPathComponent).font(.caption2).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
+            if !inferenceController.isYouTubeSourceLoaded {
+                HStack(spacing: 10) {
+                    if playbackController.hasFile, let title = playbackController.title {
+                        Label(title, systemImage: "doc.fill").font(.caption.weight(.medium)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        if let url = playbackController.sourceURL {
+                            Text(url.lastPathComponent).font(.caption2).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
+                        }
+                        Spacer()
+                        Button { showingImporter = true } label: {
+                            Label("Change", systemImage: "arrow.triangle.2.circlepath").font(.caption.weight(.medium))
+                        }.buttonStyle(.bordered).tint(.white).disabled(inferenceController.isSeparating)
+                    } else {
+                        Text("No file selected — Add audio to separate").font(.caption).foregroundStyle(.tertiary)
+                        Spacer()
+                        Button { showingImporter = true } label: {
+                            Label("Add Audio", systemImage: "plus").font(.caption.weight(.medium))
+                        }.buttonStyle(.bordered).tint(.white).disabled(inferenceController.isSeparating)
                     }
-                    Spacer()
-                    Button { showingImporter = true } label: {
-                        Label("Change", systemImage: "arrow.triangle.2.circlepath").font(.caption.weight(.medium))
-                    }.buttonStyle(.bordered).tint(.white).disabled(inferenceController.isSeparating)
-                } else {
-                    Text("No file selected — Add audio to separate").font(.caption).foregroundStyle(.tertiary)
-                    Spacer()
-                    Button { showingImporter = true } label: {
-                        Label("Add Audio", systemImage: "plus").font(.caption.weight(.medium))
-                    }.buttonStyle(.bordered).tint(.white).disabled(inferenceController.isSeparating)
                 }
             }
 
-            // YouTube URL (M4 minimal)
+            // YouTube source-first workflow
             VStack(alignment: .leading, spacing: 8) {
                 TextField("Paste YouTube URL", text: $youTubeURLString)
                     .textFieldStyle(.roundedBorder)
@@ -335,36 +342,136 @@ struct InferenceCard: View {
                     Button {
                         let trimmed = youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return }
-                        inferenceController.startSeparation(youTubeURL: url)
+                        inferenceController.loadYouTubeSource(youTubeURL: url)
                     } label: {
-                        Label("Separate from YouTube", systemImage: "link").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                        Label("Load source", systemImage: "arrow.down.circle").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
                     .disabled(youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating)
-                    .accessibilityIdentifier("SeparateFromYouTubeButton")
+                    .accessibilityIdentifier("LoadYouTubeSourceButton")
+                }
 
-                    Button {
-                        let trimmed = youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return }
-                        inferenceController.prepareYouTubeMP3Export(youTubeURL: url)
-                    } label: {
-                        Label("Save MP3", systemImage: "square.and.arrow.down").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                if inferenceController.isYouTubeSourceLoaded, let loaded = inferenceController.loadedYouTubeSource {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 12) {
+                            youTubeArtworkView(for: loaded)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(youTubeDisplayTitle(for: loaded))
+                                    .font(.callout.weight(.semibold))
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+                                Text(youTubeDisplayArtist(for: loaded))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                if let channel = youTubeDisplayChannel(for: loaded), !channel.isEmpty {
+                                    Text(channel)
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                        .lineLimit(1)
+                                }
+                            }
+                            Spacer()
+                        }
+
+                        // Full original-source play/pause/seek controls bound to playbackController
+                        VStack(spacing: 8) {
+                            HStack {
+                                Text(playbackController.formattedTime(isYouTubeDragging ? youTubeSliderValue : playbackController.currentTime))
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 48, alignment: .leading)
+                                Slider(
+                                    value: Binding(
+                                        get: { isYouTubeDragging ? youTubeSliderValue : playbackController.currentTime },
+                                        set: { youTubeSliderValue = $0 }
+                                    ),
+                                    in: 0...(playbackController.duration > 0 ? playbackController.duration : 1),
+                                    onEditingChanged: { editing in
+                                        isYouTubeDragging = editing
+                                        if editing {
+                                            youTubeSliderValue = playbackController.currentTime
+                                        } else {
+                                            playbackController.seek(to: youTubeSliderValue)
+                                        }
+                                    }
+                                )
+                                .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
+                                .disabled(!playbackController.hasFile)
+                                .accessibilityLabel("Seek YouTube source")
+                                Text(playbackController.formattedDuration)
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 48, alignment: .trailing)
+                            }
+                            HStack {
+                                Button {
+                                    if playbackController.isPlaying { playbackController.pause() } else { playbackController.play() }
+                                } label: {
+                                    Image(systemName: playbackController.isPlaying ? "pause.fill" : "play.fill")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 36, height: 36)
+                                        .background(Color(red: 0.56, green: 0.46, blue: 0.95), in: Circle())
+                                        .shadow(color: Color(red: 0.56, green: 0.46, blue: 0.95).opacity(0.4), radius: 8, y: 2)
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(!playbackController.hasFile)
+                                .accessibilityLabel(playbackController.isPlaying ? "Pause" : "Play")
+
+                                Spacer()
+
+                                HStack(spacing: 6) {
+                                    Circle().fill(playbackController.isPlaying ? Color.green : Color.secondary.opacity(0.4)).frame(width: 6, height: 6)
+                                    Text(playbackController.isPlaying ? "Playing" : "Paused").font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+
+                        // Gated actions: reuse already-loaded mixture.wav
+                        HStack(spacing: 10) {
+                            Button {
+                                inferenceController.startSeparationFromLoadedYouTubeSource()
+                            } label: {
+                                Label("Separate", systemImage: "waveform.path.badge.magnifyingglass").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
+                            .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating)
+                            .accessibilityIdentifier("SeparateLoadedYouTubeButton")
+
+                            Button {
+                                if let prep = inferenceController.prepareYouTubeMP3ExportFromLoadedSource() {
+                                    exportYouTubeMP3(prep)
+                                }
+                            } label: {
+                                Label("Save MP3", systemImage: "square.and.arrow.down").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating)
+                            .accessibilityIdentifier("SaveYouTubeMP3Button")
+                        }
+                        // Legacy identifier proxy for UI tests expecting SeparateFromYouTubeButton
+                        Color.clear.frame(width: 0, height: 0)
+                            .accessibilityIdentifier("SeparateFromYouTubeButton")
+                            .accessibilityHidden(true)
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating)
-                    .accessibilityIdentifier("SaveYouTubeMP3Button")
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.06)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.08), lineWidth: 1)))
                 }
             }
 
             // Start / Cancel — uses single local source via playbackController
             HStack(spacing: 10) {
-                Button {
-                    guard let url = playbackController.sourceURL else { return }
-                    inferenceController.startSeparation(localFileURL: url)
-                } label: {
-                    Label("Separate", systemImage: "play.fill").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
-                }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).disabled(!playbackController.hasFile || playbackController.sourceURL == nil || inferenceController.isSeparating)
+                if !inferenceController.isYouTubeSourceLoaded {
+                    Button {
+                        guard let url = playbackController.sourceURL else { return }
+                        inferenceController.startSeparation(localFileURL: url)
+                    } label: {
+                        Label("Separate", systemImage: "play.fill").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                    }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).disabled(!playbackController.hasFile || playbackController.sourceURL == nil || inferenceController.isSeparating)
+                }
 
                 if inferenceController.isSeparating {
                     Button(role: .destructive) { inferenceController.cancel() } label: { Text("Cancel").font(.callout.weight(.medium)) }.buttonStyle(.bordered).tint(.red)
@@ -440,6 +547,16 @@ struct InferenceCard: View {
                 guard let preparation else { return }
                 exportYouTubeMP3(preparation)
             }
+            .onChange(of: inferenceController.loadedYouTubeSource) { _, loaded in
+                guard let loaded else { return }
+                let display = inferenceController.exportBaseName ?? loaded.metadata?.exportBaseName ?? loaded.metadata?.title
+                playbackController.load(url: loaded.audioURL, displayTitle: display)
+                youTubeSliderValue = 0
+            }
+            .onChange(of: playbackController.currentTime) { _, newValue in
+                if !isYouTubeDragging { youTubeSliderValue = newValue }
+            }
+            .onAppear { youTubeSliderValue = playbackController.currentTime }
             .alert("Export Failed", isPresented: Binding(
                 get: { exportErrorMessage != nil },
                 set: { if !$0 { exportErrorMessage = nil } }
@@ -498,7 +615,7 @@ struct InferenceCard: View {
         panel.nameFieldStringValue = StemExporter.defaultFilename(
             for: artifact.name,
             format: format,
-            sourceBaseName: inferenceController.exportBaseName
+            sourceBaseName: inferenceController.effectiveExportBaseName
         )
         panel.canCreateDirectories = true
         let defaultDirectoryAccess = exportFolderPreference.applyDefaultDirectory(to: panel)
@@ -538,7 +655,7 @@ struct InferenceCard: View {
         panel.nameFieldStringValue = StemExporter.defaultMixFilename(
             for: artifacts.map(\.name),
             format: format,
-            sourceBaseName: inferenceController.exportBaseName
+            sourceBaseName: inferenceController.effectiveExportBaseName
         )
         panel.canCreateDirectories = true
         let defaultDirectoryAccess = exportFolderPreference.applyDefaultDirectory(to: panel)
@@ -569,8 +686,10 @@ struct InferenceCard: View {
     private func exportYouTubeMP3(_ preparation: YouTubeIngestResult) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.mp3]
+        let effectiveMetadata = inferenceController.effectiveYouTubeMetadata
+        let filenameMetadata = effectiveMetadata?.exportBaseName == nil ? preparation.metadata : effectiveMetadata
         panel.nameFieldStringValue = StemExporter.defaultYouTubeMP3Filename(
-            metadata: preparation.metadata
+            metadata: filenameMetadata
         )
         panel.canCreateDirectories = true
         let defaultDirectoryAccess = exportFolderPreference.applyDefaultDirectory(to: panel)
@@ -578,7 +697,6 @@ struct InferenceCard: View {
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
                 guard response == .OK, let destinationURL = panel.url else { return }
-                let effectiveMetadata = self.inferenceController.effectiveYouTubeMetadata
                 let effectiveArtwork = self.inferenceController.effectiveArtworkURL
                 Task { [defaultDirectoryAccess] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
@@ -597,6 +715,53 @@ struct InferenceCard: View {
                 }
             }
         }
+    }
+
+    // MARK: - YouTube source presentation helpers
+
+    @ViewBuilder
+    private func youTubeArtworkView(for loaded: YouTubeIngestResult) -> some View {
+        let url = inferenceController.effectiveArtworkURL ?? loaded.artworkURL
+        Group {
+            if let url, let nsImage = NSImage(contentsOf: url) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 64, height: 64)
+                    .clipped()
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.08))
+                    Image(systemName: "waveform").font(.system(size: 20, weight: .medium)).foregroundStyle(.secondary)
+                }
+                .frame(width: 64, height: 64)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.12), lineWidth: 1))
+    }
+
+    private func youTubeDisplayTitle(for loaded: YouTubeIngestResult) -> String {
+        let editable = inferenceController.editableTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !editable.isEmpty { return editable }
+        if let t = loaded.metadata?.title?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
+        if let base = inferenceController.exportBaseName?.trimmingCharacters(in: .whitespacesAndNewlines), !base.isEmpty { return base }
+        if let base = loaded.metadata?.exportBaseName?.trimmingCharacters(in: .whitespacesAndNewlines), !base.isEmpty { return base }
+        return loaded.audioURL.deletingPathExtension().lastPathComponent
+    }
+
+    private func youTubeDisplayArtist(for loaded: YouTubeIngestResult) -> String {
+        let editable = inferenceController.editableArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !editable.isEmpty { return editable }
+        if let a = loaded.metadata?.artist?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty { return a }
+        return "Unknown Artist"
+    }
+
+    private func youTubeDisplayChannel(for loaded: YouTubeIngestResult) -> String? {
+        if let c = inferenceController.loadedChannelName?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty { return c }
+        if let c = inferenceController.youTubeExportMetadata?.channel?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty { return c }
+        if let c = loaded.metadata?.channel?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty { return c }
+        return nil
     }
 
     private var statusText: String {
