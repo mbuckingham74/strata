@@ -383,3 +383,64 @@ final class AppTerminationCoordinatorTests: XCTestCase {
         XCTAssertEqual(secondReplies.count, 1, "completing the first coordinator must not reply through the second")
     }
 }
+
+// MARK: - Hosted lifecycle distinction (orphaned test-host fix)
+
+@MainActor
+final class AppLifecycleDelegateTests: XCTestCase {
+
+    func testHostedTestEnvironmentDetectsXCTestHostDuringTestRun() {
+        XCTAssertTrue(HostedTestEnvironment.isHostedTest(), "HostedTestEnvironment must be true when running inside XCTest host (NSClassFromString fallback)")
+    }
+
+    func testHostedReturnsTerminateNowWithNilController() {
+        let delegate = AppLifecycleDelegate()
+        delegate.isHostedTestCheck = { true }
+        delegate.inferenceController = nil
+        XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateNow)
+        XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateNow)
+    }
+
+    func testHostedReturnsTerminateNowWithController() {
+        let delegate = AppLifecycleDelegate()
+        delegate.isHostedTestCheck = { true }
+        let controller = InferenceController()
+        delegate.inferenceController = controller
+        XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateNow)
+        XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateNow)
+        _ = controller
+    }
+
+    func testProductionWithoutControllerReturnsTerminateNow() {
+        let delegate = AppLifecycleDelegate()
+        delegate.isHostedTestCheck = { false }
+        delegate.inferenceController = nil
+        XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateNow)
+    }
+
+    func testProductionWithControllerReturnsTerminateLater() {
+        let delegate = AppLifecycleDelegate()
+        delegate.isHostedTestCheck = { false }
+        let controller = InferenceController()
+        delegate.inferenceController = controller
+        let first = delegate.applicationShouldTerminate(NSApplication.shared)
+        XCTAssertEqual(first, .terminateLater, "production must defer for bounded cleanup")
+        XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateLater)
+        let exp = expectation(description: "cleanup")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { exp.fulfill() }
+        wait(for: [exp], timeout: 1)
+        _ = controller
+    }
+
+    func testHostedBypassesExistingCoordinator() {
+        let delegate = AppLifecycleDelegate()
+        delegate.isHostedTestCheck = { false }
+        let controller = InferenceController()
+        delegate.inferenceController = controller
+        XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateLater)
+        delegate.isHostedTestCheck = { true }
+        XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateNow)
+        XCTAssertEqual(delegate.applicationShouldTerminate(NSApplication.shared), .terminateNow)
+        _ = controller
+    }
+}
