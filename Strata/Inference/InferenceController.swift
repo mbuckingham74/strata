@@ -1,6 +1,12 @@
 import Foundation
 import SwiftUI
 
+enum EditableArtwork: Equatable, Sendable {
+    case keep
+    case removed
+    case replaced(URL)
+}
+
 // MARK: - YouTubeIngesting seam (smallest test seam)
 
 protocol YouTubeIngesting: Sendable {
@@ -44,6 +50,66 @@ final class InferenceController {
     private(set) var youTubeExportMetadata: YouTubeTrackMetadata?
     private(set) var youTubeExportArtworkURL: URL?
     private(set) var preparedYouTubeMP3Export: YouTubeIngestResult?
+
+    // MARK: - Editable ID3 Metadata
+
+    var editableTitle: String = ""
+    var editableArtist: String = ""
+    var editableAlbum: String = ""
+    var editableAlbumArtist: String = ""
+    var editableYear: String = ""
+    var editableGenre: String = ""
+    var editableTrackNumber: String = ""
+    var editableArtwork: EditableArtwork = .keep
+
+    var effectiveYouTubeMetadata: YouTubeTrackMetadata? {
+        YouTubeTrackMetadata(
+            artist: editableArtist,
+            title: editableTitle,
+            album: editableAlbum,
+            albumArtist: editableAlbumArtist,
+            year: editableYear,
+            genre: editableGenre,
+            trackNumber: editableTrackNumber
+        )
+    }
+
+    var effectiveArtworkURL: URL? {
+        switch editableArtwork {
+        case .keep:
+            return youTubeExportArtworkURL ?? preparedYouTubeMP3Export?.artworkURL
+        case .removed:
+            return nil
+        case .replaced(let url):
+            return url
+        }
+    }
+
+    var isEditableMetadataAvailable: Bool {
+        youTubeExportMetadata != nil || preparedYouTubeMP3Export != nil
+    }
+
+    private func populateEditableMetadata(from metadata: YouTubeTrackMetadata?) {
+        editableTitle = metadata?.title ?? ""
+        editableArtist = metadata?.artist ?? ""
+        editableAlbum = metadata?.album ?? ""
+        editableAlbumArtist = metadata?.albumArtist ?? ""
+        editableYear = metadata?.year ?? ""
+        editableGenre = metadata?.genre ?? ""
+        editableTrackNumber = metadata?.trackNumber ?? ""
+        editableArtwork = .keep
+    }
+
+    private func clearEditableMetadata() {
+        editableTitle = ""
+        editableArtist = ""
+        editableAlbum = ""
+        editableAlbumArtist = ""
+        editableYear = ""
+        editableGenre = ""
+        editableTrackNumber = ""
+        editableArtwork = .keep
+    }
 
     var isSeparating: Bool {
         if case .separating = state { return true }
@@ -128,6 +194,7 @@ final class InferenceController {
         youTubeExportMetadata = nil
         youTubeExportArtworkURL = nil
         preparedYouTubeMP3Export = nil
+        clearEditableMetadata()
 
         let client = self.client
         let base = outputBaseURL
@@ -196,6 +263,7 @@ final class InferenceController {
         youTubeExportMetadata = nil
         youTubeExportArtworkURL = nil
         preparedYouTubeMP3Export = nil
+        clearEditableMetadata()
 
         let client = self.client
         let youTubeIngest = self.youTubeIngest
@@ -229,6 +297,7 @@ final class InferenceController {
                 self.exportBaseName = ingestResult.metadata?.exportBaseName
                 self.youTubeExportMetadata = ingestResult.metadata
                 self.youTubeExportArtworkURL = ingestResult.artworkURL
+                self.populateEditableMetadata(from: ingestResult.metadata)
                 self.state = .completed
                 self.statusMessage = "Complete — \(separationResult.stems.count) stems"
                 self.errorMessage = nil
@@ -300,6 +369,7 @@ final class InferenceController {
         youTubeExportMetadata = nil
         youTubeExportArtworkURL = nil
         preparedYouTubeMP3Export = nil
+        clearEditableMetadata()
 
         let youTubeIngest = self.youTubeIngest
         currentTask = Task { [previousTask] in
@@ -316,6 +386,11 @@ final class InferenceController {
                 guard !Task.isCancelled else { throw CancellationError() }
 
                 self.preparedYouTubeMP3Export = ingestResult
+                // Also populate unified editable state for direct MP3 flow
+                self.youTubeExportMetadata = ingestResult.metadata
+                self.youTubeExportArtworkURL = ingestResult.artworkURL
+                self.exportBaseName = ingestResult.metadata?.exportBaseName
+                self.populateEditableMetadata(from: ingestResult.metadata)
                 self.state = .idle
                 self.statusMessage = "Ready to save MP3"
                 self.errorMessage = nil

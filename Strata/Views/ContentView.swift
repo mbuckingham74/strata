@@ -344,6 +344,10 @@ struct InferenceCard: View {
                 Text(msg).font(.caption).foregroundStyle(.red.opacity(0.9)).fixedSize(horizontal: false, vertical: true).padding(10).background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
             }
 
+            if inferenceController.isEditableMetadataAvailable {
+                EditableMetadataEditor(inferenceController: inferenceController)
+            }
+
             // Completed stems
             if case .completed = inferenceController.state, let result = inferenceController.result {
                 VStack(alignment: .leading, spacing: 8) {
@@ -475,8 +479,8 @@ struct InferenceCard: View {
     }
 
     private func export(_ artifact: StemArtifact, as format: StemExportFormat) {
-        let metadata = format == .mp3 ? inferenceController.youTubeExportMetadata : nil
-        let artworkURL = format == .mp3 ? inferenceController.youTubeExportArtworkURL : nil
+        let metadata = format == .mp3 ? inferenceController.effectiveYouTubeMetadata : nil
+        let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
         panel.nameFieldStringValue = StemExporter.defaultFilename(
@@ -515,8 +519,8 @@ struct InferenceCard: View {
         as format: StemExportFormat = .mp3
     ) {
         guard artifacts.count >= 2 else { return }
-        let metadata = format == .mp3 ? inferenceController.youTubeExportMetadata : nil
-        let artworkURL = format == .mp3 ? inferenceController.youTubeExportArtworkURL : nil
+        let metadata = format == .mp3 ? inferenceController.effectiveYouTubeMetadata : nil
+        let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
         panel.nameFieldStringValue = StemExporter.defaultMixFilename(
@@ -562,6 +566,8 @@ struct InferenceCard: View {
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
                 guard response == .OK, let destinationURL = panel.url else { return }
+                let effectiveMetadata = self.inferenceController.effectiveYouTubeMetadata
+                let effectiveArtwork = self.inferenceController.effectiveArtworkURL
                 Task { [defaultDirectoryAccess] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
@@ -569,8 +575,8 @@ struct InferenceCard: View {
                             try StemExporter.exportMP3(
                                 from: preparation.audioURL,
                                 to: destinationURL,
-                                metadata: preparation.metadata,
-                                artworkURL: preparation.artworkURL
+                                metadata: effectiveMetadata,
+                                artworkURL: effectiveArtwork
                             )
                         }.value
                     } catch {
@@ -607,6 +613,132 @@ struct InferenceCard: View {
         case .guitar: return "guitars"
         case .piano: return "pianokeys"
         case .other: return "music.note"
+        }
+    }
+}
+
+struct EditableMetadataEditor: View {
+    @Bindable var inferenceController: InferenceController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("MP3 Tags").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
+            Text("Edit ID3 metadata written into MP3 exports.").font(.caption2).foregroundStyle(.tertiary)
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Title").font(.caption2).foregroundStyle(.secondary)
+                        TextField("Title", text: $inferenceController.editableTitle)
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityIdentifier("ID3TitleField")
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Artist").font(.caption2).foregroundStyle(.secondary)
+                        TextField("Artist", text: $inferenceController.editableArtist)
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityIdentifier("ID3ArtistField")
+                    }
+                }
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Album").font(.caption2).foregroundStyle(.secondary)
+                        TextField("Album", text: $inferenceController.editableAlbum)
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityIdentifier("ID3AlbumField")
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Album Artist").font(.caption2).foregroundStyle(.secondary)
+                        TextField("Album Artist", text: $inferenceController.editableAlbumArtist)
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityIdentifier("ID3AlbumArtistField")
+                    }
+                }
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Year").font(.caption2).foregroundStyle(.secondary)
+                        TextField("Year", text: $inferenceController.editableYear)
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityIdentifier("ID3YearField")
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Genre").font(.caption2).foregroundStyle(.secondary)
+                        TextField("Genre", text: $inferenceController.editableGenre)
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityIdentifier("ID3GenreField")
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Track #").font(.caption2).foregroundStyle(.secondary)
+                        TextField("Track #", text: $inferenceController.editableTrackNumber)
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityIdentifier("ID3TrackNumberField")
+                    }
+                }
+            }
+            Divider().opacity(0.12)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text("Artwork").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Spacer()
+                    Text(artworkStatusText).font(.caption2).foregroundStyle(.tertiary)
+                }
+                if let previewURL = inferenceController.effectiveArtworkURL {
+                    HStack(spacing: 10) {
+                        if let nsImage = NSImage(contentsOf: previewURL) {
+                            Image(nsImage: nsImage)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 56, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
+                        } else {
+                            RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.06)).frame(width: 56, height: 56).overlay(Image(systemName: "photo").foregroundStyle(.secondary))
+                        }
+                        Text(previewURL.lastPathComponent).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        Spacer()
+                    }
+                } else {
+                    Text("No artwork — MP3 will have no cover image").font(.caption2).foregroundStyle(.tertiary)
+                }
+                HStack(spacing: 8) {
+                    Button("Keep") { inferenceController.editableArtwork = .keep }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .accessibilityIdentifier("ID3ArtworkKeep")
+                        .disabled(!canKeep)
+                    Button("Remove") { inferenceController.editableArtwork = .removed }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .accessibilityIdentifier("ID3ArtworkRemove")
+                    Button("Replace…") { chooseReplacementArtwork() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .accessibilityIdentifier("ID3ArtworkReplace")
+                }
+            }
+        }.padding(12).background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.05)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.08), lineWidth: 1)))
+    }
+
+    private var artworkStatusText: String {
+        switch inferenceController.editableArtwork {
+        case .keep: return inferenceController.effectiveArtworkURL != nil ? "Keep" : "Keep (none)"
+        case .removed: return "Removed"
+        case .replaced: return "Replaced"
+        }
+    }
+
+    private var canKeep: Bool {
+        if case .keep = inferenceController.editableArtwork { return false }
+        return true
+    }
+
+    private func chooseReplacementArtwork() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.image]
+        if panel.runModal() == .OK, let url = panel.url {
+            inferenceController.editableArtwork = .replaced(url)
         }
     }
 }
