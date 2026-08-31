@@ -222,7 +222,7 @@ struct MainWorkspaceView: View {
         ZStack {
             Color(red: 0.09, green: 0.09, blue: 0.11).ignoresSafeArea()
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 14) {
                     // Selected-audio header
                     if controller.hasFile {
                         VStack(alignment: .leading, spacing: 6) {
@@ -234,11 +234,11 @@ struct MainWorkspaceView: View {
                                 Text("·").foregroundStyle(.tertiary)
                                 Text("Local file").font(.caption).foregroundStyle(.secondary)
                             }
-                        }.padding(.horizontal, 24).padding(.top, 24)
-                        TransportCard(controller: controller).padding(.horizontal, 24)
+                        }.padding(.horizontal, 20).padding(.top, 16)
+                        TransportCard(controller: controller).padding(.horizontal, 20)
                         VStack(alignment: .leading, spacing: 0) {
-                            Text("Tracks").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase).padding(.horizontal, 24).padding(.bottom, 8)
-                            OriginalMixRow(controller: controller).padding(.horizontal, 24)
+                            Text("Tracks").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase).padding(.horizontal, 20).padding(.bottom, 6)
+                            OriginalMixRow(controller: controller).padding(.horizontal, 20)
                         }
                     } else {
                         EmptyStateView(showingImporter: $showingImporter).frame(height: 260).padding(.top, 20)
@@ -250,7 +250,7 @@ struct MainWorkspaceView: View {
                         stemPlaybackController: stemPlaybackController,
                         inferenceInputURL: $inferenceInputURL,
                         showingInferenceImporter: $showingInferenceImporter
-                    ).padding(.horizontal, 24).padding(.bottom, 24)
+                    ).padding(.horizontal, 20).padding(.bottom, 16)
                 }
             }
         }
@@ -298,7 +298,7 @@ struct InferenceCard: View {
     @State private var exportErrorMessage: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label("Separation", systemImage: "waveform.path.badge.magnifyingglass").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
                 Spacer()
@@ -391,7 +391,7 @@ struct InferenceCard: View {
 
             // Completed stems
             if case .completed = inferenceController.state, let result = inferenceController.result {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text("Stems — 6 validated").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
                     HStack(spacing: 10) {
                         Button {
@@ -436,9 +436,9 @@ struct InferenceCard: View {
                         stemPlaybackController: stemPlaybackController,
                         inferenceController: inferenceController
                     )
-                }.padding(.top, 4)
+                }.padding(.top, 2)
             }
-        }.padding(16).background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.06)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1)))
+        }.padding(12).background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.06)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1)))
             .onChange(of: inferenceController.result) { _, result in
                 guard let result else { return }
                 loadCompletedResult(result)
@@ -811,7 +811,7 @@ struct TransportCard: View {
     @State private var sliderValue: Double = 0
     @State private var isDragging = false
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 10) {
             VStack(spacing: 6) {
                 HStack {
                     Text(controller.formattedTime(isDragging ? sliderValue : controller.currentTime)).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 48, alignment: .leading)
@@ -827,7 +827,7 @@ struct TransportCard: View {
                     Text(controller.isPlaying ? "Playing" : "Paused").font(.caption).foregroundStyle(.secondary)
                 }
             }
-        }.padding(16).background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.06)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1))).onChange(of: controller.currentTime) { _, newValue in if !isDragging { sliderValue = newValue } }.onAppear { sliderValue = controller.currentTime }
+        }.padding(12).background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.06)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1))).onChange(of: controller.currentTime) { _, newValue in if !isDragging { sliderValue = newValue } }.onAppear { sliderValue = controller.currentTime }
     }
 }
 

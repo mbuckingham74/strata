@@ -204,7 +204,7 @@ struct StratumRowView: View {
     private var color: Color { strataColor(for: artifact.name) }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             // Left: stem identity
             HStack(spacing: 8) {
                 ZStack {
@@ -235,7 +235,7 @@ struct StratumRowView: View {
                     stemPlaybackController.seek(to: t)
                 }
             )
-            .frame(height: 42)
+            .frame(height: 34)
             .frame(maxWidth: .infinity)
 
             // Per-stem gain slider (0% silent .. 100% original, live, separate from mute/solo)
@@ -279,7 +279,7 @@ struct StratumRowView: View {
             .accessibilityIdentifier("ExportStem-\(artifact.name.rawValue)")
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 5)
     }
 }
 
@@ -343,25 +343,25 @@ struct StrataStackView: View {
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.vertical, 6)
 
             // Shared ruler — same HStack insets as rows so ticks align with waveforms
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 Spacer().frame(width: 110)
                 StrataRulerView(
                     duration: stemPlaybackController.duration,
                     currentTime: stemPlaybackController.currentTime,
                     onSeek: { f in stemPlaybackController.seek(to: f * stemPlaybackController.duration) }
                 )
-                .frame(height: 28)
+                .frame(height: 20)
                 .frame(maxWidth: .infinity)
                 // Match right-side fixed columns (gain slider + controls + export)
                 Spacer().frame(width: 96)
                 Spacer().frame(width: 112)
-                Color.clear.frame(width: 26, height: 28)
+                Color.clear.frame(width: 26, height: 20)
             }
             .padding(.horizontal, 10)
-            .padding(.bottom, 4)
+            .padding(.bottom, 2)
 
             Divider().opacity(0.08)
 
@@ -406,7 +406,7 @@ struct StrataStackView: View {
                     .accessibilityIdentifier("StrataDisplayTitle")
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.vertical, 6)
             .background(Color.white.opacity(0.03))
         }
         .background(
