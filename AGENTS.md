@@ -114,3 +114,11 @@ Stop and ask before proceeding when:
 
 The user’s current explicit instruction overrides this policy.
 
+
+## Xcode build artifacts
+
+- Use Xcode's default DerivedData unless a task specifically requires isolation.
+- If isolation is required, use a path outside the repository, e.g. `/tmp/StrataDerivedData`.
+- Never use repo-local `build/`, `DerivedData/`, `.build/`, or similar directories for Xcode output.
+- Do not stop work merely because the known ignored `build/` directory exists.
+

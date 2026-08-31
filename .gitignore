@@ -9,3 +9,6 @@ __pycache__/
 .m2-outputs/
 .m2-staging/
 evidence-tmp/
+
+# local Xcode build output
+build/
