@@ -365,4 +365,84 @@ final class InferenceControllerLocalTests: XCTestCase {
         XCTAssertEqual(ffmpegURL.path, "/opt/homebrew/bin/ffmpeg")
         XCTAssertTrue(ffmpegURL.isFileURL)
     }
+
+    func testLocalSeparationTransitionsToSeparatingDuringInference() async throws {
+        let mixtureDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: mixtureDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: mixtureDir) }
+        let mixtureURL = mixtureDir.appendingPathComponent("mixture.wav")
+        try makeWAV(at: mixtureURL)
+
+        let dir = try makeFakeWorker(script: hangingWorkerScript())
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let mockIngest = MockLocalSuccess(mixtureURL: mixtureURL)
+        let client = InferenceWorkerClient(readinessTimeout: .seconds(3), startedTimeout: .seconds(2), separationTimeout: .seconds(10), workerDirectory: dir)
+        let outputBase = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: outputBase, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outputBase) }
+
+        let controller = InferenceController(client: client, outputBase: outputBase, youTubeIngest: nil, localIngest: mockIngest)
+        controller.startSeparation(localFileURL: URL(fileURLWithPath: "/tmp/song.mp3"))
+
+        // Before .started, state must be .loadingModel with "Loading model…"
+        var observedLoading = false
+        for _ in 0..<50 {
+            if case .loadingModel = controller.state, controller.statusMessage == "Loading model…" {
+                observedLoading = true
+                break
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertTrue(observedLoading, "Expected .loadingModel with 'Loading model…' before worker emits started")
+        XCTAssertEqual(controller.statusMessage, "Loading model…")
+        if case .loadingModel = controller.state {} else { XCTFail("Expected loadingModel before started") }
+
+        // After worker emits .started (hanging worker sleeps 10s after started), state becomes .separating
+        var observedSeparating = false
+        for _ in 0..<100 {
+            if case .separating = controller.state, controller.statusMessage == "Separating…" {
+                observedSeparating = true
+                break
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertTrue(observedSeparating, "Expected transition to .separating with 'Separating…' after started")
+        XCTAssertEqual(controller.statusMessage, "Separating…")
+
+        controller.cancel()
+        if let tail = controller.debugCleanupChainTail() { await tail.value }
+        await controller.shutdownWorker(policy: .testShort())
+    }
+
+    func testFastStartedCompletionEndsInCompletedNotSeparating() async throws {
+        let mixtureDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: mixtureDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: mixtureDir) }
+        let mixtureURL = mixtureDir.appendingPathComponent("mixture.wav")
+        try makeWAV(at: mixtureURL)
+
+        let dir = try makeFakeWorker(script: floatSuccessScript())
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let mockIngest = MockLocalSuccess(mixtureURL: mixtureURL)
+        let client = InferenceWorkerClient(readinessTimeout: .seconds(3), startedTimeout: .seconds(2), separationTimeout: .seconds(5), workerDirectory: dir)
+        let outputBase = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: outputBase, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outputBase) }
+
+        let controller = InferenceController(client: client, outputBase: outputBase, youTubeIngest: nil, localIngest: mockIngest)
+        controller.startSeparation(localFileURL: URL(fileURLWithPath: "/tmp/song.mp3"))
+
+        let task = try XCTUnwrap(controller.debugCurrentTask())
+        await task.value
+
+        // Fast worker emits started then immediately done; awaiting onStarted before result ensures
+        // the awaited MainActor transition cannot overwrite .completed with a delayed .separating.
+        XCTAssertEqual(controller.state, .completed)
+        XCTAssertEqual(controller.statusMessage, "Complete — 6 stems")
+        XCTAssertNotEqual(controller.state, .separating)
+        XCTAssertFalse(controller.statusMessage == "Separating…")
+        await controller.shutdownWorker()
+    }
 }

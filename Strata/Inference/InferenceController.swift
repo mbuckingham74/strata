@@ -266,7 +266,14 @@ final class InferenceController {
 
             do {
                 try Task.checkCancellation()
-                let separationResult = try await client.runSeparation(inputPath: inputURL, outputBaseDir: base)
+                let separationResult = try await client.runSeparation(inputPath: inputURL, outputBaseDir: base) {
+                    await MainActor.run {
+                        guard generation == self.latestGeneration else { return }
+                        guard !Task.isCancelled else { return }
+                        self.state = .separating
+                        self.statusMessage = "Separating…"
+                    }
+                }
 
                 // Generation guard: old operation must not overwrite newer
                 guard generation == self.latestGeneration else { return }
@@ -339,7 +346,7 @@ final class InferenceController {
         previousTask?.cancel()
 
         state = .loadingModel
-        statusMessage = "Preparing…"
+        statusMessage = "Loading model…"
         result = nil
         errorMessage = nil
         exportBaseName = nil
@@ -371,9 +378,14 @@ final class InferenceController {
                 guard generation == self.latestGeneration else { return }
                 guard !Task.isCancelled else { throw CancellationError() }
 
-                self.statusMessage = "Loading model…"
-
-                let separationResult = try await client.runSeparation(inputPath: canonicalURL, outputBaseDir: base)
+                let separationResult = try await client.runSeparation(inputPath: canonicalURL, outputBaseDir: base) {
+                    await MainActor.run {
+                        guard generation == self.latestGeneration else { return }
+                        guard !Task.isCancelled else { return }
+                        self.state = .separating
+                        self.statusMessage = "Separating…"
+                    }
+                }
 
                 guard generation == self.latestGeneration else { return }
                 guard !Task.isCancelled else { return }
@@ -472,7 +484,6 @@ final class InferenceController {
                 let ingestResult: YouTubeIngestResult
                 if canReuse, let loaded = self.loadedYouTubeSource {
                     ingestResult = loaded
-                    self.statusMessage = "Loading model…"
                 } else {
                     let fetched = try await youTubeIngest.ingestWithMetadata(youTubeURL: youTubeURL)
 
@@ -482,15 +493,25 @@ final class InferenceController {
 
                     self.loadedYouTubeSource = fetched
                     self.loadedYouTubeURL = youTubeURL
-                    // Transition status to inference phase
-                    self.statusMessage = "Loading model…"
                     ingestResult = fetched
                 }
+
+                guard generation == self.latestGeneration else { return }
+                guard !Task.isCancelled else { throw CancellationError() }
+                self.state = .loadingModel
+                self.statusMessage = "Loading model…"
 
                 let separationResult = try await client.runSeparation(
                     inputPath: ingestResult.audioURL,
                     outputBaseDir: base
-                )
+                ) {
+                    await MainActor.run {
+                        guard generation == self.latestGeneration else { return }
+                        guard !Task.isCancelled else { return }
+                        self.state = .separating
+                        self.statusMessage = "Separating…"
+                    }
+                }
 
                 guard generation == self.latestGeneration else { return }
                 guard !Task.isCancelled else { return }
@@ -785,7 +806,14 @@ final class InferenceController {
                 let separationResult = try await client.runSeparation(
                     inputPath: loaded.audioURL,
                     outputBaseDir: base
-                )
+                ) {
+                    await MainActor.run {
+                        guard generation == self.latestGeneration else { return }
+                        guard !Task.isCancelled else { return }
+                        self.state = .separating
+                        self.statusMessage = "Separating…"
+                    }
+                }
 
                 guard generation == self.latestGeneration else { return }
                 guard !Task.isCancelled else { return }

@@ -224,11 +224,19 @@ actor InferenceWorkerClient {
         try await runSeparationImpl(inputPath: inputPath, outputBaseDir: outputBaseDir)
     }
 
+    func runSeparation(inputPath: URL, outputBaseDir: URL, onStarted: @Sendable @escaping () async -> Void) async throws -> SeparationResult {
+        try await runSeparationImpl(inputPath: inputPath, outputBaseDir: outputBaseDir, onStarted: onStarted)
+    }
+
     func runSeparation(inputPath: URL, outputBaseDir: URL, projectId: String) async throws -> SeparationResult {
         try await runSeparationImpl(inputPath: inputPath, outputBaseDir: outputBaseDir, projectId: projectId)
     }
 
-    private func runSeparationImpl(inputPath: URL, outputBaseDir: URL, projectId: String? = nil) async throws -> SeparationResult {
+    func runSeparation(inputPath: URL, outputBaseDir: URL, projectId: String, onStarted: @Sendable @escaping () async -> Void) async throws -> SeparationResult {
+        try await runSeparationImpl(inputPath: inputPath, outputBaseDir: outputBaseDir, projectId: projectId, onStarted: onStarted)
+    }
+
+    private func runSeparationImpl(inputPath: URL, outputBaseDir: URL, projectId: String? = nil, onStarted: (@Sendable () async -> Void)? = nil) async throws -> SeparationResult {
         guard !separationReserved, activeJob == nil else { throw InferenceError.alreadyRunningJob }
         separationReserved = true
         defer { separationReserved = false }
@@ -288,7 +296,8 @@ actor InferenceWorkerClient {
             return try await sendCommandAndWaitForResult(
                 command.encodeNDJSON(),
                 job: job,
-                generation: generation
+                generation: generation,
+                onStarted: onStarted
             )
         } catch {
             clearActiveJobIfMatching(jobID: jobId, generation: generation)
@@ -894,7 +903,8 @@ actor InferenceWorkerClient {
     private func sendCommandAndWaitForResult(
         _ data: Data,
         job: JobInfo,
-        generation: UInt64
+        generation: UInt64,
+        onStarted: (@Sendable () async -> Void)? = nil
     ) async throws -> SeparationResult {
         guard generation == processGeneration, !invalidatedGenerations.contains(generation) else {
             throw InferenceError.cancellation
@@ -925,6 +935,10 @@ actor InferenceWorkerClient {
         let overallDeadline = ContinuousClock.now + separationTimeout
         try writeCommand(data, generation: generation)
         try await waitForStartedSignal(startedStream, timeout: startedTimeout)
+        // Existing worker .started is the product boundary between loading and separating.
+        // Await the controller transition before waiting for result so a fast completion
+        // cannot race and be overwritten by a delayed .separating.
+        await onStarted?()
 
         let remaining = ContinuousClock.now < overallDeadline
             ? overallDeadline - ContinuousClock.now

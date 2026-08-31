@@ -321,7 +321,7 @@ struct InferenceCard: View {
                     ProgressView().scaleEffect(0.7).tint(.white)
                 }
             }
-            Text("Local BS-RoFormer via MLX — proves Swift ownership of the inference worker.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text("Separation runs locally on this Mac.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
 
             // Unified local source — single selection via Add Audio
             if !inferenceController.isYouTubeSourceLoaded {
