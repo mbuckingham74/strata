@@ -627,7 +627,7 @@ struct InferenceCard: View {
     private func icon(for stem: StemName) -> String {
         switch stem {
         case .vocals: return "mic.fill"
-        case .drums: return "drum.fill"
+        case .drums: return "metronome.fill"
         case .bass: return "guitars.fill"
         case .guitar: return "guitars"
         case .piano: return "pianokeys"
