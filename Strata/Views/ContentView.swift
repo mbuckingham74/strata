@@ -516,6 +516,14 @@ struct InferenceCard: View {
                         Label("Separate", systemImage: "play.fill").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
                     }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).disabled(!playbackController.hasFile || playbackController.sourceURL == nil || inferenceController.isSeparating || !inferenceController.isLocalSeparationReady)
                     .accessibilityIdentifier("LocalSeparateButton")
+                    Button {
+                        exportLocalMP3()
+                    } label: {
+                        Label("Save MP3", systemImage: "square.and.arrow.down").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!playbackController.hasFile || inferenceController.isSeparating || !inferenceController.isMp3ExportReady || isExporting)
+                    .accessibilityIdentifier("SaveLocalMP3Button")
                 }
 
                 if inferenceController.isSeparating {
@@ -527,6 +535,24 @@ struct InferenceCard: View {
             if let r = inferenceController.runtimeReadiness, !r.isLocalSeparationReady, !inferenceController.isYouTubeSourceLoaded {
                 Text(r.sidebarStatus).font(.caption2).foregroundStyle(.red.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
             }
+            if !inferenceController.isYouTubeSourceLoaded {
+                if let exportingFileName {
+                    HStack(spacing: 6) {
+                        ProgressView().scaleEffect(0.6).tint(.white)
+                        Text("Exporting \(exportingFileName)…").font(.caption).foregroundStyle(.secondary)
+                    }
+                    .accessibilityIdentifier("LocalExportStatus")
+                } else if let savedFileName {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).font(.caption)
+                        Text("Saved \(savedFileName)").font(.caption).foregroundStyle(.secondary)
+                    }
+                    .accessibilityIdentifier("LocalExportStatus")
+                }
+                if let r = inferenceController.runtimeReadiness, !r.isMp3ExportReady {
+                    Text(r.sidebarStatus).font(.caption2).foregroundStyle(.red.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
+                }
+            }
             }
 
             // Failure
@@ -534,7 +560,7 @@ struct InferenceCard: View {
                 Text(msg).font(.caption).foregroundStyle(.red.opacity(0.9)).fixedSize(horizontal: false, vertical: true).padding(10).background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
             }
 
-            if inferenceController.isEditableMetadataAvailable {
+            if inferenceController.isEditableMetadataAvailable || (playbackController.hasFile && !inferenceController.isYouTubeSourceLoaded) {
                 EditableMetadataEditor(inferenceController: inferenceController)
             }
 
@@ -783,6 +809,55 @@ struct InferenceCard: View {
                         try await Task.detached(priority: .userInitiated) {
                             try StemExporter.exportMP3(
                                 from: capturedPreparationAudioURL,
+                                to: dest,
+                                metadata: capturedMetadata,
+                                artworkURL: effectiveArtwork
+                            )
+                        }.value
+                        await MainActor.run {
+                            exportingFileName = nil
+                            savedFileName = dest.lastPathComponent
+                        }
+                    } catch {
+                        await MainActor.run {
+                            exportingFileName = nil
+                            exportErrorMessage = error.localizedDescription
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func exportLocalMP3() {
+        guard !isExporting else { return }
+        guard let sourceURL = playbackController.sourceURL else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.mp3]
+        let effectiveMetadata = inferenceController.effectiveYouTubeMetadata
+        panel.nameFieldStringValue = StemExporter.defaultLocalMP3Filename(
+            metadata: effectiveMetadata,
+            fallbackTitle: playbackController.title,
+            fallbackURL: sourceURL
+        )
+        panel.canCreateDirectories = true
+        let defaultDirectoryAccess = exportFolderPreference.applyDefaultDirectory(to: panel)
+
+        panel.begin { response in
+            withExtendedLifetime(defaultDirectoryAccess) {
+                guard response == .OK, let destinationURL = panel.url else { return }
+                let dest = destinationURL
+                let effectiveArtwork = self.inferenceController.effectiveArtworkURL
+                let capturedMetadata = effectiveMetadata
+                let capturedSourceURL = sourceURL
+                exportingFileName = dest.lastPathComponent
+                savedFileName = nil
+                Task { [defaultDirectoryAccess] in
+                    defer { withExtendedLifetime(defaultDirectoryAccess) {} }
+                    do {
+                        try await Task.detached(priority: .userInitiated) {
+                            try StemExporter.exportMP3(
+                                from: capturedSourceURL,
                                 to: dest,
                                 metadata: capturedMetadata,
                                 artworkURL: effectiveArtwork

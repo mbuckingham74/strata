@@ -62,6 +62,7 @@
 		A10000000000000000000036 /* AudioIngestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000036 /* AudioIngestSupport.swift */; };
 		A10000000000000000000037 /* RuntimeReadiness.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000037 /* RuntimeReadiness.swift */; };
 		A10000000000000000000038 /* RuntimeReadinessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000038 /* RuntimeReadinessTests.swift */; };
+		A10000000000000000000039 /* LocalMP3ExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000039 /* LocalMP3ExportTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -122,6 +123,7 @@
 		B10000000000000000000036 /* AudioIngestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioIngestSupport.swift; sourceTree = "<group>"; };
 		B10000000000000000000037 /* RuntimeReadiness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeReadiness.swift; sourceTree = "<group>"; };
 		B10000000000000000000038 /* RuntimeReadinessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeReadinessTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000039 /* LocalMP3ExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalMP3ExportTests.swift; sourceTree = "<group>"; };
 		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -264,6 +266,7 @@
 				B10000000000000000000034 /* LocalAudioIngestClientTests.swift */,
 				B10000000000000000000035 /* InferenceControllerLocalTests.swift */,
 				B10000000000000000000038 /* RuntimeReadinessTests.swift */,
+				B10000000000000000000039 /* LocalMP3ExportTests.swift */,
 			);
 			path = StrataTests;
 			sourceTree = "<group>";
@@ -475,6 +478,7 @@
 				A10000000000000000000034 /* LocalAudioIngestClientTests.swift in Sources */,
 				A10000000000000000000035 /* InferenceControllerLocalTests.swift in Sources */,
 				A10000000000000000000038 /* RuntimeReadinessTests.swift in Sources */,
+				A10000000000000000000039 /* LocalMP3ExportTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

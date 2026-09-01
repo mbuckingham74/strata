@@ -50,6 +50,38 @@ struct StemExporter {
         return "YouTube Audio.mp3"
     }
 
+    static func defaultLocalMP3Filename(
+        metadata: YouTubeTrackMetadata?,
+        fallbackTitle: String?,
+        fallbackURL: URL?
+    ) -> String {
+        if let exportBaseName = metadata?.exportBaseName {
+            return "\(exportBaseName).mp3"
+        }
+        var fallbackName: String?
+        if let title = fallbackTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+            fallbackName = title
+        } else if let url = fallbackURL {
+            let name = url.deletingPathExtension().lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty { fallbackName = name }
+        }
+        guard let raw = fallbackName, !raw.isEmpty else { return "Audio.mp3" }
+        let sanitized = sanitizedLocalFilename(raw)
+        guard !sanitized.isEmpty else { return "Audio.mp3" }
+        return "\(sanitized).mp3"
+    }
+
+    private static func sanitizedLocalFilename(_ raw: String) -> String {
+        let unsafeCharacters = CharacterSet(charactersIn: "/:").union(.controlCharacters)
+        let sanitized = raw
+            .components(separatedBy: unsafeCharacters)
+            .joined(separator: "-")
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return sanitized
+    }
+
     static func defaultFilename(
         for stem: StemName,
         format: StemExportFormat = .wav,
