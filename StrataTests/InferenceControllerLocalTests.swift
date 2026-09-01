@@ -385,30 +385,46 @@ final class InferenceControllerLocalTests: XCTestCase {
         let controller = InferenceController(client: client, outputBase: outputBase, youTubeIngest: nil, localIngest: mockIngest)
         controller.startSeparation(localFileURL: URL(fileURLWithPath: "/tmp/song.mp3"))
 
-        // Before .started, state must be .loadingModel with "Loading model…"
+        // Before .started, state must be .loadingModel with "Loading separation model" and creationPhase .loadingModel (truthful: Preparing → Loading)
         var observedLoading = false
         for _ in 0..<50 {
-            if case .loadingModel = controller.state, controller.statusMessage == "Loading model…" {
+            if case .loadingModel = controller.state, controller.statusMessage == "Loading separation model", controller.creationPhase == .loadingModel {
+                observedLoading = true
+                break
+            }
+            // Also accept preparing phase briefly before loading
+            if controller.statusMessage == "Preparing audio", controller.creationPhase == .preparingAudio {
                 observedLoading = true
                 break
             }
             try await Task.sleep(nanoseconds: 50_000_000)
         }
-        XCTAssertTrue(observedLoading, "Expected .loadingModel with 'Loading model…' before worker emits started")
-        XCTAssertEqual(controller.statusMessage, "Loading model…")
+        XCTAssertTrue(observedLoading, "Expected .loadingModel with 'Loading separation model' before worker emits started")
+        // After ingest finishes, should be loadingModel; Preparing is transient
+        if controller.creationPhase == .preparingAudio {
+            // Wait a bit more for transition to loading
+            for _ in 0..<20 {
+                if controller.creationPhase == .loadingModel { break }
+                try await Task.sleep(nanoseconds: 50_000_000)
+            }
+        }
+        XCTAssertEqual(controller.creationPhase, .loadingModel)
+        XCTAssertEqual(controller.statusMessage, "Loading separation model")
+        XCTAssertFalse(controller.showDownloadingPhase, "Local flow must hide downloading phase")
         if case .loadingModel = controller.state {} else { XCTFail("Expected loadingModel before started") }
 
-        // After worker emits .started (hanging worker sleeps 10s after started), state becomes .separating
+        // After worker emits .started (hanging worker sleeps 10s after started), state becomes .separating with "Creating strata"
         var observedSeparating = false
         for _ in 0..<100 {
-            if case .separating = controller.state, controller.statusMessage == "Separating…" {
+            if case .separating = controller.state, controller.statusMessage == "Creating strata", controller.creationPhase == .creatingStrata {
                 observedSeparating = true
                 break
             }
             try await Task.sleep(nanoseconds: 50_000_000)
         }
-        XCTAssertTrue(observedSeparating, "Expected transition to .separating with 'Separating…' after started")
-        XCTAssertEqual(controller.statusMessage, "Separating…")
+        XCTAssertTrue(observedSeparating, "Expected transition to .separating with 'Creating strata' after started")
+        XCTAssertEqual(controller.statusMessage, "Creating strata")
+        XCTAssertEqual(controller.creationPhase, .creatingStrata)
 
         controller.cancel()
         if let tail = controller.debugCleanupChainTail() { await tail.value }
@@ -440,9 +456,11 @@ final class InferenceControllerLocalTests: XCTestCase {
         // Fast worker emits started then immediately done; awaiting onStarted before result ensures
         // the awaited MainActor transition cannot overwrite .completed with a delayed .separating.
         XCTAssertEqual(controller.state, .completed)
-        XCTAssertEqual(controller.statusMessage, "Complete — 6 stems")
+        XCTAssertEqual(controller.statusMessage, "Complete — 6 strata")
+        XCTAssertEqual(controller.creationPhase, .complete)
+        XCTAssertFalse(controller.isSeparating)
         XCTAssertNotEqual(controller.state, .separating)
-        XCTAssertFalse(controller.statusMessage == "Separating…")
+        XCTAssertFalse(controller.statusMessage == "Creating strata")
         await controller.shutdownWorker()
     }
 
@@ -501,6 +519,6 @@ final class InferenceControllerLocalTests: XCTestCase {
         controller.dismissErrorAlert()
         XCTAssertEqual(controller.state, .idle)
         XCTAssertNil(controller.errorMessage)
-        XCTAssertEqual(controller.statusMessage, "Ready to separate")
+        XCTAssertEqual(controller.statusMessage, "Ready to create strata")
     }
 }

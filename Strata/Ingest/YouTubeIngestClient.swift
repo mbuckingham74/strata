@@ -25,6 +25,11 @@ enum YouTubeIngestError: Error, Equatable, LocalizedError, Sendable {
     }
 }
 
+enum YouTubeIngestPhase: Sendable, Equatable {
+    case downloading
+    case preparing
+}
+
 struct YouTubeTrackMetadata: Sendable, Equatable, Codable {
     let artist: String?
     let title: String?
@@ -256,7 +261,7 @@ actor YouTubeIngestClient {
         try await ingestWithMetadata(youTubeURL: youTubeURL).audioURL
     }
 
-    func ingestWithMetadata(youTubeURL: URL) async throws -> YouTubeIngestResult {
+    func ingestWithMetadata(youTubeURL: URL, onProgress: @Sendable (YouTubeIngestPhase) -> Void = { _ in }) async throws -> YouTubeIngestResult {
         // Validate YouTube URL
         guard let scheme = youTubeURL.scheme?.lowercased(), scheme == "https",
               let host = youTubeURL.host?.lowercased(),
@@ -305,6 +310,7 @@ actor YouTubeIngestClient {
                 "--ffmpeg-location", "/opt/homebrew/bin/ffmpeg",
                 "--js-runtimes", "node:/opt/homebrew/bin/node",
             ]
+            onProgress(.downloading)
             let ytStatus = try await runTool(
                 toolName: "yt-dlp",
                 executableURL: ytDlpURL,
@@ -348,6 +354,7 @@ actor YouTubeIngestClient {
             // FFmpeg
             let mixtureURL = runDir.appendingPathComponent("mixture.wav")
             let ffArgs = ["-nostdin", "-y", "-i", sourceURL.path, "-ar", "44100", "-ac", "2", "-c:a", "pcm_f32le", mixtureURL.path]
+            onProgress(.preparing)
             let ffStatus = try await runTool(
                 toolName: "ffmpeg",
                 executableURL: ffmpegURL,

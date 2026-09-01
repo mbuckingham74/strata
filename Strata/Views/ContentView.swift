@@ -309,7 +309,7 @@ struct InferenceCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("Separation", systemImage: "waveform").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
+                Label("Create Strata", systemImage: "waveform").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
                 Spacer()
                 Button {
                     chooseDefaultExportFolder()
@@ -320,7 +320,7 @@ struct InferenceCard: View {
                 .controlSize(.small)
                 .help("Choose the default folder shown by export save panels")
                 .accessibilityIdentifier("ChooseDefaultExportFolder")
-                if inferenceController.isSeparating {
+                if !shouldShowPhaseList && inferenceController.isSeparating {
                     ProgressView().scaleEffect(0.7).tint(.white)
                 }
             }
@@ -469,7 +469,7 @@ struct InferenceCard: View {
                                     inferenceController.startSeparationFromLoadedPreview()
                                 }
                             } label: {
-                                Label("Separate", systemImage: "waveform").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                                Label("Create Strata", systemImage: "waveform").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
@@ -523,7 +523,7 @@ struct InferenceCard: View {
                         guard let url = playbackController.sourceURL else { return }
                         inferenceController.startSeparation(localFileURL: url)
                     } label: {
-                        Label("Separate", systemImage: "play.fill").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                        Label("Create Strata", systemImage: "waveform").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
                     }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).disabled(!playbackController.hasFile || playbackController.sourceURL == nil || inferenceController.isSeparating || !inferenceController.isLocalSeparationReady)
                     .accessibilityIdentifier("LocalSeparateButton")
                     Button {
@@ -536,11 +536,17 @@ struct InferenceCard: View {
                     .accessibilityIdentifier("SaveLocalMP3Button")
                 }
 
-                if inferenceController.isSeparating {
+                if inferenceController.isSeparating && inferenceController.creationPhase != .complete {
                     Button(role: .destructive) { inferenceController.cancel() } label: { Text("Cancel").font(.callout.weight(.medium)) }.buttonStyle(.bordered).tint(.red)
+                        .accessibilityIdentifier("CancelSeparationButton")
                 }
-                Spacer()
-                Text(statusText).font(.caption).foregroundStyle(statusColor)
+                Spacer(minLength: 0)
+                if !shouldShowPhaseList {
+                    Text(statusText).font(.caption).foregroundStyle(statusColor)
+                }
+            }
+            if shouldShowPhaseList {
+                phaseList
             }
             if let r = inferenceController.runtimeReadiness, !r.isLocalSeparationReady, !inferenceController.isYouTubeSourceLoaded {
                 Text(r.sidebarStatus).font(.caption2).foregroundStyle(.red.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
@@ -982,6 +988,102 @@ struct InferenceCard: View {
             return String(format: "%d:%02d:%02d", hours, minutes, seconds)
         } else {
             return String(format: "%d:%02d", minutes, seconds)
+        }
+    }
+
+    // MARK: - Phase List (truthful progress)
+
+    private var shouldShowPhaseList: Bool {
+        // Show whenever controller has a phase. Hides when idle with no operation.
+        // Completed keeps list visible (all checkmarks); failed/cancelled hides.
+        if case .failed = inferenceController.state { return false }
+        return inferenceController.creationPhase != nil
+    }
+
+    private var orderedPhases: [StrataCreationPhase] {
+        if inferenceController.showDownloadingPhase {
+            return [.downloadingAudio, .preparingAudio, .loadingModel, .creatingStrata, .complete]
+        } else {
+            return [.preparingAudio, .loadingModel, .creatingStrata, .complete]
+        }
+    }
+
+    @ViewBuilder
+    private var phaseList: some View {
+        let phases = orderedPhases
+        let current = inferenceController.creationPhase
+        let currentIndex: Int = {
+            guard let c = current, let idx = phases.firstIndex(of: c) else { return -1 }
+            return idx
+        }()
+
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(phases.enumerated()), id: \.offset) { index, phase in
+                let isCompleteFlow = current == .complete
+                let rowState: PhaseRowState = {
+                    if isCompleteFlow {
+                        // All rows completed when flow is complete
+                        return .completed
+                    }
+                    if index < currentIndex { return .completed }
+                    if index == currentIndex { return .current }
+                    return .future
+                }()
+                phaseRow(phase: phase, state: rowState)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.white.opacity(0.06))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.08), lineWidth: 1))
+        )
+        .accessibilityIdentifier("PhaseList")
+    }
+
+    private enum PhaseRowState { case completed, current, future }
+
+    @ViewBuilder
+    private func phaseRow(phase: StrataCreationPhase, state: PhaseRowState) -> some View {
+        HStack(spacing: 8) {
+            Group {
+                switch state {
+                case .completed:
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.green)
+                case .current:
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .tint(.white)
+                        .frame(width: 12, height: 12)
+                case .future:
+                    Image(systemName: "circle")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .opacity(0.55)
+                }
+            }
+            .frame(width: 12, height: 12)
+
+            Text(phase.displayString)
+                .font(state == .current ? .caption.weight(.semibold) : .caption2.weight(.medium))
+                .foregroundStyle(colorForPhaseRow(state: state))
+                .opacity(state == .future ? 0.42 : 1.0)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+        }
+        .opacity(state == .future ? 0.45 : 1.0)
+        .accessibilityIdentifier("PhaseRow-\(phase.displayString)")
+    }
+
+    private func colorForPhaseRow(state: PhaseRowState) -> Color {
+        switch state {
+        case .completed: return Color.white.opacity(0.85)
+        case .current: return Color.white
+        case .future: return Color.secondary
         }
     }
 

@@ -11,7 +11,7 @@ enum EditableArtwork: Equatable, Sendable {
 
 protocol YouTubeIngesting: Sendable {
     func ingest(youTubeURL: URL) async throws -> URL
-    func ingestWithMetadata(youTubeURL: URL) async throws -> YouTubeIngestResult
+    func ingestWithMetadata(youTubeURL: URL, onProgress: @Sendable (YouTubeIngestPhase) -> Void) async throws -> YouTubeIngestResult
     func fetchPreview(youTubeURL: URL) async throws -> YouTubePreviewResult
     func downloadAudioOnly(youTubeURL: URL) async throws -> YouTubeIngestResult
     func cancel() async throws
@@ -19,6 +19,10 @@ protocol YouTubeIngesting: Sendable {
 
 extension YouTubeIngesting {
     func ingestWithMetadata(youTubeURL: URL) async throws -> YouTubeIngestResult {
+        try await ingestWithMetadata(youTubeURL: youTubeURL, onProgress: { _ in })
+    }
+
+    func ingestWithMetadata(youTubeURL: URL, onProgress: @Sendable (YouTubeIngestPhase) -> Void) async throws -> YouTubeIngestResult {
         YouTubeIngestResult(
             audioURL: try await ingest(youTubeURL: youTubeURL),
             metadata: nil
@@ -36,6 +40,26 @@ extension YouTubeIngesting {
 }
 
 extension YouTubeIngestClient: YouTubeIngesting {}
+
+// MARK: - StrataCreationPhase (truthful progress)
+
+enum StrataCreationPhase: Sendable, Equatable {
+    case downloadingAudio
+    case preparingAudio
+    case loadingModel
+    case creatingStrata
+    case complete
+
+    var displayString: String {
+        switch self {
+        case .downloadingAudio: return "Downloading audio"
+        case .preparingAudio: return "Preparing audio"
+        case .loadingModel: return "Loading separation model"
+        case .creatingStrata: return "Creating strata"
+        case .complete: return "Complete — 6 strata"
+        }
+    }
+}
 
 // LocalAudioIngesting is defined in LocalAudioIngestClient.swift and adopted there.
 // InferenceController depends on the protocol, not concrete type, for testability.
@@ -57,8 +81,11 @@ final class InferenceController {
     }
 
     private(set) var state: SeparationState = .idle
-    private(set) var statusMessage: String = "Ready to separate"
+    private(set) var statusMessage: String = "Ready to create strata"
     private(set) var result: SeparationResult?
+    private(set) var creationPhase: StrataCreationPhase?
+    private(set) var isYouTubeFlow: Bool = false
+    var showDownloadingPhase: Bool { isYouTubeFlow }
     private(set) var errorMessage: String?
     private(set) var exportBaseName: String?
     private(set) var youTubeExportMetadata: YouTubeTrackMetadata?
@@ -162,6 +189,9 @@ final class InferenceController {
     }
 
     var isSeparating: Bool {
+        if case .failed = state { return false }
+        if case .completed = state { return false }
+        if let phase = creationPhase, phase != .complete { return true }
         if case .separating = state { return true }
         if case .loadingModel = state { return true }
         return false
@@ -279,7 +309,9 @@ final class InferenceController {
 
         // Reset UI state for new operation
         state = .loadingModel
-        statusMessage = "Loading model…"
+        statusMessage = "Loading separation model"
+        creationPhase = .loadingModel
+        isYouTubeFlow = false
         result = nil
         errorMessage = nil
         exportBaseName = nil
@@ -306,7 +338,8 @@ final class InferenceController {
                         guard generation == self.latestGeneration else { return }
                         guard !Task.isCancelled else { return }
                         self.state = .separating
-                        self.statusMessage = "Separating…"
+                        self.statusMessage = "Creating strata"
+                        self.creationPhase = .creatingStrata
                     }
                 }
 
@@ -316,7 +349,8 @@ final class InferenceController {
 
                 self.result = separationResult
                 self.state = .completed
-                self.statusMessage = "Complete — \(separationResult.stems.count) stems"
+                self.statusMessage = "Complete — 6 strata"
+                self.creationPhase = .complete
                 self.errorMessage = nil
 
             } catch is CancellationError {
@@ -366,7 +400,9 @@ final class InferenceController {
         // Keep single source coherent: stale stems/status from prior YouTube source must not linger when local source becomes active.
         result = nil
         state = .idle
-        statusMessage = "Ready to separate"
+        statusMessage = "Ready to create strata"
+        creationPhase = nil
+        isYouTubeFlow = false
         errorMessage = nil
     }
 
@@ -389,7 +425,9 @@ final class InferenceController {
         previousTask?.cancel()
 
         state = .loadingModel
-        statusMessage = "Loading model…"
+        statusMessage = "Preparing audio"
+        creationPhase = .preparingAudio
+        isYouTubeFlow = false
         result = nil
         errorMessage = nil
         exportBaseName = nil
@@ -422,12 +460,22 @@ final class InferenceController {
                 guard generation == self.latestGeneration else { return }
                 guard !Task.isCancelled else { throw CancellationError() }
 
+                // Truthful phase: local ingest complete → loading model
+                await MainActor.run {
+                    guard generation == self.latestGeneration else { return }
+                    guard !Task.isCancelled else { return }
+                    self.creationPhase = .loadingModel
+                    self.statusMessage = "Loading separation model"
+                    self.state = .loadingModel
+                }
+
                 let separationResult = try await client.runSeparation(inputPath: canonicalURL, outputBaseDir: base) {
                     await MainActor.run {
                         guard generation == self.latestGeneration else { return }
                         guard !Task.isCancelled else { return }
                         self.state = .separating
-                        self.statusMessage = "Separating…"
+                        self.statusMessage = "Creating strata"
+                        self.creationPhase = .creatingStrata
                     }
                 }
 
@@ -437,7 +485,8 @@ final class InferenceController {
                 self.result = separationResult
                 self.exportBaseName = derivedBaseName
                 self.state = .completed
-                self.statusMessage = "Complete — \(separationResult.stems.count) stems"
+                self.statusMessage = "Complete — 6 strata"
+                self.creationPhase = .complete
                 self.errorMessage = nil
 
             } catch is CancellationError {
@@ -500,7 +549,9 @@ final class InferenceController {
         previousTask?.cancel()
 
         state = .loadingModel
-        statusMessage = "Downloading…"
+        statusMessage = "Downloading audio"
+        creationPhase = .downloadingAudio
+        isYouTubeFlow = true
         result = nil
         errorMessage = nil
         exportBaseName = nil
@@ -529,7 +580,22 @@ final class InferenceController {
                 if canReuse, let loaded = self.loadedYouTubeSource {
                     ingestResult = loaded
                 } else {
-                    let fetched = try await youTubeIngest.ingestWithMetadata(youTubeURL: youTubeURL)
+                    let fetched = try await youTubeIngest.ingestWithMetadata(youTubeURL: youTubeURL, onProgress: { phase in
+                        Task { @MainActor in
+                            guard generation == self.latestGeneration else { return }
+                            guard !Task.isCancelled else { return }
+                            switch phase {
+                            case .downloading:
+                                self.creationPhase = .downloadingAudio
+                                self.statusMessage = "Downloading audio"
+                                self.state = .loadingModel
+                            case .preparing:
+                                self.creationPhase = .preparingAudio
+                                self.statusMessage = "Preparing audio"
+                                self.state = .loadingModel
+                            }
+                        }
+                    })
 
                     try Task.checkCancellation()
                     guard generation == self.latestGeneration else { return }
@@ -542,8 +608,13 @@ final class InferenceController {
 
                 guard generation == self.latestGeneration else { return }
                 guard !Task.isCancelled else { throw CancellationError() }
-                self.state = .loadingModel
-                self.statusMessage = "Loading model…"
+                await MainActor.run {
+                    guard generation == self.latestGeneration else { return }
+                    guard !Task.isCancelled else { return }
+                    self.state = .loadingModel
+                    self.statusMessage = "Loading separation model"
+                    self.creationPhase = .loadingModel
+                }
 
                 let separationResult = try await client.runSeparation(
                     inputPath: ingestResult.audioURL,
@@ -553,7 +624,8 @@ final class InferenceController {
                         guard generation == self.latestGeneration else { return }
                         guard !Task.isCancelled else { return }
                         self.state = .separating
-                        self.statusMessage = "Separating…"
+                        self.statusMessage = "Creating strata"
+                        self.creationPhase = .creatingStrata
                     }
                 }
 
@@ -566,7 +638,8 @@ final class InferenceController {
                 self.youTubeExportArtworkURL = ingestResult.artworkURL
                 self.populateEditableMetadata(from: ingestResult.metadata)
                 self.state = .completed
-                self.statusMessage = "Complete — \(separationResult.stems.count) stems"
+                self.statusMessage = "Complete — 6 strata"
+                self.creationPhase = .complete
                 self.errorMessage = nil
 
             } catch is CancellationError {
@@ -630,6 +703,8 @@ final class InferenceController {
 
         state = .loadingModel
         statusMessage = "Downloading…"
+        creationPhase = nil
+        isYouTubeFlow = false
         result = nil
         errorMessage = nil
         exportBaseName = nil
@@ -734,6 +809,8 @@ final class InferenceController {
 
         state = .loadingModel
         statusMessage = "Downloading…"
+        creationPhase = nil
+        isYouTubeFlow = false
         result = nil
         errorMessage = nil
         exportBaseName = nil
@@ -836,7 +913,9 @@ final class InferenceController {
         previousTask?.cancel()
 
         state = .loadingModel
-        statusMessage = "Loading model…"
+        statusMessage = "Loading separation model"
+        creationPhase = .loadingModel
+        isYouTubeFlow = true
         result = nil
         errorMessage = nil
 
@@ -860,7 +939,8 @@ final class InferenceController {
                         guard generation == self.latestGeneration else { return }
                         guard !Task.isCancelled else { return }
                         self.state = .separating
-                        self.statusMessage = "Separating…"
+                        self.statusMessage = "Creating strata"
+                        self.creationPhase = .creatingStrata
                     }
                 }
 
@@ -872,7 +952,8 @@ final class InferenceController {
                 self.youTubeExportMetadata = loaded.metadata
                 self.youTubeExportArtworkURL = loaded.artworkURL
                 self.state = .completed
-                self.statusMessage = "Complete — \(separationResult.stems.count) stems"
+                self.statusMessage = "Complete — 6 strata"
+                self.creationPhase = .complete
                 self.errorMessage = nil
 
             } catch is CancellationError {
@@ -907,6 +988,8 @@ final class InferenceController {
     /// (which triggers PlaybackController.load via ContentView observer and fails for WebM).
     func prepareYouTubeMP3ExportFromLoadedPreview() {
         if youTubeCleanupFailed { return }
+        creationPhase = nil
+        isYouTubeFlow = false
         guard let preview = loadedYouTubePreview, let url = loadedYouTubeURL else {
             if let loaded = loadedYouTubeSource, FileManager.default.fileExists(atPath: loaded.audioURL.path) {
                 youTubeExportMetadata = loaded.metadata
@@ -1034,7 +1117,9 @@ final class InferenceController {
         let previousTask = currentTask
         previousTask?.cancel()
         state = .loadingModel
-        statusMessage = "Downloading…"
+        statusMessage = "Downloading audio"
+        creationPhase = .downloadingAudio
+        isYouTubeFlow = true
         result = nil
         errorMessage = nil
         let client = self.client
@@ -1048,7 +1133,22 @@ final class InferenceController {
             if self.youTubeCleanupFailed { return }
             do {
                 try Task.checkCancellation()
-                let ingestResult = try await youTubeIngest.ingestWithMetadata(youTubeURL: captureURL)
+                let ingestResult = try await youTubeIngest.ingestWithMetadata(youTubeURL: captureURL, onProgress: { phase in
+                    Task { @MainActor in
+                        guard generation == self.latestGeneration else { return }
+                        guard !Task.isCancelled else { return }
+                        switch phase {
+                        case .downloading:
+                            self.creationPhase = .downloadingAudio
+                            self.statusMessage = "Downloading audio"
+                            self.state = .loadingModel
+                        case .preparing:
+                            self.creationPhase = .preparingAudio
+                            self.statusMessage = "Preparing audio"
+                            self.state = .loadingModel
+                        }
+                    }
+                })
                 try Task.checkCancellation()
                 guard generation == self.latestGeneration else { return }
                 guard !Task.isCancelled else { throw CancellationError() }
@@ -1056,8 +1156,13 @@ final class InferenceController {
                 self.youTubeExportMetadata = ingestResult.metadata ?? capturePreview.metadata
                 self.youTubeExportArtworkURL = ingestResult.artworkURL ?? capturePreview.artworkURL
                 self.exportBaseName = ingestResult.metadata?.exportBaseName ?? capturePreview.metadata?.exportBaseName
-                self.state = .loadingModel
-                self.statusMessage = "Loading model…"
+                await MainActor.run {
+                    guard generation == self.latestGeneration else { return }
+                    guard !Task.isCancelled else { return }
+                    self.state = .loadingModel
+                    self.statusMessage = "Loading separation model"
+                    self.creationPhase = .loadingModel
+                }
                 let separationResult = try await client.runSeparation(
                     inputPath: ingestResult.audioURL,
                     outputBaseDir: base
@@ -1066,14 +1171,16 @@ final class InferenceController {
                         guard generation == self.latestGeneration else { return }
                         guard !Task.isCancelled else { return }
                         self.state = .separating
-                        self.statusMessage = "Separating…"
+                        self.statusMessage = "Creating strata"
+                        self.creationPhase = .creatingStrata
                     }
                 }
                 guard generation == self.latestGeneration else { return }
                 guard !Task.isCancelled else { return }
                 self.result = separationResult
                 self.state = .completed
-                self.statusMessage = "Complete — \(separationResult.stems.count) stems"
+                self.statusMessage = "Complete — 6 strata"
+                self.creationPhase = .complete
                 self.errorMessage = nil
             } catch is CancellationError {
                 guard generation == self.latestGeneration else { return }
@@ -1207,6 +1314,7 @@ final class InferenceController {
         state = .failed("Cancelled")
         statusMessage = "Cancelled"
         errorMessage = "Cancelled"
+        creationPhase = nil
     }
 
     /// Structured application-exit operation (Sol xHigh).
@@ -1262,7 +1370,9 @@ final class InferenceController {
         await drainCleanupChain()
 
         state = .idle
-        statusMessage = "Ready to separate"
+        statusMessage = "Ready to create strata"
+        creationPhase = nil
+        isYouTubeFlow = false
         if youTubeCancelThrew || localCancelThrew {
             return .unsafeToTerminate(reason: .cleanupIncomplete)
         }

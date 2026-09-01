@@ -40,6 +40,10 @@ private actor MockYouTubeMetadataSuccess: YouTubeIngesting {
     }
 
     func ingestWithMetadata(youTubeURL: URL) async throws -> YouTubeIngestResult {
+        try await ingestWithMetadata(youTubeURL: youTubeURL, onProgress: { _ in })
+    }
+
+    func ingestWithMetadata(youTubeURL: URL, onProgress: @Sendable (YouTubeIngestPhase) -> Void) async throws -> YouTubeIngestResult {
         ingestCallCount += 1
         ingestedURLs.append(youTubeURL)
         try Task.checkCancellation()
@@ -71,6 +75,10 @@ private actor MockYouTubePreviewFlow: YouTubeIngesting {
     }
 
     func ingestWithMetadata(youTubeURL: URL) async throws -> YouTubeIngestResult {
+        try await ingestWithMetadata(youTubeURL: youTubeURL, onProgress: { _ in })
+    }
+
+    func ingestWithMetadata(youTubeURL: URL, onProgress: @Sendable (YouTubeIngestPhase) -> Void) async throws -> YouTubeIngestResult {
         ingestCallCount += 1
         ingestURLs.append(youTubeURL)
         try Task.checkCancellation()
@@ -223,6 +231,39 @@ private actor MockYouTubeControllable: YouTubeIngesting {
             throw YouTubeIngestError.cleanupFailed("mock still running after SIGTERM/SIGKILL")
         }
     }
+}
+
+private actor MockYouTubePhased: YouTubeIngesting {
+    let result: YouTubeIngestResult
+    private(set) var ingestCallCount = 0
+    init(result: YouTubeIngestResult) { self.result = result }
+    func ingest(youTubeURL: URL) async throws -> URL {
+        try await ingestWithMetadata(youTubeURL: youTubeURL, onProgress: { _ in }).audioURL
+    }
+    func ingestWithMetadata(youTubeURL: URL, onProgress: @Sendable (YouTubeIngestPhase) -> Void) async throws -> YouTubeIngestResult {
+        ingestCallCount += 1
+        onProgress(.downloading)
+        try await Task.sleep(for: .milliseconds(30))
+        onProgress(.preparing)
+        try await Task.sleep(for: .milliseconds(30))
+        try Task.checkCancellation()
+        return result
+    }
+    func cancel() async throws {}
+}
+
+private actor MockYouTubePhasedFailure: YouTubeIngesting {
+    let error: YouTubeIngestError
+    init(error: YouTubeIngestError) { self.error = error }
+    func ingest(youTubeURL: URL) async throws -> URL {
+        throw error
+    }
+    func ingestWithMetadata(youTubeURL: URL, onProgress: @Sendable (YouTubeIngestPhase) -> Void) async throws -> YouTubeIngestResult {
+        onProgress(.downloading)
+        try await Task.sleep(for: .milliseconds(20))
+        throw error
+    }
+    func cancel() async throws {}
 }
 
 private final class AtomicBool: @unchecked Sendable {
@@ -591,6 +632,58 @@ final class InferenceControllerYouTubeTests: XCTestCase {
                 outdir=obj["output_dir"]
                 inp=obj["input_path"]
                 \(captureLine)sys.stdout.write(json.dumps({"protocol":1,"type":"started","job_id":jid})+"\\n"); sys.stdout.flush()
+                job_dir=os.path.join(outdir, jid)
+                os.makedirs(job_dir, exist_ok=True)
+                inp_sha=hashlib.sha256(open(inp,'rb').read()).hexdigest()
+                stems=[]
+                for name in ["bass","drums","other","vocals","guitar","piano"]:
+                    p=os.path.join(job_dir, f"{name}.wav")
+                    make_wav(p, frames=1024)
+                    stems.append({"name":name,"path":p,"sha256":hashlib.sha256(open(p,'rb').read()).hexdigest(),"file_size":os.path.getsize(p),"frame_count":1024,"channels":2,"sample_rate":44100})
+                    sys.stdout.write(json.dumps({"protocol":1,"type":"stem","job_id":jid,"name":name,"path":p})+"\\n"); sys.stdout.flush()
+                manifest={"job_id":jid,"model":"roformer-model-bs-roformer-sw-by-jarredou","checkpoint_sha256":"24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e","backend":"mlx","device":"mps","input_path":inp,"output_dir":outdir,"input_sha256":inp_sha,"input_metadata":{"sample_rate":44100,"channels":2,"frames":1024,"duration":0.02,"sha256":inp_sha},"stems":stems}
+                man_path=os.path.join(job_dir,"manifest.json")
+                open(man_path,'w').write(json.dumps(manifest))
+                sys.stdout.write(json.dumps({"protocol":1,"type":"done","job_id":jid,"output_manifest":man_path})+"\\n"); sys.stdout.flush()
+        """
+    }
+
+    private func delayedSuccessScript(delaySeconds: Double = 0.8) -> String {
+        """
+        import sys, json, os, struct, hashlib, time
+        sys.stdout.write(json.dumps({"protocol":1,"type":"loading_model","model":"m"})+"\\n"); sys.stdout.flush()
+        sys.stdout.write(json.dumps({"protocol":1,"type":"ready","backend":"mlx","device":"mps","checkpoint_sha256":"24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e"})+"\\n"); sys.stdout.flush()
+        def make_wav(path, frames=1024, sr=44100, ch=2):
+            data = b''.join(struct.pack('<f', 0.0) for _ in range(frames*ch))
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'wb') as f:
+                f.write(b'RIFF')
+                f.write(struct.pack('<I', 36 + len(data)))
+                f.write(b'WAVE')
+                f.write(b'fmt ')
+                f.write(struct.pack('<I', 16))
+                f.write(struct.pack('<H', 3))
+                f.write(struct.pack('<H', ch))
+                f.write(struct.pack('<I', sr))
+                f.write(struct.pack('<I', sr * ch * 4))
+                f.write(struct.pack('<H', ch * 4))
+                f.write(struct.pack('<H', 32))
+                f.write(b'data')
+                f.write(struct.pack('<I', len(data)))
+                f.write(data)
+        for line in sys.stdin:
+            try:
+                obj=json.loads(line)
+            except:
+                continue
+            if obj.get("type")=="shutdown":
+                sys.exit(0)
+            if obj.get("type")=="separate":
+                jid=obj["job_id"]
+                outdir=obj["output_dir"]
+                inp=obj["input_path"]
+                sys.stdout.write(json.dumps({"protocol":1,"type":"started","job_id":jid})+"\\n"); sys.stdout.flush()
+                time.sleep(\(delaySeconds))
                 job_dir=os.path.join(outdir, jid)
                 os.makedirs(job_dir, exist_ok=True)
                 inp_sha=hashlib.sha256(open(inp,'rb').read()).hexdigest()
@@ -1351,6 +1444,135 @@ final class InferenceControllerYouTubeTests: XCTestCase {
         XCTAssertFalse(didStart.value, "inference must not start for rejected YouTube")
         let ingestedFinal = await hanging.ingestedURLs
         XCTAssertEqual(ingestedFinal.count, prevIngestedCount)
+
+        await controller.shutdownWorker(policy: .testShort())
+    }
+
+    // MARK: - Truthful phase-based progress
+
+    func testYouTubeSeparationTruthfulPhasesEndToEnd() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let mixtureURL = directory.appendingPathComponent("mixture.wav")
+        try makeWAV(at: mixtureURL, frames: 1024)
+        let metadata = try XCTUnwrap(YouTubeTrackMetadata(artist: "Artist", title: "Title"))
+        let phasedResult = YouTubeIngestResult(audioURL: mixtureURL, metadata: metadata)
+        let phasedMock = MockYouTubePhased(result: phasedResult)
+
+        let workerDir = try makeFakeWorker(script: delayedSuccessScript())
+        defer { try? FileManager.default.removeItem(at: workerDir) }
+        let client = InferenceWorkerClient(readinessTimeout: .seconds(3), startedTimeout: .seconds(2), separationTimeout: .seconds(5), workerDirectory: workerDir)
+        let outputBase = directory.appendingPathComponent("output", isDirectory: true)
+        try FileManager.default.createDirectory(at: outputBase, withIntermediateDirectories: true)
+        let controller = InferenceController(client: client, outputBase: outputBase, youTubeIngest: phasedMock)
+
+        let url = URL(string: "https://www.youtube.com/watch?v=phase-test")!
+        controller.startSeparation(youTubeURL: url)
+
+        XCTAssertEqual(controller.creationPhase, .downloadingAudio)
+        XCTAssertEqual(controller.statusMessage, "Downloading audio")
+        XCTAssertTrue(controller.isYouTubeFlow)
+        XCTAssertTrue(controller.showDownloadingPhase)
+        XCTAssertTrue(controller.isSeparating)
+
+        var observedPreparing = false
+        for _ in 0..<50 {
+            if controller.creationPhase == .preparingAudio && controller.statusMessage == "Preparing audio" {
+                observedPreparing = true
+                break
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertTrue(observedPreparing, "Should transition to Preparing audio via FFmpeg phase")
+
+        var observedLoading = false
+        for _ in 0..<50 {
+            if controller.creationPhase == .loadingModel && controller.statusMessage == "Loading separation model" {
+                observedLoading = true
+                break
+            }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertTrue(observedLoading, "Should transition to Loading separation model after ingest")
+
+        var observedCreating = false
+        for _ in 0..<100 {
+            if controller.creationPhase == .creatingStrata && controller.statusMessage == "Creating strata" {
+                observedCreating = true
+                break
+            }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertTrue(observedCreating, "Worker .started should transition to Creating strata")
+
+        let task = try XCTUnwrap(controller.debugCurrentTask())
+        await task.value
+        XCTAssertEqual(controller.creationPhase, .complete)
+        XCTAssertEqual(controller.statusMessage, "Complete — 6 strata")
+        XCTAssertEqual(controller.state, .completed)
+        XCTAssertNotNil(controller.result)
+        XCTAssertEqual(controller.result?.stems.count, 6)
+        XCTAssertFalse(controller.isSeparating)
+
+        await controller.shutdownWorker(policy: .testShort())
+    }
+
+    func testYouTubeSeparationFromLoadedSourceSkipsDownloadPrepare() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let mixtureURL = directory.appendingPathComponent("mixture.wav")
+        try makeWAV(at: mixtureURL)
+        let metadata = try XCTUnwrap(YouTubeTrackMetadata(artist: "Artist", title: "Title"))
+        let ingestResult = YouTubeIngestResult(audioURL: mixtureURL, metadata: metadata)
+        let phasedMock = MockYouTubePhased(result: ingestResult)
+        let workerDir = try makeFakeWorker(script: floatSuccessScript())
+        defer { try? FileManager.default.removeItem(at: workerDir) }
+        let client = InferenceWorkerClient(readinessTimeout: .seconds(3), startedTimeout: .seconds(2), separationTimeout: .seconds(5), workerDirectory: workerDir)
+        let outputBase = directory.appendingPathComponent("output", isDirectory: true)
+        let controller = InferenceController(client: client, outputBase: outputBase, youTubeIngest: phasedMock)
+
+        let url = URL(string: "https://www.youtube.com/watch?v=reuse-test")!
+        controller.startSeparation(youTubeURL: url)
+        let firstTask = try XCTUnwrap(controller.debugCurrentTask())
+        await firstTask.value
+        XCTAssertEqual(controller.state, .completed)
+
+        controller.startSeparationFromLoadedYouTubeSource()
+        XCTAssertEqual(controller.creationPhase, .loadingModel)
+        XCTAssertEqual(controller.statusMessage, "Loading separation model")
+        XCTAssertTrue(controller.isYouTubeFlow)
+
+        let secondTask = try XCTUnwrap(controller.debugCurrentTask())
+        await secondTask.value
+        XCTAssertEqual(controller.creationPhase, .complete)
+        XCTAssertEqual(controller.statusMessage, "Complete — 6 strata")
+
+        await controller.shutdownWorker(policy: .testShort())
+    }
+
+    func testYouTubeIngestFailurePreservesErrorWithoutFakeProgress() async throws {
+        let failureMock = MockYouTubePhasedFailure(error: .invalidYouTubeURL("https://www.youtube.com/watch?v=bad"))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let workerDir = try makeFakeWorker(script: floatSuccessScript())
+        defer { try? FileManager.default.removeItem(at: workerDir) }
+        let client = InferenceWorkerClient(readinessTimeout: .seconds(2), startedTimeout: .seconds(1), separationTimeout: .seconds(2), workerDirectory: workerDir)
+        let controller = InferenceController(client: client, outputBase: directory, youTubeIngest: failureMock)
+
+        controller.startSeparation(youTubeURL: URL(string: "https://www.youtube.com/watch?v=bad")!)
+        let task = try XCTUnwrap(controller.debugCurrentTask())
+        await task.value
+        if case .failed(let msg) = controller.state {
+            XCTAssertTrue(msg.contains("Invalid YouTube URL"))
+        } else {
+            XCTFail("Expected failed, got \(controller.state)")
+        }
+        XCTAssertNil(controller.result)
+        XCTAssertNotEqual(controller.statusMessage, "Complete — 6 strata")
+        XCTAssertNotEqual(controller.creationPhase, .complete)
 
         await controller.shutdownWorker(policy: .testShort())
     }

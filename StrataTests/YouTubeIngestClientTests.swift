@@ -1494,4 +1494,56 @@ final class YouTubeIngestClientTests: XCTestCase {
         XCTAssertEqual(preview.metadata?.title, "Je te laisserai des mots")
         XCTAssertEqual(preview.metadata?.channel, "Some Other Channel")
     }
+
+    // MARK: - Progress phases (truthful)
+
+    func testIngestWithMetadataReportsDownloadingThenPreparing() async throws {
+        let cacheBase = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase) }
+        let logFile = try makeLogFile()
+        defer { try? FileManager.default.removeItem(at: logFile) }
+
+        let ytScript = """
+        #!/usr/bin/python3
+        import sys, os
+        args = sys.argv[1:]
+        if "-o" in args:
+            idx = args.index("-o")
+            tmpl = args[idx+1]
+            out = tmpl.replace("%(ext)s", "mp4")
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            open(out, "wb").write(b"\\x00"*1024)
+        sys.exit(0)
+        """
+        let ffScript = writeValidWavPythonScript(logPath: logFile.path, frames: 1024, sr: 44100, ch: 2)
+        let ytURL = try makeFakeExecutable(name: "yt-dlp", scriptContent: ytScript)
+        let ffURL = try makeFakeExecutable(name: "ffmpeg", scriptContent: ffScript)
+        defer {
+            try? FileManager.default.removeItem(at: ytURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: ffURL.deletingLastPathComponent())
+        }
+
+        let client = YouTubeIngestClient(ytDlpURL: ytURL, ffmpegURL: ffURL, cacheBaseURL: cacheBase)
+
+        final class Collector: @unchecked Sendable {
+            private let lock = NSLock()
+            private var _phases: [YouTubeIngestPhase] = []
+            var phases: [YouTubeIngestPhase] { lock.withLock { _phases } }
+            func append(_ p: YouTubeIngestPhase) { lock.withLock { _phases.append(p) } }
+        }
+        let collector = Collector()
+
+        let result = try await client.ingestWithMetadata(youTubeURL: validYouTubeURL(), onProgress: { phase in
+            collector.append(phase)
+        })
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.audioURL.path))
+        XCTAssertEqual(collector.phases, [.downloading, .preparing], "Progress must be downloading then preparing in order")
+        // Backward-compatible no-arg call must still work
+        let cacheBase2 = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase2) }
+        let client2 = YouTubeIngestClient(ytDlpURL: ytURL, ffmpegURL: ffURL, cacheBaseURL: cacheBase2)
+        let result2 = try await client2.ingestWithMetadata(youTubeURL: shortYouTubeURL())
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result2.audioURL.path))
+    }
 }
