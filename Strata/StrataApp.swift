@@ -60,6 +60,7 @@ private struct WindowIDAccessor: NSViewRepresentable {
 private enum StrataWindowID {
     static let main = NSUserInterfaceItemIdentifier("StrataMainWindow")
     static let settings = NSUserInterfaceItemIdentifier("StrataSettingsWindow")
+    static let about = NSUserInterfaceItemIdentifier("StrataAboutWindow")
 }
 
 @MainActor
@@ -203,6 +204,29 @@ struct StrataApp: App {
                 y: visible.origin.y + (visible.height - size.height) / 2
             )
             return WindowPlacement(position, size: size)
+        }
+
+        Window("About Strata", id: "about-strata") {
+            AboutView()
+                .frame(minWidth: 480, idealWidth: 480, maxWidth: .infinity, minHeight: 520, idealHeight: 560)
+                .background(WindowIDAccessor(identifier: StrataWindowID.about))
+                .preferredColorScheme(appearance.colorScheme)
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 480, height: 560)
+        .defaultWindowPlacement { _, context in
+            let visible = context.defaultDisplay.visibleRect
+            let size = CGSize(width: 480, height: 560)
+            let position = CGPoint(
+                x: visible.origin.x + (visible.width - size.width) / 2,
+                y: visible.origin.y + (visible.height - size.height) / 2
+            )
+            return WindowPlacement(position, size: size)
+        }
+        .commands {
+            CommandGroup(replacing: .appInfo) {
+                AboutCommandButton()
+            }
         }
     }
 }

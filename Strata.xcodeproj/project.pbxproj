@@ -65,6 +65,7 @@
 		A10000000000000000000039 /* LocalMP3ExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000039 /* LocalMP3ExportTests.swift */; };
 		A1000000000000000000003A /* StorageLocationPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000003A /* StorageLocationPreferences.swift */; };
 		A1000000000000000000003B /* StorageLocationPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000003B /* StorageLocationPreferencesTests.swift */; };
+		A1000000000000000000003C /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000003C /* AboutView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -128,6 +129,7 @@
 		B10000000000000000000039 /* LocalMP3ExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalMP3ExportTests.swift; sourceTree = "<group>"; };
 		B1000000000000000000003A /* StorageLocationPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageLocationPreferences.swift; sourceTree = "<group>"; };
 		B1000000000000000000003B /* StorageLocationPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageLocationPreferencesTests.swift; sourceTree = "<group>"; };
+		B1000000000000000000003C /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -169,6 +171,7 @@
 		E00000000000000000000002 /* Strata */ = {
 			isa = PBXGroup;
 			children = (
+				E0000000000000000000000C /* About */,
 				E00000000000000000000003 /* Audio */,
 				E00000000000000000000008 /* Application */,
 				E00000000000000000000009 /* Inference */,
@@ -190,6 +193,14 @@
 				B10000000000000000000027 /* WaveformProvider.swift */,
 			);
 			path = Audio;
+			sourceTree = "<group>";
+		};
+		E0000000000000000000000C /* About */ = {
+			isa = PBXGroup;
+			children = (
+				B1000000000000000000003C /* AboutView.swift */,
+			);
+			path = About;
 			sourceTree = "<group>";
 		};
 		E00000000000000000000004 /* Views */ = {
@@ -304,6 +315,7 @@
 			buildPhases = (
 				G00000000000000000000001 /* Sources */,
 				D10000000000000000000001 /* Frameworks */,
+				J00000000000000000000001 /* Generate AboutMetadata.json */,
 				G00000000000000000000002 /* Resources */,
 			);
 			buildRules = (
@@ -419,6 +431,28 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		J00000000000000000000001 /* Generate AboutMetadata.json */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/InferenceWorker/pyproject.toml",
+				"$(SRCROOT)/InferenceWorker/uv.lock",
+				"$(SRCROOT)/InferenceWorker/.python-version",
+				"$(SRCROOT)/scripts/generate-about-metadata.py",
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AboutMetadata.json",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nOUTPUT=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/AboutMetadata.json\"\nmkdir -p \"${OUTPUT%/*}\"\npython3 \"${SRCROOT}/scripts/generate-about-metadata.py\" --pyproject \"${SRCROOT}/InferenceWorker/pyproject.toml\" --lock \"${SRCROOT}/InferenceWorker/uv.lock\" --python-version \"${SRCROOT}/InferenceWorker/.python-version\" --output \"$OUTPUT\"\necho \"Generated AboutMetadata.json at $OUTPUT\"\n";
+			name = "Generate AboutMetadata.json";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		G00000000000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -445,6 +479,7 @@
 				A10000000000000000000019 /* YouTubeIngestClient.swift in Sources */,
 				A10000000000000000000033 /* LocalAudioIngestClient.swift in Sources */,
 				A10000000000000000000037 /* RuntimeReadiness.swift in Sources */,
+				A1000000000000000000003C /* AboutView.swift in Sources */,
 				A10000000000000000000022 /* StemExporter.swift in Sources */,
 				A10000000000000000000024 /* ExportFolderPreference.swift in Sources */,
 				A1000000000000000000003A /* StorageLocationPreferences.swift in Sources */,
