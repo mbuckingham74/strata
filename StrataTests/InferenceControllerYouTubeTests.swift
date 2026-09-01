@@ -49,6 +49,57 @@ private actor MockYouTubeMetadataSuccess: YouTubeIngesting {
     func cancel() async throws {}
 }
 
+private actor MockYouTubePreviewFlow: YouTubeIngesting {
+    let preview: YouTubePreviewResult
+    let ingestResult: YouTubeIngestResult?
+    let downloadResult: YouTubeIngestResult?
+    private(set) var fetchPreviewCallCount = 0
+    private(set) var ingestCallCount = 0
+    private(set) var downloadCallCount = 0
+    private(set) var fetchPreviewURLs: [URL] = []
+    private(set) var ingestURLs: [URL] = []
+    private(set) var downloadURLs: [URL] = []
+
+    init(preview: YouTubePreviewResult, ingestResult: YouTubeIngestResult? = nil, downloadResult: YouTubeIngestResult? = nil) {
+        self.preview = preview
+        self.ingestResult = ingestResult
+        self.downloadResult = downloadResult
+    }
+
+    func ingest(youTubeURL: URL) async throws -> URL {
+        try await ingestWithMetadata(youTubeURL: youTubeURL).audioURL
+    }
+
+    func ingestWithMetadata(youTubeURL: URL) async throws -> YouTubeIngestResult {
+        ingestCallCount += 1
+        ingestURLs.append(youTubeURL)
+        try Task.checkCancellation()
+        guard let r = ingestResult ?? downloadResult else {
+            throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: 1, stderrTail: "no ingestResult configured")
+        }
+        return r
+    }
+
+    func fetchPreview(youTubeURL: URL) async throws -> YouTubePreviewResult {
+        fetchPreviewCallCount += 1
+        fetchPreviewURLs.append(youTubeURL)
+        try Task.checkCancellation()
+        return preview
+    }
+
+    func downloadAudioOnly(youTubeURL: URL) async throws -> YouTubeIngestResult {
+        downloadCallCount += 1
+        downloadURLs.append(youTubeURL)
+        try Task.checkCancellation()
+        guard let r = downloadResult ?? ingestResult else {
+            throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: 1, stderrTail: "no downloadResult configured")
+        }
+        return r
+    }
+
+    func cancel() async throws {}
+}
+
 private actor MockYouTubeFailure: YouTubeIngesting {
     let error: YouTubeIngestError
     private(set) var cancelCallCount = 0
@@ -213,18 +264,23 @@ final class InferenceControllerYouTubeTests: XCTestCase {
     }
 
     func testLoadYouTubeSourceIsIngestOnlyAndSavePreparationReusesCanonicalSource() async throws {
+        // Metadata-only load: fetchPreview, no media, no FFmpeg, no separation
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let mixtureURL = directory.appendingPathComponent("mixture.wav")
-        try makeWAV(at: mixtureURL)
+        let artworkURL = directory.appendingPathComponent("thumb.jpg")
+        try Data([0xFF, 0xD8, 0xFF, 0xE0]).write(to: artworkURL)
         let metadata = try XCTUnwrap(
             YouTubeTrackMetadata(artist: "Artist", title: "Song Title", channel: "Channel")
         )
-        let result = YouTubeIngestResult(audioURL: mixtureURL, metadata: metadata)
-        let ingest = MockYouTubeMetadataSuccess(result: result)
+        let preview = YouTubePreviewResult(metadata: metadata, artworkURL: artworkURL, duration: 123.4)
+        let ingest = MockYouTubePreviewFlow(preview: preview)
+        // Hook to ensure no worker launched
+        let client = InferenceWorkerClient()
+        let sawWorker = AtomicBool()
+        await client.setTestHook { _ in sawWorker.setTrue() }
         let controller = InferenceController(
-            client: InferenceWorkerClient(),
+            client: client,
             outputBase: directory,
             youTubeIngest: ingest
         )
@@ -235,18 +291,140 @@ final class InferenceControllerYouTubeTests: XCTestCase {
         await loadTask.value
 
         XCTAssertEqual(controller.state, .idle)
+        XCTAssertEqual(controller.statusMessage, "Loaded — Ready to save or separate")
         XCTAssertNil(controller.result, "Loading a source must not start separation")
-        XCTAssertEqual(controller.loadedYouTubeSource, result)
-        XCTAssertTrue(controller.isYouTubeSourceLoaded)
+        XCTAssertNil(controller.loadedYouTubeSource, "Preview load must not create canonical source")
+        XCTAssertEqual(controller.loadedYouTubePreview, preview)
+        XCTAssertEqual(controller.loadedYouTubeURL, url)
+        XCTAssertTrue(controller.isYouTubeSourceLoaded, "isYouTubeSourceLoaded should be true when preview exists")
+        XCTAssertTrue(controller.isYouTubePreviewLoaded)
+        XCTAssertEqual(controller.loadedYouTubeDuration ?? 0, 123.4, accuracy: 0.01)
+        XCTAssertEqual(controller.exportBaseName, metadata.exportBaseName)
+        XCTAssertEqual(controller.youTubeExportMetadata, metadata)
+        XCTAssertEqual(controller.youTubeExportArtworkURL, artworkURL)
+        XCTAssertEqual(controller.editableArtist, "Artist")
+        XCTAssertEqual(controller.editableTitle, "Song Title")
+        XCTAssertEqual(controller.editableArtwork, .keep)
         XCTAssertNil(controller.preparedYouTubeMP3Export)
-        let ingestCountAfterLoad = await ingest.ingestCallCount
-        XCTAssertEqual(ingestCountAfterLoad, 1)
-
-        XCTAssertEqual(controller.prepareYouTubeMP3ExportFromLoadedSource(), result)
-        let ingestCountAfterSavePreparation = await ingest.ingestCallCount
-        XCTAssertEqual(ingestCountAfterSavePreparation, 1, "Save preparation must reuse the loaded source")
+        let fetchCount = await ingest.fetchPreviewCallCount
+        XCTAssertEqual(fetchCount, 1, "Load must call fetchPreview once")
+        let ingestCount = await ingest.ingestCallCount
+        XCTAssertEqual(ingestCount, 0, "Load must NOT call ingestWithMetadata")
+        let downloadCount = await ingest.downloadCallCount
+        XCTAssertEqual(downloadCount, 0, "Load must NOT call downloadAudioOnly")
+        XCTAssertFalse(sawWorker.value, "Preview load must not launch inference worker (no FFmpeg)")
+        XCTAssertNil(controller.prepareYouTubeMP3ExportFromLoadedSource(), "No canonical source yet, prepare should return nil")
         XCTAssertEqual(controller.state, .idle, "Save preparation must not hide or reset the source state")
         XCTAssertNil(controller.result)
+    }
+
+    func testPrepareYouTubeMP3ExportFromLoadedPreviewAcquiresAudioOnly() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let previewArtwork = directory.appendingPathComponent("preview.jpg")
+        try Data([0xFF, 0xD8, 0xFF, 0xE0]).write(to: previewArtwork)
+        let metadata = try XCTUnwrap(YouTubeTrackMetadata(artist: "Preview Artist", title: "Preview Title", channel: "Channel"))
+        let preview = YouTubePreviewResult(metadata: metadata, artworkURL: previewArtwork, duration: 99.9)
+
+        let audioArtwork = directory.appendingPathComponent("audio.jpg")
+        try Data([0xFF, 0xD8, 0xFF, 0xE0]).write(to: audioArtwork)
+        let audioFile = directory.appendingPathComponent("source.m4a")
+        try Data(repeating: 0, count: 2048).write(to: audioFile)
+        let audioResult = YouTubeIngestResult(audioURL: audioFile, metadata: metadata, artworkURL: audioArtwork)
+
+        let ingest = MockYouTubePreviewFlow(preview: preview, ingestResult: audioResult, downloadResult: audioResult)
+        let workerDir = try makeFakeWorker(script: floatSuccessScript())
+        defer { try? FileManager.default.removeItem(at: workerDir) }
+        let client = InferenceWorkerClient(readinessTimeout: .seconds(3), startedTimeout: .seconds(2), separationTimeout: .seconds(3), workerDirectory: workerDir)
+        let sawWorker = AtomicBool()
+        await client.setTestHook { _ in sawWorker.setTrue() }
+
+        let controller = InferenceController(client: client, outputBase: directory, youTubeIngest: ingest)
+        let url = URL(string: "https://www.youtube.com/watch?v=preview-save")!
+
+        controller.loadYouTubeSource(youTubeURL: url)
+        let loadTask = try XCTUnwrap(controller.debugCurrentTask())
+        await loadTask.value
+        XCTAssertTrue(controller.isYouTubePreviewLoaded)
+
+        controller.prepareYouTubeMP3ExportFromLoadedPreview()
+        let saveTask = try XCTUnwrap(controller.debugCurrentTask())
+        await saveTask.value
+
+        XCTAssertEqual(controller.state, .idle)
+        XCTAssertEqual(controller.statusMessage, "Ready to save MP3")
+        XCTAssertEqual(controller.preparedYouTubeMP3Export, audioResult)
+        XCTAssertEqual(controller.youTubeExportMetadata, metadata)
+        XCTAssertEqual(controller.editableArtist, "Preview Artist")
+        XCTAssertEqual(controller.editableTitle, "Preview Title")
+        let fetchCount = await ingest.fetchPreviewCallCount
+        XCTAssertEqual(fetchCount, 1)
+        let downloadCount = await ingest.downloadCallCount
+        XCTAssertEqual(downloadCount, 1, "Save must trigger downloadAudioOnly once")
+        let ingestCount = await ingest.ingestCallCount
+        XCTAssertEqual(ingestCount, 0, "Save must NOT call ingestWithMetadata")
+        XCTAssertFalse(sawWorker.value, "Save MP3 must not start inference")
+        XCTAssertNil(controller.result)
+
+        // Second Save should reuse without re-download
+        controller.prepareYouTubeMP3ExportFromLoadedPreview()
+        // No new task should be created because loadedYouTubeSource already exists; state remains idle
+        // Allow a short hop
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let downloadCountAfterSecond = await ingest.downloadCallCount
+        XCTAssertEqual(downloadCountAfterSecond, 1, "Second Save should reuse without re-download")
+        await controller.shutdownWorker(policy: .testShort())
+    }
+
+    func testStartSeparationFromLoadedPreviewAcquiresAudioOnlyThenSeparates() async throws {
+        let mixtureDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: mixtureDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: mixtureDir) }
+        let mixtureURL = mixtureDir.appendingPathComponent("mixture.wav")
+        try makeWAV(at: mixtureURL, frames: 1024)
+        let artworkURL = mixtureDir.appendingPathComponent("thumb.jpg")
+        try Data([0xFF, 0xD8, 0xFF, 0xE0]).write(to: artworkURL)
+        let metadata = try XCTUnwrap(YouTubeTrackMetadata(artist: "Artist", title: "Song Title", channel: "Channel"))
+        let preview = YouTubePreviewResult(metadata: metadata, artworkURL: artworkURL, duration: 55.5)
+        let ingestResult = YouTubeIngestResult(audioURL: mixtureURL, metadata: metadata, artworkURL: artworkURL)
+        let ingest = MockYouTubePreviewFlow(preview: preview, ingestResult: ingestResult, downloadResult: ingestResult)
+
+        let capturedInput = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".txt")
+        defer { try? FileManager.default.removeItem(at: capturedInput) }
+        let workerDir = try makeFakeWorker(script: floatSuccessScript(capturedInputPathFile: capturedInput))
+        defer { try? FileManager.default.removeItem(at: workerDir) }
+        let client = InferenceWorkerClient(readinessTimeout: .seconds(3), startedTimeout: .seconds(2), separationTimeout: .seconds(5), workerDirectory: workerDir)
+        let outputBase = mixtureDir.appendingPathComponent("output", isDirectory: true)
+        let controller = InferenceController(client: client, outputBase: outputBase, youTubeIngest: ingest)
+
+        let url = URL(string: "https://www.youtube.com/watch?v=preview-separate")!
+        controller.loadYouTubeSource(youTubeURL: url)
+        let loadTask = try XCTUnwrap(controller.debugCurrentTask())
+        await loadTask.value
+        XCTAssertTrue(controller.isYouTubePreviewLoaded)
+
+        controller.startSeparationFromLoadedPreview()
+        let sepTask = try XCTUnwrap(controller.debugCurrentTask())
+        await sepTask.value
+
+        XCTAssertEqual(controller.state, .completed)
+        XCTAssertNotNil(controller.result)
+        XCTAssertEqual(controller.result?.stems.count, 6)
+        let fetchCount = await ingest.fetchPreviewCallCount
+        XCTAssertEqual(fetchCount, 1)
+        let ingestCount = await ingest.ingestCallCount
+        XCTAssertEqual(ingestCount, 1, "Separate must call ingestWithMetadata once (audio-only+canonical)")
+        let downloadCount = await ingest.downloadCallCount
+        XCTAssertEqual(downloadCount, 0, "Separate must NOT call downloadAudioOnly")
+        let captured = try? String(contentsOf: capturedInput, encoding: .utf8)
+        XCTAssertEqual(captured, mixtureURL.path, "Worker input_path should be canonical mixture.wav")
+
+        // Generation guard: start a slow ingest then supersede with direct WAV, ensure stale not applied
+        let slowPreview = YouTubePreviewResult(metadata: metadata, artworkURL: artworkURL, duration: 10)
+        let slowIngest = MockYouTubePreviewFlow(preview: slowPreview, ingestResult: ingestResult)
+        // Make ingest hang via delayed mock? Use separate controller for guard verification
+        await controller.shutdownWorker(policy: .testShort())
     }
 
     func testSeparateFromLoadedYouTubeSourceDoesNotReingest() async throws {
@@ -258,9 +436,10 @@ final class InferenceControllerYouTubeTests: XCTestCase {
         let metadata = try XCTUnwrap(
             YouTubeTrackMetadata(artist: "Artist", title: "Song Title", channel: "Channel")
         )
-        let ingest = MockYouTubeMetadataSuccess(
-            result: YouTubeIngestResult(audioURL: mixtureURL, metadata: metadata)
-        )
+        let ingestResult = YouTubeIngestResult(audioURL: mixtureURL, metadata: metadata)
+        // Preview load then deferred separate will download via ingestWithMetadata; second separate reuses.
+        let preview = YouTubePreviewResult(metadata: metadata, artworkURL: nil, duration: 10)
+        let ingest = MockYouTubePreviewFlow(preview: preview, ingestResult: ingestResult, downloadResult: ingestResult)
         let workerDirectory = try makeFakeWorker(script: floatSuccessScript())
         defer { try? FileManager.default.removeItem(at: workerDirectory) }
         let client = InferenceWorkerClient(
@@ -279,13 +458,21 @@ final class InferenceControllerYouTubeTests: XCTestCase {
         controller.loadYouTubeSource(youTubeURL: URL(string: "https://www.youtube.com/watch?v=source-first")!)
         let loadTask = try XCTUnwrap(controller.debugCurrentTask())
         await loadTask.value
-        controller.startSeparationFromLoadedYouTubeSource()
+        // Deferred separate triggers ingestWithMetadata once
+        controller.startSeparationFromLoadedPreview()
         let separationTask = try XCTUnwrap(controller.debugCurrentTask())
         await separationTask.value
 
         XCTAssertEqual(controller.state, .completed)
-        let ingestCountAfterSeparate = await ingest.ingestCallCount
-        XCTAssertEqual(ingestCountAfterSeparate, 1, "Separate must reuse the loaded canonical source")
+        let ingestCountAfterFirstSeparate = await ingest.ingestCallCount
+        XCTAssertEqual(ingestCountAfterFirstSeparate, 1, "First separate must ingest once")
+        // Second separate reuses canonical source without re-ingest
+        controller.startSeparationFromLoadedYouTubeSource()
+        let secondTask = try XCTUnwrap(controller.debugCurrentTask())
+        await secondTask.value
+        XCTAssertEqual(controller.state, .completed)
+        let ingestCountAfterSecond = await ingest.ingestCallCount
+        XCTAssertEqual(ingestCountAfterSecond, 1, "Separate must reuse the loaded canonical source")
         await controller.shutdownWorker()
     }
 

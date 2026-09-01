@@ -12,6 +12,8 @@ enum EditableArtwork: Equatable, Sendable {
 protocol YouTubeIngesting: Sendable {
     func ingest(youTubeURL: URL) async throws -> URL
     func ingestWithMetadata(youTubeURL: URL) async throws -> YouTubeIngestResult
+    func fetchPreview(youTubeURL: URL) async throws -> YouTubePreviewResult
+    func downloadAudioOnly(youTubeURL: URL) async throws -> YouTubeIngestResult
     func cancel() async throws
 }
 
@@ -21,6 +23,15 @@ extension YouTubeIngesting {
             audioURL: try await ingest(youTubeURL: youTubeURL),
             metadata: nil
         )
+    }
+
+    func fetchPreview(youTubeURL: URL) async throws -> YouTubePreviewResult {
+        let result = try await ingestWithMetadata(youTubeURL: youTubeURL)
+        return YouTubePreviewResult(metadata: result.metadata, artworkURL: result.artworkURL, duration: nil)
+    }
+
+    func downloadAudioOnly(youTubeURL: URL) async throws -> YouTubeIngestResult {
+        try await ingestWithMetadata(youTubeURL: youTubeURL)
     }
 }
 
@@ -54,19 +65,36 @@ final class InferenceController {
     private(set) var youTubeExportArtworkURL: URL?
     private(set) var preparedYouTubeMP3Export: YouTubeIngestResult?
     private(set) var loadedYouTubeSource: YouTubeIngestResult?
+    private(set) var loadedYouTubePreview: YouTubePreviewResult?
     private(set) var loadedYouTubeURL: URL?
 
     var isYouTubeSourceLoaded: Bool {
-        guard let source = loadedYouTubeSource, let url = loadedYouTubeURL else { return false }
-        return FileManager.default.fileExists(atPath: source.audioURL.path) && !url.absoluteString.isEmpty
+        guard let url = loadedYouTubeURL, !url.absoluteString.isEmpty else { return false }
+        if loadedYouTubePreview != nil { return true }
+        if let source = loadedYouTubeSource {
+            return FileManager.default.fileExists(atPath: source.audioURL.path)
+        }
+        return false
+    }
+
+    var isYouTubePreviewLoaded: Bool {
+        loadedYouTubePreview != nil && loadedYouTubeURL != nil
+    }
+
+    var loadedYouTubeDuration: TimeInterval? {
+        loadedYouTubePreview?.duration
     }
 
     var loadedChannelName: String? {
-        loadedYouTubeSource?.metadata?.channel
+        loadedYouTubeSource?.metadata?.channel ?? loadedYouTubePreview?.metadata?.channel ?? youTubeExportMetadata?.channel
     }
 
     var loadedYouTubeAudioURL: URL? {
         loadedYouTubeSource?.audioURL
+    }
+
+    private var loadedYouTubeSourceIsCanonical: Bool {
+        loadedYouTubeSource?.audioURL.lastPathComponent == "mixture.wav"
     }
 
     // MARK: - Editable ID3 Metadata
@@ -99,7 +127,7 @@ final class InferenceController {
     var effectiveArtworkURL: URL? {
         switch editableArtwork {
         case .keep:
-            return youTubeExportArtworkURL ?? preparedYouTubeMP3Export?.artworkURL
+            return youTubeExportArtworkURL ?? preparedYouTubeMP3Export?.artworkURL ?? loadedYouTubePreview?.artworkURL ?? loadedYouTubeSource?.artworkURL
         case .removed:
             return nil
         case .replaced(let url):
@@ -108,7 +136,7 @@ final class InferenceController {
     }
 
     var isEditableMetadataAvailable: Bool {
-        youTubeExportMetadata != nil || preparedYouTubeMP3Export != nil
+        youTubeExportMetadata != nil || preparedYouTubeMP3Export != nil || loadedYouTubePreview != nil || loadedYouTubeSource != nil
     }
 
     private func populateEditableMetadata(from metadata: YouTubeTrackMetadata?) {
@@ -149,6 +177,10 @@ final class InferenceController {
     var isLoadedSeparationReady: Bool { runtimeReadiness?.isLoadedSeparationReady ?? false }
     var isWorkerReady: Bool { runtimeReadiness?.isWorkerReady ?? false }
     var isYouTubeAcquisitionReady: Bool { runtimeReadiness?.isYouTubeAcquisitionReady ?? false }
+    // Granular YouTube readiness per metadata-first workflow (combining existing readiness properties)
+    var isYouTubePreviewReady: Bool { runtimeReadiness?.isYouTubePreviewReady ?? false }
+    var isYouTubeMp3Ready: Bool { runtimeReadiness?.isYouTubeMp3Ready ?? false }
+    var isYouTubeSeparationReady: Bool { runtimeReadiness?.isYouTubeSeparationReady ?? false }
     var isExportReady: Bool { isMp3ExportReady }
     var isMp3ExportReady: Bool { runtimeReadiness?.isMp3ExportReady ?? false }
     var isWavExportReady: Bool { runtimeReadiness?.isWavExportReady ?? true }
@@ -254,6 +286,9 @@ final class InferenceController {
         youTubeExportMetadata = nil
         youTubeExportArtworkURL = nil
         preparedYouTubeMP3Export = nil
+        loadedYouTubeSource = nil
+        loadedYouTubePreview = nil
+        loadedYouTubeURL = nil
         clearEditableMetadata()
 
         let client = self.client
@@ -321,6 +356,7 @@ final class InferenceController {
             latestGeneration = operationGeneration
         }
         loadedYouTubeSource = nil
+        loadedYouTubePreview = nil
         loadedYouTubeURL = nil
         preparedYouTubeMP3Export = nil
         youTubeExportMetadata = nil
@@ -361,6 +397,7 @@ final class InferenceController {
         youTubeExportArtworkURL = nil
         preparedYouTubeMP3Export = nil
         loadedYouTubeSource = nil
+        loadedYouTubePreview = nil
         loadedYouTubeURL = nil
         clearEditableMetadata()
 
@@ -685,7 +722,7 @@ final class InferenceController {
     // MARK: - Source-first YouTube workflow
 
     /// Load YouTube source without starting separation or MP3 export.
-    /// Reuses existing downloaded metadata/artwork and canonical mixture.wav via loadedYouTubeSource.
+    /// Metadata-only preview: no media download, no FFmpeg, no canonical WAV.
     func loadYouTubeSource(youTubeURL: URL) {
         if youTubeCleanupFailed { return }
         let generation = operationGeneration + 1
@@ -705,6 +742,7 @@ final class InferenceController {
         preparedYouTubeMP3Export = nil
         clearEditableMetadata()
         loadedYouTubeSource = nil
+        loadedYouTubePreview = nil
         loadedYouTubeURL = nil
 
         let youTubeIngest = self.youTubeIngest
@@ -715,18 +753,19 @@ final class InferenceController {
 
             do {
                 try Task.checkCancellation()
-                let ingestResult = try await youTubeIngest.ingestWithMetadata(youTubeURL: youTubeURL)
+                let preview = try await youTubeIngest.fetchPreview(youTubeURL: youTubeURL)
 
                 try Task.checkCancellation()
                 guard generation == self.latestGeneration else { return }
                 guard !Task.isCancelled else { throw CancellationError() }
 
-                self.loadedYouTubeSource = ingestResult
+                self.loadedYouTubePreview = preview
                 self.loadedYouTubeURL = youTubeURL
-                self.exportBaseName = ingestResult.metadata?.exportBaseName
-                self.youTubeExportMetadata = ingestResult.metadata
-                self.youTubeExportArtworkURL = ingestResult.artworkURL
-                self.populateEditableMetadata(from: ingestResult.metadata)
+                self.loadedYouTubeSource = nil
+                self.exportBaseName = preview.metadata?.exportBaseName
+                self.youTubeExportMetadata = preview.metadata
+                self.youTubeExportArtworkURL = preview.artworkURL
+                self.populateEditableMetadata(from: preview.metadata)
                 self.state = .idle
                 self.statusMessage = "Loaded — Ready to save or separate"
                 self.errorMessage = nil
@@ -777,7 +816,6 @@ final class InferenceController {
         youTubeExportMetadata = loaded.metadata
         youTubeExportArtworkURL = loaded.artworkURL
         exportBaseName = loaded.metadata?.exportBaseName
-        populateEditableMetadata(from: loaded.metadata)
         return loaded
     }
 
@@ -786,6 +824,10 @@ final class InferenceController {
         guard let loaded = loadedYouTubeSource else { return }
         guard FileManager.default.fileExists(atPath: loaded.audioURL.path) else { return }
         if youTubeCleanupFailed { return }
+        guard loadedYouTubeSourceIsCanonical else {
+            startSeparationFromLoadedPreview()
+            return
+        }
         let generation = operationGeneration + 1
         operationGeneration = generation
         latestGeneration = generation
@@ -829,7 +871,6 @@ final class InferenceController {
                 self.exportBaseName = loaded.metadata?.exportBaseName
                 self.youTubeExportMetadata = loaded.metadata
                 self.youTubeExportArtworkURL = loaded.artworkURL
-                self.populateEditableMetadata(from: loaded.metadata)
                 self.state = .completed
                 self.statusMessage = "Complete — \(separationResult.stems.count) stems"
                 self.errorMessage = nil
@@ -839,6 +880,211 @@ final class InferenceController {
                 self.state = .failed("Cancelled")
                 self.statusMessage = "Cancelled"
                 self.errorMessage = "Cancelled"
+            } catch let err as InferenceError {
+                guard generation == self.latestGeneration else { return }
+                if case .cancellation = err {
+                    self.state = .failed("Cancelled")
+                    self.statusMessage = "Cancelled"
+                    self.errorMessage = "Cancelled"
+                } else {
+                    let msg = err.localizedDescription
+                    self.state = .failed(msg)
+                    self.statusMessage = "Failed"
+                    self.errorMessage = String(msg.prefix(500))
+                }
+            } catch {
+                guard generation == self.latestGeneration else { return }
+                let msg = error.localizedDescription
+                self.state = .failed(msg)
+                self.statusMessage = "Failed"
+                self.errorMessage = String(msg.prefix(500))
+            }
+        }
+    }
+
+    /// Deferred Save MP3 from preview: downloads audio-only then prepares MP3 export.
+    func prepareYouTubeMP3ExportFromLoadedPreview() {
+        if youTubeCleanupFailed { return }
+        guard let preview = loadedYouTubePreview, let url = loadedYouTubeURL else {
+            if let loaded = loadedYouTubeSource, FileManager.default.fileExists(atPath: loaded.audioURL.path) {
+                youTubeExportMetadata = loaded.metadata
+                youTubeExportArtworkURL = loaded.artworkURL
+                exportBaseName = loaded.metadata?.exportBaseName
+                preparedYouTubeMP3Export = loaded
+                state = .idle
+                statusMessage = "Ready to save MP3"
+                errorMessage = nil
+            }
+            return
+        }
+        if let loaded = loadedYouTubeSource, FileManager.default.fileExists(atPath: loaded.audioURL.path) {
+            youTubeExportMetadata = loaded.metadata
+            youTubeExportArtworkURL = loaded.artworkURL
+            exportBaseName = loaded.metadata?.exportBaseName
+            preparedYouTubeMP3Export = loaded
+            state = .idle
+            statusMessage = "Ready to save MP3"
+            errorMessage = nil
+            return
+        }
+        let generation = operationGeneration + 1
+        operationGeneration = generation
+        latestGeneration = generation
+        let previousTask = currentTask
+        previousTask?.cancel()
+        state = .loadingModel
+        statusMessage = "Downloading…"
+        result = nil
+        errorMessage = nil
+        let youTubeIngest = self.youTubeIngest
+        let captureURL = url
+        let capturePreview = preview
+        currentTask = Task { [previousTask] in
+            if let previousTask { await previousTask.value }
+            await self.drainCleanupChain()
+            if self.youTubeCleanupFailed { return }
+            do {
+                try Task.checkCancellation()
+                let ingestResult = try await youTubeIngest.downloadAudioOnly(youTubeURL: captureURL)
+                try Task.checkCancellation()
+                guard generation == self.latestGeneration else { return }
+                guard !Task.isCancelled else { throw CancellationError() }
+                self.loadedYouTubeSource = ingestResult
+                self.preparedYouTubeMP3Export = ingestResult
+                self.youTubeExportMetadata = ingestResult.metadata ?? capturePreview.metadata
+                self.youTubeExportArtworkURL = ingestResult.artworkURL ?? capturePreview.artworkURL
+                self.exportBaseName = ingestResult.metadata?.exportBaseName ?? capturePreview.metadata?.exportBaseName
+                self.state = .idle
+                self.statusMessage = "Ready to save MP3"
+                self.errorMessage = nil
+            } catch is CancellationError {
+                guard generation == self.latestGeneration else { return }
+                self.state = .failed("Cancelled")
+                self.statusMessage = "Cancelled"
+                self.errorMessage = "Cancelled"
+            } catch let err as YouTubeIngestError {
+                if case .cleanupFailed(let msg) = err {
+                    let message = "Cleanup failed: \(msg)"
+                    self.state = .failed(message)
+                    self.statusMessage = "Cleanup failed"
+                    self.errorMessage = String(message.prefix(500))
+                    self.youTubeCleanupFailed = true
+                }
+                guard generation == self.latestGeneration else { return }
+                switch err {
+                case .cancelled:
+                    self.state = .failed("Cancelled")
+                    self.statusMessage = "Cancelled"
+                    self.errorMessage = "Cancelled"
+                case .cleanupFailed:
+                    break
+                default:
+                    let message = err.localizedDescription
+                    self.state = .failed(message)
+                    self.statusMessage = "Failed"
+                    self.errorMessage = String(message.prefix(500))
+                }
+            } catch {
+                guard generation == self.latestGeneration else { return }
+                let message = error.localizedDescription
+                self.state = .failed(message)
+                self.statusMessage = "Failed"
+                self.errorMessage = String(message.prefix(500))
+            }
+        }
+    }
+
+    /// Deferred Separate from preview: downloads audio-only canonical WAV then starts separation.
+    func startSeparationFromLoadedPreview() {
+        if youTubeCleanupFailed { return }
+        guard let preview = loadedYouTubePreview, let url = loadedYouTubeURL else {
+            if let loaded = loadedYouTubeSource,
+               loadedYouTubeSourceIsCanonical,
+               FileManager.default.fileExists(atPath: loaded.audioURL.path) {
+                startSeparationFromLoadedYouTubeSource()
+            }
+            return
+        }
+        if let loaded = loadedYouTubeSource,
+           loadedYouTubeSourceIsCanonical,
+           FileManager.default.fileExists(atPath: loaded.audioURL.path) {
+            startSeparationFromLoadedYouTubeSource()
+            return
+        }
+        let generation = operationGeneration + 1
+        operationGeneration = generation
+        latestGeneration = generation
+        let previousTask = currentTask
+        previousTask?.cancel()
+        state = .loadingModel
+        statusMessage = "Downloading…"
+        result = nil
+        errorMessage = nil
+        let client = self.client
+        let youTubeIngest = self.youTubeIngest
+        let base = outputBaseURL
+        let captureURL = url
+        let capturePreview = preview
+        currentTask = Task { [previousTask] in
+            if let previousTask { await previousTask.value }
+            await self.drainCleanupChain()
+            if self.youTubeCleanupFailed { return }
+            do {
+                try Task.checkCancellation()
+                let ingestResult = try await youTubeIngest.ingestWithMetadata(youTubeURL: captureURL)
+                try Task.checkCancellation()
+                guard generation == self.latestGeneration else { return }
+                guard !Task.isCancelled else { throw CancellationError() }
+                self.loadedYouTubeSource = ingestResult
+                self.youTubeExportMetadata = ingestResult.metadata ?? capturePreview.metadata
+                self.youTubeExportArtworkURL = ingestResult.artworkURL ?? capturePreview.artworkURL
+                self.exportBaseName = ingestResult.metadata?.exportBaseName ?? capturePreview.metadata?.exportBaseName
+                self.state = .loadingModel
+                self.statusMessage = "Loading model…"
+                let separationResult = try await client.runSeparation(
+                    inputPath: ingestResult.audioURL,
+                    outputBaseDir: base
+                ) {
+                    await MainActor.run {
+                        guard generation == self.latestGeneration else { return }
+                        guard !Task.isCancelled else { return }
+                        self.state = .separating
+                        self.statusMessage = "Separating…"
+                    }
+                }
+                guard generation == self.latestGeneration else { return }
+                guard !Task.isCancelled else { return }
+                self.result = separationResult
+                self.state = .completed
+                self.statusMessage = "Complete — \(separationResult.stems.count) stems"
+                self.errorMessage = nil
+            } catch is CancellationError {
+                guard generation == self.latestGeneration else { return }
+                self.state = .failed("Cancelled")
+                self.statusMessage = "Cancelled"
+                self.errorMessage = "Cancelled"
+            } catch let err as YouTubeIngestError {
+                if case .cleanupFailed(let msg) = err {
+                    let m = "Cleanup failed: \(msg)"
+                    self.state = .failed(m)
+                    self.statusMessage = "Cleanup failed"
+                    self.errorMessage = String(m.prefix(500))
+                    self.youTubeCleanupFailed = true
+                }
+                guard generation == self.latestGeneration else { return }
+                switch err {
+                case .cancelled:
+                    self.state = .failed("Cancelled")
+                    self.statusMessage = "Cancelled"
+                    self.errorMessage = "Cancelled"
+                case .cleanupFailed:
+                    break
+                default:
+                    let msg = err.localizedDescription
+                    self.state = .failed(msg)
+                    self.statusMessage = "Failed"
+                    self.errorMessage = String(msg.prefix(500))
+                }
             } catch let err as InferenceError {
                 guard generation == self.latestGeneration else { return }
                 if case .cancellation = err {

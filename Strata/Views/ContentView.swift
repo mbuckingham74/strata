@@ -365,32 +365,40 @@ struct InferenceCard: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
-                    .disabled(youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating || !inferenceController.isYouTubeAcquisitionReady)
+                    .disabled(youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating || !inferenceController.isYouTubePreviewReady)
                     .accessibilityIdentifier("LoadYouTubeSourceButton")
                 }
-                if let r = inferenceController.runtimeReadiness, !r.isYouTubeAcquisitionReady {
+                if let r = inferenceController.runtimeReadiness, !r.isYouTubePreviewReady {
                     Text(r.sidebarStatus).font(.caption2).foregroundStyle(.orange.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("YouTubeReadinessHint")
                 } else if inferenceController.runtimeReadiness == nil {
                     Text("Checking setup…").font(.caption2).foregroundStyle(.tertiary)
                 }
 
-                if inferenceController.isYouTubeSourceLoaded, let loaded = inferenceController.loadedYouTubeSource {
+                if inferenceController.isYouTubeSourceLoaded {
+                    let loaded = inferenceController.loadedYouTubeSource
+                    let hasAudioFile = (loaded != nil && inferenceController.loadedYouTubeAudioURL != nil && FileManager.default.fileExists(atPath: inferenceController.loadedYouTubeAudioURL!.path) && playbackController.hasFile)
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 12) {
-                            youTubeArtworkView(for: loaded)
+                            youTubeArtworkView()
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(youTubeDisplayTitle(for: loaded))
+                                Text(youTubeDisplayTitle())
                                     .font(.callout.weight(.semibold))
                                     .foregroundStyle(.white)
                                     .lineLimit(1)
-                                Text(youTubeDisplayArtist(for: loaded))
+                                Text(youTubeDisplayArtist())
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
-                                if let channel = youTubeDisplayChannel(for: loaded), !channel.isEmpty {
+                                if let channel = youTubeDisplayChannel(), !channel.isEmpty {
                                     Text(channel)
                                         .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                        .lineLimit(1)
+                                }
+                                if let durationText = youTubeDisplayDuration() {
+                                    Text(durationText)
+                                        .font(.caption2.monospacedDigit())
                                         .foregroundStyle(.tertiary)
                                         .lineLimit(1)
                                 }
@@ -398,10 +406,10 @@ struct InferenceCard: View {
                             Spacer()
                         }
 
-                        // Full original-source play/pause/seek controls bound to playbackController
+                        // Playback controls: disabled when preview only (no audio file)
                         VStack(spacing: 8) {
                             HStack {
-                                Text(playbackController.formattedTime(isYouTubeDragging ? youTubeSliderValue : playbackController.currentTime))
+                                Text(hasAudioFile ? playbackController.formattedTime(isYouTubeDragging ? youTubeSliderValue : playbackController.currentTime) : (youTubeDisplayDuration() ?? "--:--"))
                                     .font(.caption.monospacedDigit())
                                     .foregroundStyle(.secondary)
                                     .frame(width: 48, alignment: .leading)
@@ -421,9 +429,9 @@ struct InferenceCard: View {
                                     }
                                 )
                                 .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
-                                .disabled(!playbackController.hasFile)
+                                .disabled(!hasAudioFile)
                                 .accessibilityLabel("Seek YouTube source")
-                                Text(playbackController.formattedDuration)
+                                Text(hasAudioFile ? playbackController.formattedDuration : (youTubeDisplayDuration() ?? "--:--"))
                                     .font(.caption.monospacedDigit())
                                     .foregroundStyle(.secondary)
                                     .frame(width: 48, alignment: .trailing)
@@ -440,39 +448,45 @@ struct InferenceCard: View {
                                         .shadow(color: Color(red: 0.56, green: 0.46, blue: 0.95).opacity(0.4), radius: 8, y: 2)
                                 }
                                 .buttonStyle(.plain)
-                                .disabled(!playbackController.hasFile)
+                                .disabled(!hasAudioFile)
                                 .accessibilityLabel(playbackController.isPlaying ? "Pause" : "Play")
 
                                 Spacer()
 
                                 HStack(spacing: 6) {
-                                    Circle().fill(playbackController.isPlaying ? Color.green : Color.secondary.opacity(0.4)).frame(width: 6, height: 6)
-                                    Text(playbackController.isPlaying ? "Playing" : "Paused").font(.caption).foregroundStyle(.secondary)
+                                    Circle().fill(hasAudioFile && playbackController.isPlaying ? Color.green : Color.secondary.opacity(0.4)).frame(width: 6, height: 6)
+                                    Text(hasAudioFile && playbackController.isPlaying ? "Playing" : (hasAudioFile ? "Paused" : "Preview only")).font(.caption).foregroundStyle(.secondary)
                                 }
                             }
                         }
 
-                        // Gated actions: reuse already-loaded mixture.wav
+                        // Gated actions: deferred audio acquisition (audio-only)
                         HStack(spacing: 10) {
                             Button {
-                                inferenceController.startSeparationFromLoadedYouTubeSource()
+                                if hasAudioFile {
+                                    inferenceController.startSeparationFromLoadedYouTubeSource()
+                                } else {
+                                    inferenceController.startSeparationFromLoadedPreview()
+                                }
                             } label: {
                                 Label("Separate", systemImage: "waveform.path.badge.magnifyingglass").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
-                            .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating || !inferenceController.isLoadedSeparationReady)
+                            .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating || !inferenceController.isYouTubeSeparationReady)
                             .accessibilityIdentifier("SeparateLoadedYouTubeButton")
 
                             Button {
-                                if let prep = inferenceController.prepareYouTubeMP3ExportFromLoadedSource() {
+                                if hasAudioFile, let prep = inferenceController.prepareYouTubeMP3ExportFromLoadedSource() {
                                     exportYouTubeMP3(prep)
+                                } else {
+                                    inferenceController.prepareYouTubeMP3ExportFromLoadedPreview()
                                 }
                             } label: {
                                 Label("Save MP3", systemImage: "square.and.arrow.down").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
                             }
                             .buttonStyle(.bordered)
-                            .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating || !inferenceController.isMp3ExportReady || isExporting)
+                            .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating || !inferenceController.isYouTubeMp3Ready || isExporting)
                             .accessibilityIdentifier("SaveYouTubeMP3Button")
                         }
                         if let exportingFileName {
@@ -489,9 +503,9 @@ struct InferenceCard: View {
                             .accessibilityIdentifier("YouTubeExportStatus")
                         }
                         if let r = inferenceController.runtimeReadiness {
-                            if !r.isLoadedSeparationReady {
+                            if !r.isYouTubeSeparationReady {
                                 Text(r.sidebarStatus).font(.caption2).foregroundStyle(.red.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
-                            } else if !r.isMp3ExportReady {
+                            } else if !r.isYouTubeMp3Ready {
                                 Text(r.sidebarStatus).font(.caption2).foregroundStyle(.red.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
                             }
                         }
@@ -622,6 +636,11 @@ struct InferenceCard: View {
                 guard let loaded else { return }
                 let display = inferenceController.exportBaseName ?? loaded.metadata?.exportBaseName ?? loaded.metadata?.title
                 playbackController.load(url: loaded.audioURL, displayTitle: display)
+                youTubeSliderValue = 0
+            }
+            .onChange(of: inferenceController.loadedYouTubePreview) { _, preview in
+                guard preview != nil else { return }
+                // Preview only: no audio to load into playbackController
                 youTubeSliderValue = 0
             }
             .onChange(of: playbackController.currentTime) { _, newValue in
@@ -877,10 +896,13 @@ struct InferenceCard: View {
     // MARK: - YouTube source presentation helpers
 
     @ViewBuilder
-    private func youTubeArtworkView(for loaded: YouTubeIngestResult) -> some View {
-        let url = inferenceController.effectiveArtworkURL ?? loaded.artworkURL
+    private func youTubeArtworkView() -> some View {
+        let effective = inferenceController.effectiveArtworkURL
+        let previewArt = inferenceController.loadedYouTubePreview?.artworkURL
+        let sourceArt = inferenceController.loadedYouTubeSource?.artworkURL
+        let url: URL? = effective ?? previewArt ?? sourceArt
         Group {
-            if let url, let nsImage = NSImage(contentsOf: url) {
+            if let u = url, let nsImage = NSImage(contentsOf: u) {
                 Image(nsImage: nsImage)
                     .resizable()
                     .scaledToFill()
@@ -898,27 +920,69 @@ struct InferenceCard: View {
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.12), lineWidth: 1))
     }
 
-    private func youTubeDisplayTitle(for loaded: YouTubeIngestResult) -> String {
-        let editable = inferenceController.editableTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !editable.isEmpty { return editable }
-        if let t = loaded.metadata?.title?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
-        if let base = inferenceController.exportBaseName?.trimmingCharacters(in: .whitespacesAndNewlines), !base.isEmpty { return base }
-        if let base = loaded.metadata?.exportBaseName?.trimmingCharacters(in: .whitespacesAndNewlines), !base.isEmpty { return base }
-        return loaded.audioURL.deletingPathExtension().lastPathComponent
+    @ViewBuilder
+    private func youTubeArtworkView(for loaded: YouTubeIngestResult) -> some View {
+        youTubeArtworkView()
     }
 
-    private func youTubeDisplayArtist(for loaded: YouTubeIngestResult) -> String {
+    @ViewBuilder
+    private func youTubeArtworkView(for preview: YouTubePreviewResult) -> some View {
+        youTubeArtworkView()
+    }
+
+    private func youTubeDisplayTitle() -> String {
+        let editable = inferenceController.editableTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !editable.isEmpty { return editable }
+        if let t = inferenceController.loadedYouTubePreview?.metadata?.title?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
+        if let t = inferenceController.loadedYouTubeSource?.metadata?.title?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
+        if let base = inferenceController.exportBaseName?.trimmingCharacters(in: .whitespacesAndNewlines), !base.isEmpty { return base }
+        if let base = inferenceController.loadedYouTubePreview?.metadata?.exportBaseName?.trimmingCharacters(in: .whitespacesAndNewlines), !base.isEmpty { return base }
+        if let base = inferenceController.loadedYouTubeSource?.metadata?.exportBaseName?.trimmingCharacters(in: .whitespacesAndNewlines), !base.isEmpty { return base }
+        if let url = inferenceController.loadedYouTubeSource?.audioURL { return url.deletingPathExtension().lastPathComponent }
+        if let url = inferenceController.loadedYouTubeURL { return url.lastPathComponent }
+        return "Untitled"
+    }
+
+    private func youTubeDisplayTitle(for loaded: YouTubeIngestResult) -> String { youTubeDisplayTitle() }
+    private func youTubeDisplayTitle(for preview: YouTubePreviewResult) -> String { youTubeDisplayTitle() }
+
+    private func youTubeDisplayArtist() -> String {
         let editable = inferenceController.editableArtist.trimmingCharacters(in: .whitespacesAndNewlines)
         if !editable.isEmpty { return editable }
-        if let a = loaded.metadata?.artist?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty { return a }
+        if let a = inferenceController.loadedYouTubePreview?.metadata?.artist?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty { return a }
+        if let a = inferenceController.loadedYouTubeSource?.metadata?.artist?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty { return a }
         return "Unknown Artist"
     }
 
-    private func youTubeDisplayChannel(for loaded: YouTubeIngestResult) -> String? {
+    private func youTubeDisplayArtist(for loaded: YouTubeIngestResult) -> String { youTubeDisplayArtist() }
+    private func youTubeDisplayArtist(for preview: YouTubePreviewResult) -> String { youTubeDisplayArtist() }
+
+    private func youTubeDisplayChannel() -> String? {
         if let c = inferenceController.loadedChannelName?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty { return c }
         if let c = inferenceController.youTubeExportMetadata?.channel?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty { return c }
-        if let c = loaded.metadata?.channel?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty { return c }
+        if let c = inferenceController.loadedYouTubePreview?.metadata?.channel?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty { return c }
+        if let c = inferenceController.loadedYouTubeSource?.metadata?.channel?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty { return c }
         return nil
+    }
+
+    private func youTubeDisplayChannel(for loaded: YouTubeIngestResult) -> String? { youTubeDisplayChannel() }
+    private func youTubeDisplayChannel(for preview: YouTubePreviewResult) -> String? { youTubeDisplayChannel() }
+
+    private func youTubeDisplayDuration() -> String? {
+        guard let duration = inferenceController.loadedYouTubeDuration, duration > 0 else { return nil }
+        return formattedYouTubeDuration(duration)
+    }
+
+    private func formattedYouTubeDuration(_ duration: TimeInterval) -> String {
+        let totalSeconds = Int(duration.rounded())
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let seconds = totalSeconds % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            return String(format: "%d:%02d", minutes, seconds)
+        }
     }
 
     private var statusText: String {

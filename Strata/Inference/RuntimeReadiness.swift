@@ -6,9 +6,11 @@ struct RuntimeReadiness: Sendable, Equatable {
     let workerPythonPath: String?
     let ffmpegAvailable: Bool
     let ytDlpAvailable: Bool
+    let nodeAvailable: Bool
 
     static let ffmpegPath = "/opt/homebrew/bin/ffmpeg"
     static let ytDlpPath = "/opt/homebrew/bin/yt-dlp"
+    static let nodePath = "/opt/homebrew/bin/node"
 
     // Local file separation requires worker + FFmpeg (canonicalization)
     var isSeparationReady: Bool { isLocalSeparationReady }
@@ -17,7 +19,12 @@ struct RuntimeReadiness: Sendable, Equatable {
     var isLoadedSeparationReady: Bool { workerAvailable }
     var isWorkerReady: Bool { workerAvailable }
 
-    var isYouTubeAcquisitionReady: Bool { ffmpegAvailable && ytDlpAvailable }
+    var isYouTubeAcquisitionReady: Bool { ffmpegAvailable && ytDlpAvailable && nodeAvailable }
+
+    // Granular YouTube readiness per metadata-first workflow (prefer combining existing readiness properties)
+    var isYouTubePreviewReady: Bool { ytDlpAvailable && nodeAvailable }
+    var isYouTubeMp3Ready: Bool { isYouTubePreviewReady && isMp3ExportReady }
+    var isYouTubeSeparationReady: Bool { isYouTubeMp3Ready && isWorkerReady }
 
     // MP3 exports require FFmpeg; WAV exports are pure file copy / AVFoundation mix and do not
     var isExportReady: Bool { isMp3ExportReady }
@@ -43,6 +50,9 @@ struct RuntimeReadiness: Sendable, Equatable {
         if !ytDlpAvailable {
             return "YouTube disabled · missing yt-dlp at \(Self.ytDlpPath)"
         }
+        if !nodeAvailable {
+            return "YouTube disabled · missing Node at \(Self.nodePath)"
+        }
         return "Separation ready · runs on this Mac"
     }
 }
@@ -61,6 +71,7 @@ struct RuntimeReadinessChecker: Sendable {
     func check() -> RuntimeReadiness {
         let ffmpegAvailable = isExecutable(RuntimeReadiness.ffmpegPath)
         let ytDlpAvailable = isExecutable(RuntimeReadiness.ytDlpPath)
+        let nodeAvailable = isExecutable(RuntimeReadiness.nodePath)
         do {
             let config = try resolveWorker()
             let pythonPath = config.pythonExecutable.path
@@ -71,7 +82,8 @@ struct RuntimeReadinessChecker: Sendable {
                     workerError: nil,
                     workerPythonPath: pythonPath,
                     ffmpegAvailable: ffmpegAvailable,
-                    ytDlpAvailable: ytDlpAvailable
+                    ytDlpAvailable: ytDlpAvailable,
+                    nodeAvailable: nodeAvailable
                 )
             } else {
                 return RuntimeReadiness(
@@ -79,7 +91,8 @@ struct RuntimeReadinessChecker: Sendable {
                     workerError: "python not executable at \(pythonPath)",
                     workerPythonPath: pythonPath,
                     ffmpegAvailable: ffmpegAvailable,
-                    ytDlpAvailable: ytDlpAvailable
+                    ytDlpAvailable: ytDlpAvailable,
+                    nodeAvailable: nodeAvailable
                 )
             }
         } catch {
@@ -91,7 +104,8 @@ struct RuntimeReadinessChecker: Sendable {
                 workerError: msg,
                 workerPythonPath: nil,
                 ffmpegAvailable: ffmpegAvailable,
-                ytDlpAvailable: ytDlpAvailable
+                ytDlpAvailable: ytDlpAvailable,
+                nodeAvailable: nodeAvailable
             )
         }
     }

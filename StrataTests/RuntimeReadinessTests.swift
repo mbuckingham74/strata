@@ -19,6 +19,7 @@ final class RuntimeReadinessTests: XCTestCase {
     private func checker(
         ffmpeg: Bool,
         ytDlp: Bool,
+        node: Bool = true,
         workerAvailable: Bool? = true,
         pythonPath: String = "/tmp/worker/.venv/bin/python3",
         resolveThrows: Bool = false
@@ -28,6 +29,7 @@ final class RuntimeReadinessTests: XCTestCase {
             isExecutable: { path in
                 if path == RuntimeReadiness.ffmpegPath { return ffmpeg }
                 if path == RuntimeReadiness.ytDlpPath { return ytDlp }
+                if path == RuntimeReadiness.nodePath { return node }
                 if path == pythonPath { return workerAvailable ?? false }
                 return false
             },
@@ -203,6 +205,7 @@ final class RuntimeReadinessTests: XCTestCase {
             isExecutable: { path in
                 if path == RuntimeReadiness.ffmpegPath { return true }
                 if path == RuntimeReadiness.ytDlpPath { return false }
+                if path == RuntimeReadiness.nodePath { return true }
                 if path == python { return true }
                 return false
             },
@@ -263,6 +266,126 @@ final class RuntimeReadinessTests: XCTestCase {
         let r = checker(ffmpeg: true, ytDlp: true, workerAvailable: true).check()
         XCTAssertTrue(r.sidebarStatus.contains("runs on this Mac"))
         XCTAssertFalse(r.sidebarStatus.contains("100% local"))
+    }
+
+    // MARK: - Node runtime required for YouTube acquisition
+
+    func testMissingNode_disablesYouTubeAcquisitionKeepsLocalSeparation() {
+        let r = checker(ffmpeg: true, ytDlp: true, node: false, workerAvailable: true).check()
+        XCTAssertTrue(r.nodeAvailable == false)
+        XCTAssertFalse(r.isYouTubeAcquisitionReady, "Node missing must disable YouTube acquisition")
+        XCTAssertTrue(r.isLocalSeparationReady, "missing Node must NOT disable local separation")
+        XCTAssertTrue(r.isLoadedSeparationReady)
+        XCTAssertTrue(r.isMp3ExportReady)
+        XCTAssertTrue(r.isWavExportReady)
+        XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.nodePath))
+        XCTAssertTrue(r.sidebarStatus.contains("Node"))
+        XCTAssertTrue(r.sidebarStatus.contains("YouTube disabled"))
+    }
+
+    func testYouTubeAcquisitionRequiresAllThree() {
+        let all = checker(ffmpeg: true, ytDlp: true, node: true, workerAvailable: true).check()
+        XCTAssertTrue(all.isYouTubeAcquisitionReady)
+        let noFfmpeg = checker(ffmpeg: false, ytDlp: true, node: true, workerAvailable: true).check()
+        XCTAssertFalse(noFfmpeg.isYouTubeAcquisitionReady)
+        let noYtDlp = checker(ffmpeg: true, ytDlp: false, node: true, workerAvailable: true).check()
+        XCTAssertFalse(noYtDlp.isYouTubeAcquisitionReady)
+        let noNode = checker(ffmpeg: true, ytDlp: true, node: false, workerAvailable: true).check()
+        XCTAssertFalse(noNode.isYouTubeAcquisitionReady)
+        let none = checker(ffmpeg: false, ytDlp: false, node: false, workerAvailable: true).check()
+        XCTAssertFalse(none.isYouTubeAcquisitionReady)
+    }
+
+    func testSidebarStatusPriority_ffmpegOverWorkerOverYtDlpOverNode() {
+        // ffmpeg missing takes priority over node
+        let r1 = checker(ffmpeg: false, ytDlp: true, node: false, workerAvailable: true).check()
+        XCTAssertTrue(r1.sidebarStatus.contains(RuntimeReadiness.ffmpegPath))
+        XCTAssertFalse(r1.sidebarStatus.contains(RuntimeReadiness.nodePath))
+        // worker missing takes priority over yt-dlp and node
+        let r2 = checker(ffmpeg: true, ytDlp: false, node: false, workerAvailable: false).check()
+        XCTAssertTrue(r2.sidebarStatus.contains("worker Python"))
+        XCTAssertFalse(r2.sidebarStatus.contains("yt-dlp"))
+        XCTAssertFalse(r2.sidebarStatus.contains(RuntimeReadiness.nodePath))
+        // yt-dlp missing takes priority over node
+        let r3 = checker(ffmpeg: true, ytDlp: false, node: false, workerAvailable: true).check()
+        XCTAssertTrue(r3.sidebarStatus.contains(RuntimeReadiness.ytDlpPath))
+        XCTAssertFalse(r3.sidebarStatus.contains(RuntimeReadiness.nodePath))
+        // node missing only when ffmpeg, worker, yt-dlp present
+        let r4 = checker(ffmpeg: true, ytDlp: true, node: false, workerAvailable: true).check()
+        XCTAssertTrue(r4.sidebarStatus.contains(RuntimeReadiness.nodePath))
+    }
+
+    func testMissingFFmpeg_disablesYouTubeEvenWhenNodeMissing() {
+        let r = checker(ffmpeg: false, ytDlp: false, node: false, workerAvailable: true).check()
+        XCTAssertFalse(r.isYouTubeAcquisitionReady)
+        XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.ffmpegPath))
+    }
+
+    func testNodeAvailableFlag() {
+        let r = checker(ffmpeg: true, ytDlp: true, node: true, workerAvailable: true).check()
+        XCTAssertTrue(r.nodeAvailable)
+        XCTAssertEqual(RuntimeReadiness.nodePath, "/opt/homebrew/bin/node")
+    }
+
+    // MARK: - Granular YouTube readiness per metadata-first workflow
+
+    func testYouTubePreviewReady_requiresOnlyYtDlpAndNode() {
+        // preview = ytDlp && node, independent of ffmpeg and worker
+        let all = checker(ffmpeg: true, ytDlp: true, node: true, workerAvailable: true).check()
+        XCTAssertTrue(all.isYouTubePreviewReady)
+        let noFfmpeg = checker(ffmpeg: false, ytDlp: true, node: true, workerAvailable: true).check()
+        XCTAssertTrue(noFfmpeg.isYouTubePreviewReady, "Preview must NOT require FFmpeg")
+        let noWorker = checker(ffmpeg: true, ytDlp: true, node: true, workerAvailable: false).check()
+        XCTAssertTrue(noWorker.isYouTubePreviewReady, "Preview must NOT require worker")
+        let noFfmpegNoWorker = checker(ffmpeg: false, ytDlp: true, node: true, workerAvailable: false).check()
+        XCTAssertTrue(noFfmpegNoWorker.isYouTubePreviewReady, "Preview only needs yt-dlp+node")
+        let noYtDlp = checker(ffmpeg: true, ytDlp: false, node: true, workerAvailable: true).check()
+        XCTAssertFalse(noYtDlp.isYouTubePreviewReady)
+        let noNode = checker(ffmpeg: true, ytDlp: true, node: false, workerAvailable: true).check()
+        XCTAssertFalse(noNode.isYouTubePreviewReady)
+        let none = checker(ffmpeg: false, ytDlp: false, node: false, workerAvailable: false).check()
+        XCTAssertFalse(none.isYouTubePreviewReady)
+    }
+
+    func testYouTubeMp3Ready_requiresPreviewPlusFFmpeg() {
+        // mp3 = preview && ffmpeg
+        let ok = checker(ffmpeg: true, ytDlp: true, node: true, workerAvailable: true).check()
+        XCTAssertTrue(ok.isYouTubeMp3Ready)
+        let okNoWorker = checker(ffmpeg: true, ytDlp: true, node: true, workerAvailable: false).check()
+        XCTAssertTrue(okNoWorker.isYouTubeMp3Ready, "MP3 must NOT require worker")
+        let noFfmpeg = checker(ffmpeg: false, ytDlp: true, node: true, workerAvailable: true).check()
+        XCTAssertFalse(noFfmpeg.isYouTubeMp3Ready, "MP3 must require FFmpeg")
+        let noYtDlp = checker(ffmpeg: true, ytDlp: false, node: true, workerAvailable: true).check()
+        XCTAssertFalse(noYtDlp.isYouTubeMp3Ready)
+        let noNode = checker(ffmpeg: true, ytDlp: true, node: false, workerAvailable: true).check()
+        XCTAssertFalse(noNode.isYouTubeMp3Ready)
+        // also verify it combines preview and mp3Export
+        XCTAssertEqual(ok.isYouTubeMp3Ready, ok.isYouTubePreviewReady && ok.isMp3ExportReady)
+    }
+
+    func testYouTubeSeparationReady_requiresMp3PlusWorker() {
+        // separation = mp3 && worker
+        let ok = checker(ffmpeg: true, ytDlp: true, node: true, workerAvailable: true).check()
+        XCTAssertTrue(ok.isYouTubeSeparationReady)
+        let noWorker = checker(ffmpeg: true, ytDlp: true, node: true, workerAvailable: false).check()
+        XCTAssertFalse(noWorker.isYouTubeSeparationReady, "Separation must require worker")
+        let noFfmpeg = checker(ffmpeg: false, ytDlp: true, node: true, workerAvailable: true).check()
+        XCTAssertFalse(noFfmpeg.isYouTubeSeparationReady, "Separation must require FFmpeg via MP3")
+        let noYtDlp = checker(ffmpeg: true, ytDlp: false, node: true, workerAvailable: true).check()
+        XCTAssertFalse(noYtDlp.isYouTubeSeparationReady)
+        let noNode = checker(ffmpeg: true, ytDlp: true, node: false, workerAvailable: true).check()
+        XCTAssertFalse(noNode.isYouTubeSeparationReady)
+        XCTAssertEqual(ok.isYouTubeSeparationReady, ok.isYouTubeMp3Ready && ok.isWorkerReady)
+        XCTAssertEqual(ok.isYouTubeSeparationReady, ok.isYouTubeMp3Ready && ok.isLoadedSeparationReady)
+    }
+
+    func testYouTubePreviewDoesNotRequireFFmpeg_whileAcquisitionDoes() {
+        // Distinction: preview stays ready when ffmpeg missing, acquisition does not
+        let r = checker(ffmpeg: false, ytDlp: true, node: true, workerAvailable: true).check()
+        XCTAssertTrue(r.isYouTubePreviewReady, "Preview should stay ready without FFmpeg")
+        XCTAssertFalse(r.isYouTubeAcquisitionReady, "Acquisition (legacy) requires FFmpeg")
+        XCTAssertFalse(r.isYouTubeMp3Ready)
+        XCTAssertFalse(r.isYouTubeSeparationReady)
     }
 
     @MainActor

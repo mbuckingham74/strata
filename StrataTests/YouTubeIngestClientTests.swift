@@ -116,6 +116,10 @@ final class YouTubeIngestClientTests: XCTestCase {
         XCTAssertTrue(lines[0].contains("--write-info-json"), "yt-dlp should request metadata")
         XCTAssertTrue(lines[0].contains("--write-thumbnail"), "yt-dlp should request artwork")
         XCTAssertTrue(lines[0].contains("source.%(ext)s"), "yt-dlp should contain source template")
+        XCTAssertTrue(lines[0].contains("--ffmpeg-location"), "yt-dlp should contain --ffmpeg-location for GUI PATH")
+        XCTAssertTrue(lines[0].contains("/opt/homebrew/bin/ffmpeg"), "yt-dlp --ffmpeg-location value must be literal /opt/homebrew/bin/ffmpeg")
+        XCTAssertTrue(lines[0].contains("--js-runtimes"), "yt-dlp should contain --js-runtimes for Node")
+        XCTAssertTrue(lines[0].contains("node:/opt/homebrew/bin/node"), "yt-dlp --js-runtimes value must be node:/opt/homebrew/bin/node")
         // Check absolute path in yt-dlp -o arg
         XCTAssertTrue(lines[0].contains(cacheBase.path) || lines[0].contains("/tmp") || lines[0].contains("/private"), "yt-dlp template should be absolute")
         // ffmpeg args contain -ar 44100, -ac 2, pcm_f32le, and mixture.wav
@@ -986,5 +990,261 @@ final class YouTubeIngestClientTests: XCTestCase {
         for d in remaining { try? FileManager.default.removeItem(at: d) }
         firstTask.cancel()
         _ = try? await firstTask.value
+    }
+
+    // MARK: - Metadata-first preview: fetchPreview is metadata-only
+
+    func testFetchPreviewIsMetadataOnlyNoMediaOrFFmpeg() async throws {
+        let cacheBase = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase) }
+        let logFile = try makeLogFile()
+        defer { try? FileManager.default.removeItem(at: logFile) }
+
+        let ytScript = """
+        #!/usr/bin/python3
+        import sys, os
+        log_path = "\(logFile.path)"
+        with open(log_path, "a") as f:
+            f.write("yt-dlp " + " ".join(sys.argv[1:]) + "\\n")
+        args = sys.argv[1:]
+        if "-o" in args:
+            idx = args.index("-o")
+            tmpl = args[idx+1]
+            os.makedirs(os.path.dirname(tmpl), exist_ok=True)
+            if "--skip-download" in args:
+                info = tmpl.replace("%(ext)s", "info.json")
+                with open(info, "w") as jf:
+                    jf.write('{"artist":"Preview Artist","track":"Preview Title","title":"Ignored","channel":"Preview Channel","album":"Preview Album","album_artist":"Preview AlbumArtist","release_year":2020,"genre":"Pop","track_number":2,"duration":123.4}')
+                thumb = tmpl.replace("%(ext)s", "jpg")
+                with open(thumb, "wb") as tf:
+                    tf.write(b"\\xff\\xd8\\xff\\xe0thumb")
+            else:
+                out = tmpl.replace("%(ext)s", "mp4")
+                os.makedirs(os.path.dirname(out), exist_ok=True)
+                open(out, "wb").write(b"\\x00"*100)
+        sys.exit(0)
+        """
+        let ffScript = writeValidWavPythonScript(logPath: logFile.path)
+        let ytURL = try makeFakeExecutable(name: "yt-dlp", scriptContent: ytScript)
+        let ffURL = try makeFakeExecutable(name: "ffmpeg", scriptContent: ffScript)
+        defer {
+            try? FileManager.default.removeItem(at: ytURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: ffURL.deletingLastPathComponent())
+        }
+
+        let client = YouTubeIngestClient(ytDlpURL: ytURL, ffmpegURL: ffURL, cacheBaseURL: cacheBase)
+        let preview = try await client.fetchPreview(youTubeURL: validYouTubeURL())
+
+        // Metadata / artwork / duration
+        XCTAssertEqual(preview.metadata, YouTubeTrackMetadata(artist: "Preview Artist", title: "Preview Title", album: "Preview Album", albumArtist: "Preview AlbumArtist", year: "2020", genre: "Pop", trackNumber: "2", channel: "Preview Channel"))
+        XCTAssertEqual(preview.metadata?.exportBaseName, "Preview Artist - Preview Title")
+        let artworkURL = try XCTUnwrap(preview.artworkURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: artworkURL.path), "Artwork should be kept")
+        XCTAssertEqual(artworkURL.lastPathComponent, "source.jpg")
+        XCTAssertEqual(try Data(contentsOf: artworkURL), Data([0xFF, 0xD8, 0xFF, 0xE0]) + Data("thumb".utf8))
+        XCTAssertEqual(preview.duration ?? 0, 123.4, accuracy: 0.01)
+
+        let log = try String(contentsOf: logFile, encoding: .utf8)
+        let lines = log.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+        XCTAssertEqual(lines.count, 1, "fetchPreview must invoke only yt-dlp, no FFmpeg, got log: \(log)")
+        let ytLine = lines[0]
+        XCTAssertTrue(ytLine.hasPrefix("yt-dlp "), "First line should be yt-dlp")
+        XCTAssertTrue(ytLine.contains("--skip-download"), "fetchPreview must contain --skip-download: \(ytLine)")
+        XCTAssertTrue(ytLine.contains("--no-playlist"), "fetchPreview must contain --no-playlist")
+        XCTAssertTrue(ytLine.contains("--write-info-json"), "fetchPreview must contain --write-info-json")
+        XCTAssertTrue(ytLine.contains("--write-thumbnail"), "fetchPreview must contain --write-thumbnail")
+        XCTAssertFalse(ytLine.contains("bestaudio"), "fetchPreview must NOT contain bestaudio: \(ytLine)")
+        XCTAssertFalse(ytLine.contains("bestvideo"), "fetchPreview must NOT request video: \(ytLine)")
+        // Ensure no FFmpeg location formatting issues but no ffmpeg invocation
+        XCTAssertFalse(ytLine.contains("ffmpeg -nostdin"), "Should not contain ffmpeg args")
+        // Verify candidates.count == 0 success path: leaves no mixture.wav, no source media
+        let runDirs = try FileManager.default.contentsOfDirectory(at: cacheBase, includingPropertiesForKeys: nil)
+        XCTAssertEqual(runDirs.count, 1, "Run dir should remain with artwork only")
+        let runDir = runDirs.first!
+        let contents = try FileManager.default.contentsOfDirectory(at: runDir, includingPropertiesForKeys: nil)
+        let names = Set(contents.map(\.lastPathComponent))
+        XCTAssertFalse(names.contains("mixture.wav"), "fetchPreview must leave no mixture.wav")
+        XCTAssertFalse(names.contains("source.mp4"), "fetchPreview must leave no media file candidate")
+        XCTAssertTrue(names.contains("source.jpg"), "Artwork should be kept")
+        XCTAssertFalse(names.contains("source.info.json"), "info.json should be cleaned")
+        XCTAssertEqual(contents.count, 1, "Only artwork should remain, got \(contents)")
+
+        // URL validation still works
+        do {
+            _ = try await client.fetchPreview(youTubeURL: URL(string: "http://www.youtube.com/watch?v=abc")!)
+            XCTFail("http should be rejected")
+        } catch let err as YouTubeIngestError {
+            guard case .invalidYouTubeURL = err else { return XCTFail("Wrong \(err)") }
+        }
+        do {
+            _ = try await client.fetchPreview(youTubeURL: URL(string: "https://example.com/video")!)
+            XCTFail("non-youtube should be rejected")
+        } catch let err as YouTubeIngestError {
+            guard case .invalidYouTubeURL = err else { return XCTFail("Wrong \(err)") }
+        }
+
+        // Cleanup preview run dir
+        try? FileManager.default.removeItem(at: runDir)
+    }
+
+    func testDownloadAudioOnlyUsesAudioOnlyNoFFmpeg() async throws {
+        let cacheBase = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase) }
+        let logFile = try makeLogFile()
+        defer { try? FileManager.default.removeItem(at: logFile) }
+
+        let ytScript = """
+        #!/usr/bin/python3
+        import sys, os
+        log_path = "\(logFile.path)"
+        with open(log_path, "a") as f:
+            f.write("yt-dlp " + " ".join(sys.argv[1:]) + "\\n")
+        args = sys.argv[1:]
+        if "-o" in args:
+            idx = args.index("-o")
+            tmpl = args[idx+1]
+            out = tmpl.replace("%(ext)s", "m4a")
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            with open(out, "wb") as outf:
+                outf.write(b"\\x00" * 2048)
+            info = tmpl.replace("%(ext)s", "info.json")
+            with open(info, "w") as jf:
+                jf.write('{"artist":"Audio Artist","track":"Audio Title","channel":"Audio Channel","duration":99.9}')
+            thumb = tmpl.replace("%(ext)s", "jpg")
+            with open(thumb, "wb") as tf:
+                tf.write(b"\\xff\\xd8\\xff\\xe0audiothumb")
+        sys.exit(0)
+        """
+        let ffScript = writeValidWavPythonScript(logPath: logFile.path)
+        let ytURL = try makeFakeExecutable(name: "yt-dlp", scriptContent: ytScript)
+        let ffURL = try makeFakeExecutable(name: "ffmpeg", scriptContent: ffScript)
+        defer {
+            try? FileManager.default.removeItem(at: ytURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: ffURL.deletingLastPathComponent())
+        }
+
+        let client = YouTubeIngestClient(ytDlpURL: ytURL, ffmpegURL: ffURL, cacheBaseURL: cacheBase)
+        let result = try await client.downloadAudioOnly(youTubeURL: shortYouTubeURL())
+
+        // audioURL is source file, not WAV, and exists
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.audioURL.path), "downloadAudioOnly should return existing audio file")
+        XCTAssertFalse(result.audioURL.lastPathComponent == "mixture.wav", "downloadAudioOnly must NOT produce mixture.wav")
+        XCTAssertTrue(result.audioURL.pathExtension.lowercased() == "m4a" || result.audioURL.pathExtension.lowercased() == "opus" || result.audioURL.pathExtension.lowercased() != "wav", "Should be audio file not WAV: \(result.audioURL)")
+        // metadata/artwork
+        XCTAssertEqual(result.metadata, YouTubeTrackMetadata(artist: "Audio Artist", title: "Audio Title", channel: "Audio Channel"))
+        let artwork = try XCTUnwrap(result.artworkURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: artwork.path))
+        XCTAssertEqual(artwork.lastPathComponent, "source.jpg")
+
+        let log = try String(contentsOf: logFile, encoding: .utf8)
+        let lines = log.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+        XCTAssertEqual(lines.count, 1, "downloadAudioOnly must invoke only yt-dlp, no FFmpeg, got \(log)")
+        let ytLine = lines[0]
+        XCTAssertTrue(ytLine.hasPrefix("yt-dlp "))
+        XCTAssertTrue(ytLine.contains("-f bestaudio"), "Should contain strict -f bestaudio: \(ytLine)")
+        XCTAssertFalse(ytLine.contains("bestaudio*"), "Must NOT contain bestaudio* fallback: \(ytLine)")
+        XCTAssertFalse(ytLine.contains("bestaudio/"), "Must be strict bestaudio, no slash fallback: \(ytLine)")
+        XCTAssertTrue(ytLine.contains("--no-playlist"))
+        XCTAssertTrue(ytLine.contains("--write-info-json"))
+        XCTAssertTrue(ytLine.contains("--write-thumbnail"))
+        XCTAssertFalse(ytLine.contains("--skip-download"), "downloadAudioOnly must NOT contain --skip-download: \(ytLine)")
+        XCTAssertFalse(ytLine.contains("bestvideo"), "Must never request video: \(ytLine)")
+        // Ensure no bare "best" without audio qualifier triggers false positive; check best without audio is not present except bestaudio
+        if ytLine.contains("best") {
+            XCTAssertTrue(ytLine.contains("bestaudio"), "Any best must be audio-qualified: \(ytLine)")
+        }
+        // No mixture.wav in run dir
+        let runDir = result.audioURL.deletingLastPathComponent()
+        let contents = try FileManager.default.contentsOfDirectory(at: runDir, includingPropertiesForKeys: nil)
+        let names = Set(contents.map(\.lastPathComponent))
+        XCTAssertFalse(names.contains("mixture.wav"), "downloadAudioOnly must NOT produce mixture.wav")
+        XCTAssertTrue(names.contains("source.m4a"), "Audio source should remain")
+        XCTAssertTrue(names.contains("source.jpg"), "Artwork should remain")
+        XCTAssertFalse(names.contains("source.info.json"), "info.json cleaned")
+        // Output file exists and is audio file, not WAV validation
+        let attrs = try FileManager.default.attributesOfItem(atPath: result.audioURL.path)
+        XCTAssertGreaterThan(attrs[.size] as? UInt64 ?? 0, 0)
+
+        // URL validation
+        do {
+            _ = try await client.downloadAudioOnly(youTubeURL: URL(string: "https://example.com/video")!)
+            XCTFail("Should reject non-youtube")
+        } catch let err as YouTubeIngestError {
+            guard case .invalidYouTubeURL = err else { return XCTFail("Wrong \(err)") }
+        }
+    }
+
+    func testIngestWithMetadataUsesAudioOnlyAndCanonicalFFmpeg() async throws {
+        let cacheBase = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase) }
+        let logFile = try makeLogFile()
+        defer { try? FileManager.default.removeItem(at: logFile) }
+
+        let ytScript = """
+        #!/usr/bin/python3
+        import sys, os
+        log_path = "\(logFile.path)"
+        with open(log_path, "a") as f:
+            f.write("yt-dlp " + " ".join(sys.argv[1:]) + "\\n")
+        args = sys.argv[1:]
+        if "-o" in args:
+            idx = args.index("-o")
+            tmpl = args[idx+1]
+            out = tmpl.replace("%(ext)s", "webm")
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            with open(out, "wb") as outf:
+                outf.write(b"\\x00" * 512)
+            info = tmpl.replace("%(ext)s", "info.json")
+            with open(info, "w") as jf:
+                jf.write('{"artist":"Ingest Artist","track":"Ingest Title"}')
+            thumb = tmpl.replace("%(ext)s", "jpg")
+            with open(thumb, "wb") as tf:
+                tf.write(b"\\xff\\xd8\\xff\\xe0thumb")
+        sys.exit(0)
+        """
+        let ffScript = writeValidWavPythonScript(logPath: logFile.path, frames: 2048, sr: 44100, ch: 2)
+        let ytURL = try makeFakeExecutable(name: "yt-dlp", scriptContent: ytScript)
+        let ffURL = try makeFakeExecutable(name: "ffmpeg", scriptContent: ffScript)
+        defer {
+            try? FileManager.default.removeItem(at: ytURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: ffURL.deletingLastPathComponent())
+        }
+
+        let client = YouTubeIngestClient(ytDlpURL: ytURL, ffmpegURL: ffURL, cacheBaseURL: cacheBase)
+        let result = try await client.ingestWithMetadata(youTubeURL: validYouTubeURL())
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.audioURL.path))
+        XCTAssertEqual(result.audioURL.lastPathComponent, "mixture.wav")
+        // Validate canonical via AVAudioFile
+        let file = try AVAudioFile(forReading: result.audioURL)
+        XCTAssertEqual(file.processingFormat.sampleRate, 44100, accuracy: 0.1)
+        XCTAssertEqual(file.processingFormat.channelCount, 2)
+
+        let log = try String(contentsOf: logFile, encoding: .utf8)
+        let lines = log.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+        XCTAssertEqual(lines.count, 2, "ingestWithMetadata should invoke yt-dlp + ffmpeg, got \(log)")
+        let ytLine = lines[0]
+        XCTAssertTrue(ytLine.hasPrefix("yt-dlp "))
+        XCTAssertTrue(ytLine.contains("-f bestaudio"), "ingestWithMetadata must contain strict -f bestaudio: \(ytLine)")
+        XCTAssertFalse(ytLine.contains("bestaudio*"), "Must NOT contain bestaudio* fallback: \(ytLine)")
+        XCTAssertFalse(ytLine.contains("bestaudio/"), "Must be strict bestaudio, no slash fallback: \(ytLine)")
+        XCTAssertTrue(ytLine.contains("--no-playlist"))
+        XCTAssertTrue(ytLine.contains("--write-info-json"))
+        XCTAssertTrue(ytLine.contains("--write-thumbnail"))
+        XCTAssertFalse(ytLine.contains("bestvideo"), "Must never request video: \(ytLine)")
+        XCTAssertFalse(ytLine.contains("--skip-download"), "ingestWithMetadata must download media, not skip: \(ytLine)")
+
+        let ffLine = lines[1]
+        XCTAssertTrue(ffLine.hasPrefix("ffmpeg "))
+        XCTAssertTrue(ffLine.contains("-nostdin"), "ffmpeg must contain -nostdin")
+        XCTAssertTrue(ffLine.contains("-ar"), "ffmpeg must contain -ar")
+        XCTAssertTrue(ffLine.contains("44100"))
+        XCTAssertTrue(ffLine.contains("-ac"), "ffmpeg must contain -ac")
+        XCTAssertTrue(ffLine.contains("pcm_f32le"))
+        XCTAssertTrue(ffLine.contains("mixture.wav"))
+        // Ensure canonical args exactly
+        XCTAssertTrue(ffLine.contains("-ar 44100"), "ffmpeg should contain -ar 44100: \(ffLine)")
+        XCTAssertTrue(ffLine.contains("-ac 2"), "ffmpeg should contain -ac 2: \(ffLine)")
+        XCTAssertTrue(ffLine.contains("-c:a pcm_f32le"), "ffmpeg should contain -c:a pcm_f32le: \(ffLine)")
     }
 }

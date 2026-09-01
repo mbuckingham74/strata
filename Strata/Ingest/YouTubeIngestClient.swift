@@ -147,6 +147,7 @@ private struct YTDLPInfo: Decodable {
     let channel: String?
     let uploader: String?
     let channelName: String?
+    let duration: Double?
 
     private enum CodingKeys: String, CodingKey {
         case artist
@@ -160,6 +161,7 @@ private struct YTDLPInfo: Decodable {
         case channel
         case uploader
         case channelName = "channel_name"
+        case duration
     }
 
     init(from decoder: Decoder) throws {
@@ -175,6 +177,7 @@ private struct YTDLPInfo: Decodable {
         channel = try? container.decode(String.self, forKey: .channel)
         uploader = try? container.decode(String.self, forKey: .uploader)
         channelName = try? container.decode(String.self, forKey: .channelName)
+        duration = Self.double(forKey: .duration, in: container)
     }
 
     private static func integer(
@@ -189,6 +192,28 @@ private struct YTDLPInfo: Decodable {
         }
         return nil
     }
+
+    private static func double(
+        forKey key: CodingKeys,
+        in container: KeyedDecodingContainer<CodingKeys>
+    ) -> Double? {
+        if let value = try? container.decode(Double.self, forKey: key) {
+            return value
+        }
+        if let value = try? container.decode(Int.self, forKey: key) {
+            return Double(value)
+        }
+        if let value = try? container.decode(String.self, forKey: key) {
+            return Double(value)
+        }
+        return nil
+    }
+}
+
+struct YouTubePreviewResult: Sendable, Equatable {
+    let metadata: YouTubeTrackMetadata?
+    let artworkURL: URL?
+    let duration: TimeInterval?
 }
 
 // MARK: - YouTubeIngestClient
@@ -259,14 +284,17 @@ actor YouTubeIngestClient {
                 throw YouTubeIngestError.cancelled
             }
 
-            // yt-dlp
+            // yt-dlp (audio-only, strict bestaudio - never request video streams)
             let outputTemplate = runDir.appendingPathComponent("source.%(ext)s").path
             let ytArgs = [
                 youTubeURL.absoluteString,
+                "-f", "bestaudio",
                 "-o", outputTemplate,
                 "--no-playlist",
                 "--write-info-json",
                 "--write-thumbnail",
+                "--ffmpeg-location", "/opt/homebrew/bin/ffmpeg",
+                "--js-runtimes", "node:/opt/homebrew/bin/node",
             ]
             let ytStatus = try await runTool(
                 toolName: "yt-dlp",
@@ -372,6 +400,208 @@ actor YouTubeIngestClient {
         }
     }
 
+    func fetchPreview(youTubeURL: URL) async throws -> YouTubePreviewResult {
+        guard let scheme = youTubeURL.scheme?.lowercased(), scheme == "https",
+              let host = youTubeURL.host?.lowercased(),
+              host.contains("youtube.com") || host.contains("youtu.be") else {
+            throw YouTubeIngestError.invalidYouTubeURL(youTubeURL.absoluteString)
+        }
+        guard isAbsoluteFileURL(ytDlpURL) else {
+            throw YouTubeIngestError.invalidCanonicalOutput("ytDlpURL must be absolute file URL: \(ytDlpURL)")
+        }
+        if await processRunner.hasActiveProcess() || activeRunDirectory != nil {
+            throw YouTubeIngestError.alreadyRunning
+        }
+        let runDir = cacheBaseURL.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        do {
+            try fileManager.createDirectory(at: runDir, withIntermediateDirectories: true, attributes: nil)
+        } catch {
+            throw YouTubeIngestError.toolFailure(tool: "mkdir", exitCode: -1, stderrTail: error.localizedDescription)
+        }
+        activeRunDirectory = runDir
+        cancellationRequested = false
+        let stderrTail = AudioStderrTail()
+        do {
+            if Task.isCancelled || cancellationRequested {
+                throw YouTubeIngestError.cancelled
+            }
+            let outputTemplate = runDir.appendingPathComponent("source.%(ext)s").path
+            let ytArgs = [
+                youTubeURL.absoluteString,
+                "-o", outputTemplate,
+                "--skip-download",
+                "--no-playlist",
+                "--write-info-json",
+                "--write-thumbnail",
+                "--js-runtimes", "node:/opt/homebrew/bin/node",
+            ]
+            let ytStatus = try await runTool(
+                toolName: "yt-dlp",
+                executableURL: ytDlpURL,
+                arguments: ytArgs,
+                stderrTail: stderrTail
+            )
+            if ytStatus != 0 {
+                throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: stderrTail.string())
+            }
+            if Task.isCancelled || cancellationRequested {
+                throw YouTubeIngestError.cancelled
+            }
+            let contents: [URL]
+            do {
+                contents = try fileManager.contentsOfDirectory(at: runDir, includingPropertiesForKeys: nil, options: [])
+            } catch {
+                throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: stderrTail.string())
+            }
+            let infoURLs = contents.filter { $0.lastPathComponent.hasSuffix(".info.json") }
+            let thumbnailURLs = contents.filter(isThumbnailFile)
+            let candidates = contents.filter {
+                $0.lastPathComponent != "mixture.wav"
+                    && !$0.lastPathComponent.hasSuffix(".info.json")
+                    && !isThumbnailFile($0)
+            }
+            if candidates.count != 0 {
+                let tail = stderrTail.string()
+                throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: tail)
+            }
+            guard infoURLs.count == 1 else {
+                let tail = stderrTail.string()
+                throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: tail)
+            }
+            let metadata = metadata(from: infoURLs)
+            let artworkURL = artwork(from: thumbnailURLs)
+            let previewDuration = duration(from: infoURLs)
+            if Task.isCancelled || cancellationRequested {
+                throw YouTubeIngestError.cancelled
+            }
+            for url in infoURLs {
+                try? fileManager.removeItem(at: url)
+            }
+            for url in thumbnailURLs where url != artworkURL {
+                try? fileManager.removeItem(at: url)
+            }
+            activeRunDirectory = nil
+            cancellationRequested = false
+            return YouTubePreviewResult(metadata: metadata, artworkURL: artworkURL, duration: previewDuration)
+        } catch {
+            if await processRunner.hasLiveProcess() {
+                if error is CancellationError {
+                    throw YouTubeIngestError.cancelled
+                }
+                throw error
+            }
+            if fileManager.fileExists(atPath: runDir.path) {
+                try? fileManager.removeItem(at: runDir)
+            }
+            activeRunDirectory = nil
+            if error is CancellationError {
+                throw YouTubeIngestError.cancelled
+            }
+            throw error
+        }
+    }
+
+    func downloadAudioOnly(youTubeURL: URL) async throws -> YouTubeIngestResult {
+        guard let scheme = youTubeURL.scheme?.lowercased(), scheme == "https",
+              let host = youTubeURL.host?.lowercased(),
+              host.contains("youtube.com") || host.contains("youtu.be") else {
+            throw YouTubeIngestError.invalidYouTubeURL(youTubeURL.absoluteString)
+        }
+        guard isAbsoluteFileURL(ytDlpURL) else {
+            throw YouTubeIngestError.invalidCanonicalOutput("ytDlpURL must be absolute file URL: \(ytDlpURL)")
+        }
+        guard isAbsoluteFileURL(ffmpegURL) else {
+            throw YouTubeIngestError.invalidCanonicalOutput("ffmpegURL must be absolute file URL: \(ffmpegURL)")
+        }
+        if await processRunner.hasActiveProcess() || activeRunDirectory != nil {
+            throw YouTubeIngestError.alreadyRunning
+        }
+        let runDir = cacheBaseURL.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        do {
+            try fileManager.createDirectory(at: runDir, withIntermediateDirectories: true, attributes: nil)
+        } catch {
+            throw YouTubeIngestError.toolFailure(tool: "mkdir", exitCode: -1, stderrTail: error.localizedDescription)
+        }
+        activeRunDirectory = runDir
+        cancellationRequested = false
+        let stderrTail = AudioStderrTail()
+        do {
+            if Task.isCancelled || cancellationRequested {
+                throw YouTubeIngestError.cancelled
+            }
+            let outputTemplate = runDir.appendingPathComponent("source.%(ext)s").path
+            let ytArgs = [
+                youTubeURL.absoluteString,
+                "-f", "bestaudio",
+                "-o", outputTemplate,
+                "--no-playlist",
+                "--write-info-json",
+                "--write-thumbnail",
+                "--ffmpeg-location", "/opt/homebrew/bin/ffmpeg",
+                "--js-runtimes", "node:/opt/homebrew/bin/node",
+            ]
+            let ytStatus = try await runTool(
+                toolName: "yt-dlp",
+                executableURL: ytDlpURL,
+                arguments: ytArgs,
+                stderrTail: stderrTail
+            )
+            if ytStatus != 0 {
+                throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: stderrTail.string())
+            }
+            if Task.isCancelled || cancellationRequested {
+                throw YouTubeIngestError.cancelled
+            }
+            let contents: [URL]
+            do {
+                contents = try fileManager.contentsOfDirectory(at: runDir, includingPropertiesForKeys: nil, options: [])
+            } catch {
+                throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: stderrTail.string())
+            }
+            let infoURLs = contents.filter { $0.lastPathComponent.hasSuffix(".info.json") }
+            let thumbnailURLs = contents.filter(isThumbnailFile)
+            let candidates = contents.filter {
+                $0.lastPathComponent != "mixture.wav"
+                    && !$0.lastPathComponent.hasSuffix(".info.json")
+                    && !isThumbnailFile($0)
+            }
+            guard candidates.count == 1 else {
+                let tail = stderrTail.string()
+                throw YouTubeIngestError.toolFailure(tool: "yt-dlp", exitCode: ytStatus, stderrTail: tail)
+            }
+            let sourceURL = candidates[0]
+            let metadata = metadata(from: infoURLs)
+            let artworkURL = artwork(from: thumbnailURLs)
+            if Task.isCancelled || cancellationRequested {
+                throw YouTubeIngestError.cancelled
+            }
+            for url in infoURLs {
+                try? fileManager.removeItem(at: url)
+            }
+            for url in thumbnailURLs where url != artworkURL {
+                try? fileManager.removeItem(at: url)
+            }
+            activeRunDirectory = nil
+            cancellationRequested = false
+            return YouTubeIngestResult(audioURL: sourceURL, metadata: metadata, artworkURL: artworkURL)
+        } catch {
+            if await processRunner.hasLiveProcess() {
+                if error is CancellationError {
+                    throw YouTubeIngestError.cancelled
+                }
+                throw error
+            }
+            if fileManager.fileExists(atPath: runDir.path) {
+                try? fileManager.removeItem(at: runDir)
+            }
+            activeRunDirectory = nil
+            if error is CancellationError {
+                throw YouTubeIngestError.cancelled
+            }
+            throw error
+        }
+    }
+
     func cancel() async throws {
         cancellationRequested = true
         let dir = activeRunDirectory
@@ -437,6 +667,16 @@ actor YouTubeIngestClient {
             trackNumber: info.trackNumber.map(String.init),
             channel: rawChannel
         )
+    }
+
+    private func duration(from infoURLs: [URL]) -> TimeInterval? {
+        guard infoURLs.count == 1,
+              let data = try? Data(contentsOf: infoURLs[0]),
+              let info = try? JSONDecoder().decode(YTDLPInfo.self, from: data),
+              let d = info.duration, d > 0 else {
+            return nil
+        }
+        return d
     }
 
     private func isThumbnailFile(_ url: URL) -> Bool {
