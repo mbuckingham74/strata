@@ -164,6 +164,7 @@ final class StemPlaybackController {
         sessionGeneration &+= 1
         transport.stop()
         isPlaying = false
+        currentTime = transport.currentTime
         stopTimer()
     }
 

@@ -580,40 +580,10 @@ struct InferenceCard: View {
                 EditableMetadataEditor(inferenceController: inferenceController)
             }
 
-            // Completed stems
+            // Completed stems — single unified transport lives inside StrataStackView
             if case .completed = inferenceController.state, let result = inferenceController.result {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Stems — 6 validated").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
-                    HStack(spacing: 10) {
-                        Button {
-                            if stemPlaybackController.isPlaying {
-                                stemPlaybackController.pause()
-                            } else {
-                                stemPlaybackController.play()
-                            }
-                        } label: {
-                            Label(
-                                stemPlaybackController.isPlaying ? "Pause" : "Play",
-                                systemImage: stemPlaybackController.isPlaying ? "pause.fill" : "play.fill"
-                            )
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(!stemPlaybackController.hasStems)
-
-                        Slider(
-                            value: Binding(
-                                get: { stemPlaybackController.currentTime },
-                                set: { stemPlaybackController.seek(to: $0) }
-                            ),
-                            in: 0...(stemPlaybackController.duration > 0 ? stemPlaybackController.duration : 1)
-                        )
-                        .disabled(!stemPlaybackController.hasStems)
-                        .accessibilityLabel("Seek stems")
-
-                        Text("\(stemPlaybackController.formattedCurrentTime) / \(stemPlaybackController.formattedDuration)")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
                     if let errorMessage = stemPlaybackController.errorMessage {
                         Text(errorMessage)
                             .font(.caption)

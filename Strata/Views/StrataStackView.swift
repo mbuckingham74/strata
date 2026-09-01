@@ -299,6 +299,8 @@ struct StrataStackView: View {
     @State private var exportingFileName: String?
     @State private var savedFileName: String?
     private var isExporting: Bool { exportingFileName != nil }
+    @State private var strataSliderValue: Double = 0
+    @State private var isStrataDragging: Bool = false
 
     private var orderedStems: [StemArtifact] {
         strataDisplayOrder.compactMap { result.stems[$0] }
@@ -338,38 +340,125 @@ struct StrataStackView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Card header: subtle strata label + transport hint
-            HStack(spacing: 8) {
-                Label("Strata — 6 layers", systemImage: "square.stack.3d.up")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                Spacer()
-                // Small time read-out aligned to shared timeline
-                Text("\(stemPlaybackController.formattedCurrentTime) / \(stemPlaybackController.formattedDuration)")
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            // MARK: - Global mixer transport — unmissable unified surface directly above 6 strata
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    Button {
+                        if stemPlaybackController.isPlaying {
+                            stemPlaybackController.pause()
+                        } else {
+                            stemPlaybackController.play()
+                        }
+                    } label: {
+                        Image(systemName: stemPlaybackController.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.black)
+                            .frame(width: 44, height: 44)
+                            .background(Color.white, in: Circle())
+                            .shadow(color: Color.black.opacity(0.22), radius: 8, y: 3)
+                            .overlay(Circle().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!stemPlaybackController.hasStems)
+                    .accessibilityLabel(stemPlaybackController.isPlaying ? "Pause strata" : "Play strata")
+                    .accessibilityIdentifier("StrataPlayPause")
 
-            // Shared ruler — same HStack insets as rows so ticks align with waveforms
-            HStack(spacing: 10) {
-                Spacer().frame(width: 110)
-                StrataRulerView(
-                    duration: stemPlaybackController.duration,
-                    currentTime: stemPlaybackController.currentTime,
-                    onSeek: { f in stemPlaybackController.seek(to: f * stemPlaybackController.duration) }
-                )
-                .frame(height: 20)
-                .frame(maxWidth: .infinity)
-                // Match right-side fixed columns (gain slider + controls + export)
-                Spacer().frame(width: 96)
-                Spacer().frame(width: 112)
-                Color.clear.frame(width: 26, height: 20)
+                    Button {
+                        stemPlaybackController.stop()
+                    } label: {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 32, height: 32)
+                            .background(Color.white.opacity(0.12), in: Circle())
+                            .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!stemPlaybackController.hasStems)
+                    .accessibilityLabel("Stop strata")
+                    .accessibilityIdentifier("StrataStop")
+                    .help("Stop and return to start")
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label("Strata — 6 layers", systemImage: "square.stack.3d.up")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                        Text("\(stemPlaybackController.formattedCurrentTime) / \(stemPlaybackController.formattedDuration)")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.92))
+                            .contentTransition(.numericText())
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    HStack(spacing: 6) {
+                        Circle().fill(stemPlaybackController.isPlaying ? Color.green : Color.white.opacity(0.28)).frame(width: 6, height: 6)
+                        Text(stemPlaybackController.isPlaying ? "Playing" : "Paused")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    .opacity(stemPlaybackController.hasStems ? 1 : 0.45)
+                }
+                .padding(.horizontal, 12)
+
+                // ONE obvious seek surface — full-width slider aligned to waveform column
+                HStack(spacing: 10) {
+                    Spacer().frame(width: 110)
+                    Slider(
+                        value: Binding(
+                            get: { isStrataDragging ? strataSliderValue : stemPlaybackController.currentTime },
+                            set: { strataSliderValue = $0 }
+                        ),
+                        in: 0...(stemPlaybackController.duration > 0 ? stemPlaybackController.duration : 1),
+                        onEditingChanged: { editing in
+                            isStrataDragging = editing
+                            if editing {
+                                strataSliderValue = stemPlaybackController.currentTime
+                            } else {
+                                stemPlaybackController.seek(to: strataSliderValue)
+                            }
+                        }
+                    )
+                    .tint(Color.white.opacity(0.92))
+                    .disabled(!stemPlaybackController.hasStems)
+                    .accessibilityLabel("Seek strata")
+                    .accessibilityIdentifier("StrataSeekSlider")
+
+                    Spacer().frame(width: 96)
+                    Spacer().frame(width: 112)
+                    Color.clear.frame(width: 26, height: 20)
+                }
+                .padding(.horizontal, 10)
+
+                // Shared ruler ticks — same insets, tap/drag to seek preserved (not a second Slider)
+                HStack(spacing: 10) {
+                    Spacer().frame(width: 110)
+                    StrataRulerView(
+                        duration: stemPlaybackController.duration,
+                        currentTime: stemPlaybackController.currentTime,
+                        onSeek: { f in stemPlaybackController.seek(to: f * stemPlaybackController.duration) }
+                    )
+                    .frame(height: 18)
+                    .frame(maxWidth: .infinity)
+                    Spacer().frame(width: 96)
+                    Spacer().frame(width: 112)
+                    Color.clear.frame(width: 26, height: 20)
+                }
+                .padding(.horizontal, 10)
             }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 2)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
+            .background(Color.white.opacity(0.04))
+            .onChange(of: stemPlaybackController.currentTime) { _, newValue in
+                if !isStrataDragging {
+                    strataSliderValue = newValue
+                }
+            }
+            .onAppear {
+                strataSliderValue = stemPlaybackController.currentTime
+            }
 
             Divider().opacity(0.08)
 
