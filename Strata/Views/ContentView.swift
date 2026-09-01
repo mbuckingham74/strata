@@ -377,9 +377,9 @@ struct InferenceCard: View {
                     )
                 }.padding(.top, 2)
 
-                // 4) Demoted metadata — below strata
+                // 4) Demoted metadata — below strata (collapsed by default, opt-in disclosure)
                 if inferenceController.isEditableMetadataAvailable || (playbackController.hasFile && !inferenceController.isYouTubeSourceLoaded) {
-                    EditableMetadataEditor(inferenceController: inferenceController)
+                    EditableMetadataEditor(inferenceController: inferenceController, isCollapsible: true, isInitiallyExpanded: false)
                 }
 
             } else {
@@ -1281,100 +1281,136 @@ struct InferenceCard: View {
 
 struct EditableMetadataEditor: View {
     @Bindable var inferenceController: InferenceController
+    let isCollapsible: Bool
+    @State private var isExpanded: Bool
+
+    init(inferenceController: InferenceController, isCollapsible: Bool = false, isInitiallyExpanded: Bool = true) {
+        self.inferenceController = inferenceController
+        self.isCollapsible = isCollapsible
+        _isExpanded = State(initialValue: isInitiallyExpanded)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("MP3 Tags").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
-            Text("Edit ID3 metadata written into MP3 exports.").font(.caption2).foregroundStyle(.tertiary)
-            VStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Title").font(.caption2).foregroundStyle(.secondary)
-                        TextField("Title", text: $inferenceController.editableTitle)
-                            .textFieldStyle(.roundedBorder)
-                            .accessibilityIdentifier("ID3TitleField")
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Artist").font(.caption2).foregroundStyle(.secondary)
-                        TextField("Artist", text: $inferenceController.editableArtist)
-                            .textFieldStyle(.roundedBorder)
-                            .accessibilityIdentifier("ID3ArtistField")
-                    }
-                }
-                HStack(spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Album").font(.caption2).foregroundStyle(.secondary)
-                        TextField("Album", text: $inferenceController.editableAlbum)
-                            .textFieldStyle(.roundedBorder)
-                            .accessibilityIdentifier("ID3AlbumField")
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Album Artist").font(.caption2).foregroundStyle(.secondary)
-                        TextField("Album Artist", text: $inferenceController.editableAlbumArtist)
-                            .textFieldStyle(.roundedBorder)
-                            .accessibilityIdentifier("ID3AlbumArtistField")
-                    }
-                }
-                HStack(spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Year").font(.caption2).foregroundStyle(.secondary)
-                        TextField("Year", text: $inferenceController.editableYear)
-                            .textFieldStyle(.roundedBorder)
-                            .accessibilityIdentifier("ID3YearField")
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Genre").font(.caption2).foregroundStyle(.secondary)
-                        TextField("Genre", text: $inferenceController.editableGenre)
-                            .textFieldStyle(.roundedBorder)
-                            .accessibilityIdentifier("ID3GenreField")
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Track #").font(.caption2).foregroundStyle(.secondary)
-                        TextField("Track #", text: $inferenceController.editableTrackNumber)
-                            .textFieldStyle(.roundedBorder)
-                            .accessibilityIdentifier("ID3TrackNumberField")
-                    }
-                }
-            }
-            Divider().opacity(0.12)
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Text("Artwork").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    Spacer()
-                    Text(artworkStatusText).font(.caption2).foregroundStyle(.tertiary)
-                }
-                if let previewURL = inferenceController.effectiveArtworkURL {
-                    HStack(spacing: 10) {
-                        if let nsImage = NSImage(contentsOf: previewURL) {
-                            Image(nsImage: nsImage)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 56, height: 56)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
-                        } else {
-                            RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.06)).frame(width: 56, height: 56).overlay(Image(systemName: "photo").foregroundStyle(.secondary))
-                        }
-                        Text(previewURL.lastPathComponent).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            if isCollapsible {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 12, height: 12)
+                        Text("MP3 Tags").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
+                        Text(isExpanded ? "Edit ID3 metadata" : "ID3")
+                            .font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
                         Spacer()
+                        Text(isExpanded ? "Hide" : "Edit")
+                            .font(.caption2.weight(.medium)).foregroundStyle(.secondary)
                     }
-                } else {
-                    Text("No artwork — MP3 will have no cover image").font(.caption2).foregroundStyle(.tertiary)
+                    .contentShape(Rectangle())
                 }
-                HStack(spacing: 8) {
-                    Button("Keep") { inferenceController.editableArtwork = .keep }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .accessibilityIdentifier("ID3ArtworkKeep")
-                        .disabled(!canKeep)
-                    Button("Remove") { inferenceController.editableArtwork = .removed }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .accessibilityIdentifier("ID3ArtworkRemove")
-                    Button("Replace…") { chooseReplacementArtwork() }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .accessibilityIdentifier("ID3ArtworkReplace")
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("ToggleMP3Tags")
+                .help(isExpanded ? "Collapse MP3 Tags" : "Expand MP3 Tags")
+            } else {
+                Text("MP3 Tags").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
+                Text("Edit ID3 metadata written into MP3 exports.").font(.caption2).foregroundStyle(.tertiary)
+            }
+            if !isCollapsible || isExpanded {
+                if isCollapsible {
+                    Text("Edit ID3 metadata written into MP3 exports.").font(.caption2).foregroundStyle(.tertiary)
+                }
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Title").font(.caption2).foregroundStyle(.secondary)
+                            TextField("Title", text: $inferenceController.editableTitle)
+                                .textFieldStyle(.roundedBorder)
+                                .accessibilityIdentifier("ID3TitleField")
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Artist").font(.caption2).foregroundStyle(.secondary)
+                            TextField("Artist", text: $inferenceController.editableArtist)
+                                .textFieldStyle(.roundedBorder)
+                                .accessibilityIdentifier("ID3ArtistField")
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Album").font(.caption2).foregroundStyle(.secondary)
+                            TextField("Album", text: $inferenceController.editableAlbum)
+                                .textFieldStyle(.roundedBorder)
+                                .accessibilityIdentifier("ID3AlbumField")
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Album Artist").font(.caption2).foregroundStyle(.secondary)
+                            TextField("Album Artist", text: $inferenceController.editableAlbumArtist)
+                                .textFieldStyle(.roundedBorder)
+                                .accessibilityIdentifier("ID3AlbumArtistField")
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Year").font(.caption2).foregroundStyle(.secondary)
+                            TextField("Year", text: $inferenceController.editableYear)
+                                .textFieldStyle(.roundedBorder)
+                                .accessibilityIdentifier("ID3YearField")
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Genre").font(.caption2).foregroundStyle(.secondary)
+                            TextField("Genre", text: $inferenceController.editableGenre)
+                                .textFieldStyle(.roundedBorder)
+                                .accessibilityIdentifier("ID3GenreField")
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Track #").font(.caption2).foregroundStyle(.secondary)
+                            TextField("Track #", text: $inferenceController.editableTrackNumber)
+                                .textFieldStyle(.roundedBorder)
+                                .accessibilityIdentifier("ID3TrackNumberField")
+                        }
+                    }
+                }
+                Divider().opacity(0.12)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Text("Artwork").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Spacer()
+                        Text(artworkStatusText).font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    if let previewURL = inferenceController.effectiveArtworkURL {
+                        HStack(spacing: 10) {
+                            if let nsImage = NSImage(contentsOf: previewURL) {
+                                Image(nsImage: nsImage)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 56, height: 56)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
+                            } else {
+                                RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.06)).frame(width: 56, height: 56).overlay(Image(systemName: "photo").foregroundStyle(.secondary))
+                            }
+                            Text(previewURL.lastPathComponent).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                            Spacer()
+                        }
+                    } else {
+                        Text("No artwork — MP3 will have no cover image").font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    HStack(spacing: 8) {
+                        Button("Keep") { inferenceController.editableArtwork = .keep }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .accessibilityIdentifier("ID3ArtworkKeep")
+                            .disabled(!canKeep)
+                        Button("Remove") { inferenceController.editableArtwork = .removed }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .accessibilityIdentifier("ID3ArtworkRemove")
+                        Button("Replace…") { chooseReplacementArtwork() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .accessibilityIdentifier("ID3ArtworkReplace")
+                    }
                 }
             }
         }.padding(12).background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.05)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.08), lineWidth: 1)))

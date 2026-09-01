@@ -243,7 +243,7 @@ struct StratumRowView: View {
                 },
                 isMuted: isMuted
             )
-            .frame(height: 34)
+            .frame(height: 52)
             .frame(maxWidth: .infinity)
             .opacity(isMuted ? 0.42 : 1)
             .saturation(isMuted ? 0.10 : 1)
@@ -292,7 +292,7 @@ struct StratumRowView: View {
             .disabled(isExporting)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(.vertical, 7)
     }
 }
 
