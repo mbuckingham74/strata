@@ -66,6 +66,8 @@
 		A1000000000000000000003A /* StorageLocationPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000003A /* StorageLocationPreferences.swift */; };
 		A1000000000000000000003B /* StorageLocationPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000003B /* StorageLocationPreferencesTests.swift */; };
 		A1000000000000000000003C /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000003C /* AboutView.swift */; };
+		A10000000000000000000040 /* ExternalToolCompatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000040 /* ExternalToolCompatibility.swift */; };
+		A10000000000000000000041 /* RuntimeReadinessVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000041 /* RuntimeReadinessVersionTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -130,6 +132,8 @@
 		B1000000000000000000003A /* StorageLocationPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageLocationPreferences.swift; sourceTree = "<group>"; };
 		B1000000000000000000003B /* StorageLocationPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageLocationPreferencesTests.swift; sourceTree = "<group>"; };
 		B1000000000000000000003C /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		B10000000000000000000040 /* ExternalToolCompatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalToolCompatibility.swift; sourceTree = "<group>"; };
+		B10000000000000000000041 /* RuntimeReadinessVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeReadinessVersionTests.swift; sourceTree = "<group>"; };
 		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -237,6 +241,7 @@
 				B1000000000000000000000D /* InferenceController.swift */,
 				B10000000000000000000015 /* TrustedInferenceIdentity.swift */,
 				B10000000000000000000037 /* RuntimeReadiness.swift */,
+				B10000000000000000000040 /* ExternalToolCompatibility.swift */,
 			);
 			path = Inference;
 			sourceTree = "<group>";
@@ -282,6 +287,7 @@
 				B10000000000000000000034 /* LocalAudioIngestClientTests.swift */,
 				B10000000000000000000035 /* InferenceControllerLocalTests.swift */,
 				B10000000000000000000038 /* RuntimeReadinessTests.swift */,
+				B10000000000000000000041 /* RuntimeReadinessVersionTests.swift */,
 				B10000000000000000000039 /* LocalMP3ExportTests.swift */,
 				B1000000000000000000003B /* StorageLocationPreferencesTests.swift */,
 			);
@@ -479,6 +485,7 @@
 				A10000000000000000000019 /* YouTubeIngestClient.swift in Sources */,
 				A10000000000000000000033 /* LocalAudioIngestClient.swift in Sources */,
 				A10000000000000000000037 /* RuntimeReadiness.swift in Sources */,
+				A10000000000000000000040 /* ExternalToolCompatibility.swift in Sources */,
 				A1000000000000000000003C /* AboutView.swift in Sources */,
 				A10000000000000000000022 /* StemExporter.swift in Sources */,
 				A10000000000000000000024 /* ExportFolderPreference.swift in Sources */,
@@ -520,6 +527,7 @@
 				A10000000000000000000034 /* LocalAudioIngestClientTests.swift in Sources */,
 				A10000000000000000000035 /* InferenceControllerLocalTests.swift in Sources */,
 				A10000000000000000000038 /* RuntimeReadinessTests.swift in Sources */,
+				A10000000000000000000041 /* RuntimeReadinessVersionTests.swift in Sources */,
 				A10000000000000000000039 /* LocalMP3ExportTests.swift in Sources */,
 				A1000000000000000000003B /* StorageLocationPreferencesTests.swift in Sources */,
 			);

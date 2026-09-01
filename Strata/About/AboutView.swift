@@ -231,7 +231,7 @@ struct AboutView: View {
                 Image(systemName: "shippingbox")
                     .foregroundStyle(.secondary)
             }
-            Text("Pinned versions from InferenceWorker/pyproject.toml and uv.lock. System tools are provided externally; no version is pinned by Strata.")
+            Text("Pinned versions from InferenceWorker/pyproject.toml and uv.lock. External tools are provided externally; supported versions are pinned by Strata.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -353,9 +353,9 @@ enum ThirdPartyCatalog {
             ThirdPartyEntry(name: "tqdm", version: m?.tqdm ?? placeholder, note: "locked via uv.lock", url: URL(string: "https://github.com/tqdm/tqdm")),
             ThirdPartyEntry(name: "packaging", version: m?.packaging ?? placeholder, note: "locked via uv.lock", url: URL(string: "https://github.com/pypa/packaging")),
             ThirdPartyEntry(name: "ml-collections", version: m?.mlCollections ?? placeholder, note: "locked via uv.lock", url: URL(string: "https://github.com/google/ml-collections")),
-            ThirdPartyEntry(name: "FFmpeg", version: "system", note: "/opt/homebrew/bin/ffmpeg", url: URL(string: "https://ffmpeg.org")),
-            ThirdPartyEntry(name: "yt-dlp", version: "system", note: "/opt/homebrew/bin/yt-dlp", url: URL(string: "https://github.com/yt-dlp/yt-dlp")),
-            ThirdPartyEntry(name: "Node.js", version: "system", note: "/opt/homebrew/bin/node", url: URL(string: "https://nodejs.org")),
+            ThirdPartyEntry(name: "FFmpeg", version: ExternalToolCompatibility.ffmpegSupportedVersion, note: "/opt/homebrew/bin/ffmpeg · externally provided", url: URL(string: "https://ffmpeg.org")),
+            ThirdPartyEntry(name: "yt-dlp", version: ExternalToolCompatibility.ytDlpSupportedVersion, note: "/opt/homebrew/bin/yt-dlp · externally provided", url: URL(string: "https://github.com/yt-dlp/yt-dlp")),
+            ThirdPartyEntry(name: "Node.js", version: ExternalToolCompatibility.nodeSupportedVersion, note: "/opt/homebrew/bin/node · externally provided", url: URL(string: "https://nodejs.org")),
         ]
     }
 }
