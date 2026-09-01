@@ -818,4 +818,66 @@ final class StemExporterTests: XCTestCase {
         XCTAssertEqual(outputChannels[0][0], 0.5, accuracy: 0.000_01)
         XCTAssertEqual(outputChannels[1][0], 0.5, accuracy: 0.000_01)
     }
+
+    // MARK: - MP3 quality
+
+    func testMP3EncodingArgumentsHighVBRUsesQ2() {
+        XCTAssertEqual(
+            StemExporter.mp3EncodingArguments(for: .highVBR),
+            ["-codec:a", "libmp3lame", "-q:a", "2"]
+        )
+    }
+
+    func testMP3EncodingArgumentsCBRBitrates() {
+        XCTAssertEqual(
+            StemExporter.mp3EncodingArguments(for: .cbr192),
+            ["-codec:a", "libmp3lame", "-b:a", "192k"]
+        )
+        XCTAssertEqual(
+            StemExporter.mp3EncodingArguments(for: .cbr256),
+            ["-codec:a", "libmp3lame", "-b:a", "256k"]
+        )
+        XCTAssertEqual(
+            StemExporter.mp3EncodingArguments(for: .cbr320),
+            ["-codec:a", "libmp3lame", "-b:a", "320k"]
+        )
+    }
+
+    func testMP3ExportUsesSelectedQualityArguments() throws {
+        for quality in MP3Quality.allCases {
+            let directoryURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+            let sourceURL = directoryURL.appendingPathComponent("src.wav")
+            let destURL = directoryURL.appendingPathComponent("out.mp3")
+            let argumentsURL = directoryURL.appendingPathComponent("args.txt")
+            let ffmpegURL = directoryURL.appendingPathComponent("ffmpeg")
+            try Data("audio".utf8).write(to: sourceURL)
+            let expectedArgs = StemExporter.mp3EncodingArguments(for: quality)
+            try makeExecutable(at: ffmpegURL, contents: """
+            #!/bin/sh
+            printf '%s\\n' "$@" > '\(argumentsURL.path)'
+            for argument in "$@"; do output="$argument"; done
+            printf 'encoded' > "$output"
+            """)
+
+            try StemExporter.exportMP3(from: sourceURL, to: destURL, mp3Quality: quality, ffmpegURL: ffmpegURL)
+
+            let args = try String(contentsOf: argumentsURL, encoding: .utf8)
+                .split(separator: "\n").map(String.init)
+            for expected in expectedArgs {
+                XCTAssertTrue(args.contains(expected), "Quality \(quality.rawValue) missing \(expected) in \(args)")
+            }
+            // Ensure default args don't leak wrong quality
+            if quality == .highVBR {
+                XCTAssertTrue(args.contains("-q:a"))
+                XCTAssertFalse(args.contains("-b:a"))
+            } else {
+                XCTAssertTrue(args.contains("-b:a"))
+                XCTAssertFalse(args.contains("-q:a"))
+            }
+        }
+    }
 }

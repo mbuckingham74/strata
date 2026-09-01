@@ -253,11 +253,11 @@ final class InferenceController {
 #endif
 
     // Output base per spec: ~/Library/Caches/Strata/M3Separations/
+    // Scratch preference: honored for new work only (outputBaseOverride used for tests).
     private let outputBaseOverride: URL?
     private var outputBaseURL: URL {
         if let override = outputBaseOverride { return override }
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        return caches.appendingPathComponent("Strata/M3Separations", isDirectory: true)
+        return StorageLocationPreferences().separationOutputBaseURL()
     }
 
     static func makeDefaultYouTubeIngest() -> any YouTubeIngesting {
@@ -324,12 +324,12 @@ final class InferenceController {
         clearEditableMetadata()
 
         let client = self.client
-        let base = outputBaseURL
 
         currentTask = Task { [previousTask] in
             if let previousTask { await previousTask.value }
             await self.drainCleanupChain()
             if self.youTubeCleanupFailed { return }
+            let base = await MainActor.run { self.outputBaseURL }
 
             do {
                 try Task.checkCancellation()
@@ -441,7 +441,6 @@ final class InferenceController {
 
         let client = self.client
         let localIngest = self.localIngest
-        let base = outputBaseURL
 
         // Derive the current local filename (without extension) for stem export names.
         let baseName = localFileURL.deletingPathExtension().lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -451,6 +450,7 @@ final class InferenceController {
             if let previousTask { await previousTask.value }
             await self.drainCleanupChain()
             if self.youTubeCleanupFailed || self.localCleanupFailed { return }
+            let base = await MainActor.run { self.outputBaseURL }
 
             do {
                 try Task.checkCancellation()
@@ -562,12 +562,12 @@ final class InferenceController {
 
         let client = self.client
         let youTubeIngest = self.youTubeIngest
-        let base = outputBaseURL
 
         currentTask = Task { [previousTask] in
             if let previousTask { await previousTask.value }
             await self.drainCleanupChain()
             if self.youTubeCleanupFailed { return }
+            let base = await MainActor.run { self.outputBaseURL }
 
             do {
                 try Task.checkCancellation()
@@ -920,11 +920,11 @@ final class InferenceController {
         errorMessage = nil
 
         let client = self.client
-        let base = outputBaseURL
         currentTask = Task { [previousTask] in
             if let previousTask { await previousTask.value }
             await self.drainCleanupChain()
             if self.youTubeCleanupFailed { return }
+            let base = await MainActor.run { self.outputBaseURL }
 
             do {
                 try Task.checkCancellation()
@@ -1124,13 +1124,13 @@ final class InferenceController {
         errorMessage = nil
         let client = self.client
         let youTubeIngest = self.youTubeIngest
-        let base = outputBaseURL
         let captureURL = url
         let capturePreview = preview
         currentTask = Task { [previousTask] in
             if let previousTask { await previousTask.value }
             await self.drainCleanupChain()
             if self.youTubeCleanupFailed { return }
+            let base = await MainActor.run { self.outputBaseURL }
             do {
                 try Task.checkCancellation()
                 let ingestResult = try await youTubeIngest.ingestWithMetadata(youTubeURL: captureURL, onProgress: { phase in

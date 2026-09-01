@@ -235,8 +235,16 @@ struct YouTubePreviewResult: Sendable, Equatable {
 actor YouTubeIngestClient {
     let ytDlpURL: URL
     let ffmpegURL: URL
-    let cacheBaseURL: URL
     let fileManager: FileManager
+    private let cacheBaseOverride: URL?
+
+    /// Effective cache base: override if provided (tests), otherwise current Scratch preference.
+    /// Reading UserDefaults each access ensures new jobs honor a changed Scratch folder without
+    /// migrating existing data.
+    var cacheBaseURL: URL {
+        if let base = cacheBaseOverride { return base }
+        return StorageLocationPreferences(fileManager: fileManager).youtubeIngestCacheBaseURL()
+    }
 
     private var activeRunDirectory: URL?
     private var cancellationRequested = false
@@ -246,13 +254,8 @@ actor YouTubeIngestClient {
         self.ytDlpURL = ytDlpURL
         self.ffmpegURL = ffmpegURL
         self.fileManager = fileManager
+        self.cacheBaseOverride = cacheBaseURL
         self.processRunner = AudioProcessRunner(isRunningCheck: isRunningCheck)
-        if let base = cacheBaseURL {
-            self.cacheBaseURL = base
-        } else {
-            let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-            self.cacheBaseURL = caches.appendingPathComponent("Strata/M4Ingest", isDirectory: true)
-        }
     }
 
     // MARK: - Public

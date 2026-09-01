@@ -40,8 +40,39 @@ enum StemExportFormat: Sendable, Equatable {
     }
 }
 
+enum MP3Quality: String, CaseIterable, Sendable, Identifiable {
+    case highVBR = "highVBR"
+    case cbr192 = "192"
+    case cbr256 = "256"
+    case cbr320 = "320"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .highVBR: return "High (VBR)"
+        case .cbr192: return "192 kbps"
+        case .cbr256: return "256 kbps"
+        case .cbr320: return "320 kbps"
+        }
+    }
+}
+
 struct StemExporter {
     private static let mixChunkFrameCount: AVAudioFrameCount = 16_384
+
+    static func mp3EncodingArguments(for quality: MP3Quality) -> [String] {
+        switch quality {
+        case .highVBR:
+            return ["-codec:a", "libmp3lame", "-q:a", "2"]
+        case .cbr192:
+            return ["-codec:a", "libmp3lame", "-b:a", "192k"]
+        case .cbr256:
+            return ["-codec:a", "libmp3lame", "-b:a", "256k"]
+        case .cbr320:
+            return ["-codec:a", "libmp3lame", "-b:a", "320k"]
+        }
+    }
 
     static func defaultYouTubeMP3Filename(metadata: YouTubeTrackMetadata?) -> String {
         if let exportBaseName = metadata?.exportBaseName {
@@ -117,6 +148,7 @@ struct StemExporter {
         format: StemExportFormat = .wav,
         metadata: YouTubeTrackMetadata? = nil,
         artworkURL: URL? = nil,
+        mp3Quality: MP3Quality = .highVBR,
         ffmpegURL: URL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg"),
         fileManager: FileManager = .default
     ) throws {
@@ -139,6 +171,7 @@ struct StemExporter {
                 to: destinationURL,
                 metadata: metadata,
                 artworkURL: artworkURL,
+                mp3Quality: mp3Quality,
                 ffmpegURL: ffmpegURL
             )
         }
@@ -149,6 +182,7 @@ struct StemExporter {
         to destinationURL: URL,
         metadata: YouTubeTrackMetadata? = nil,
         artworkURL: URL? = nil,
+        mp3Quality: MP3Quality = .highVBR,
         ffmpegURL: URL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
     ) throws {
         let resolvedSourceURL = sourceURL.standardizedFileURL.resolvingSymlinksInPath()
@@ -161,6 +195,7 @@ struct StemExporter {
             to: destinationURL,
             metadata: metadata,
             artworkURL: artworkURL,
+            mp3Quality: mp3Quality,
             ffmpegURL: ffmpegURL
         )
     }
@@ -172,6 +207,7 @@ struct StemExporter {
         format: StemExportFormat = .mp3,
         metadata: YouTubeTrackMetadata? = nil,
         artworkURL: URL? = nil,
+        mp3Quality: MP3Quality = .highVBR,
         ffmpegURL: URL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg"),
         fileManager: FileManager = .default
     ) throws {
@@ -206,6 +242,7 @@ struct StemExporter {
                 to: destinationURL,
                 metadata: metadata,
                 artworkURL: artworkURL,
+                mp3Quality: mp3Quality,
                 ffmpegURL: ffmpegURL
             )
         }
@@ -350,6 +387,7 @@ struct StemExporter {
         to destinationURL: URL,
         metadata: YouTubeTrackMetadata?,
         artworkURL: URL?,
+        mp3Quality: MP3Quality = .highVBR,
         ffmpegURL: URL
     ) throws {
         let process = Process()
@@ -366,10 +404,7 @@ struct StemExporter {
                 "-map", "1:v:0",
             ]
         }
-        arguments += [
-            "-codec:a", "libmp3lame",
-            "-q:a", "2",
-        ]
+        arguments += mp3EncodingArguments(for: mp3Quality)
         if artworkURL != nil {
             arguments += [
                 "-codec:v", "mjpeg",

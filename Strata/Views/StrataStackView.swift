@@ -303,6 +303,8 @@ struct StrataStackView: View {
     @Bindable var stemPlaybackController: StemPlaybackController
     @Bindable var inferenceController: InferenceController
 
+    @AppStorage("mp3Quality") private var mp3Quality: MP3Quality = .highVBR
+
     @State private var exportErrorMessage: String?
     @State private var exportingFileName: String?
     @State private var savedFileName: String?
@@ -565,27 +567,28 @@ struct StrataStackView: View {
 
     // MARK: - Export (mirrors InferenceCard, uses same StemExporter + folder preference)
 
-    private var exportFolderPreference: ExportFolderPreference { ExportFolderPreference() }
+    private var storagePreferences: StorageLocationPreferences { StorageLocationPreferences() }
 
     private func export(_ artifact: StemArtifact, as format: StemExportFormat) {
         guard !isExporting else { return }
         let metadata = format == .mp3 ? inferenceController.effectiveYouTubeMetadata : nil
         let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
+        let capturedQuality = mp3Quality
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
         panel.nameFieldStringValue = StemExporter.defaultFilename(for: artifact.name, format: format, sourceBaseName: inferenceController.effectiveExportBaseName)
         panel.canCreateDirectories = true
-        let defaultDirectoryAccess = exportFolderPreference.applyDefaultDirectory(to: panel)
+        let defaultDirectoryAccess = storagePreferences.applyExportDefaultDirectory(to: panel)
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
                 guard response == .OK, let dest = panel.url else { return }
                 exportingFileName = dest.lastPathComponent
                 savedFileName = nil
-                Task { [defaultDirectoryAccess] in
+                Task { [defaultDirectoryAccess, capturedQuality] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
-                            try StemExporter.export(artifact, to: dest, format: format, metadata: metadata, artworkURL: artworkURL)
+                            try StemExporter.export(artifact, to: dest, format: format, metadata: metadata, artworkURL: artworkURL, mp3Quality: capturedQuality)
                         }.value
                         await MainActor.run {
                             exportingFileName = nil
@@ -608,21 +611,22 @@ struct StrataStackView: View {
         let metadata = format == .mp3 ? inferenceController.effectiveYouTubeMetadata : nil
         let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
         let gains = stemPlaybackController.stemGains
+        let capturedQuality = mp3Quality
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
         panel.nameFieldStringValue = StemExporter.defaultMixFilename(for: artifacts.map(\.name), format: format, sourceBaseName: inferenceController.effectiveExportBaseName)
         panel.canCreateDirectories = true
-        let defaultDirectoryAccess = exportFolderPreference.applyDefaultDirectory(to: panel)
+        let defaultDirectoryAccess = storagePreferences.applyExportDefaultDirectory(to: panel)
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
                 guard response == .OK, let dest = panel.url else { return }
                 exportingFileName = dest.lastPathComponent
                 savedFileName = nil
-                Task { [defaultDirectoryAccess] in
+                Task { [defaultDirectoryAccess, capturedQuality] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
-                            try StemExporter.exportMix(artifacts, to: dest, gains: gains, format: format, metadata: metadata, artworkURL: artworkURL)
+                            try StemExporter.exportMix(artifacts, to: dest, gains: gains, format: format, metadata: metadata, artworkURL: artworkURL, mp3Quality: capturedQuality)
                         }.value
                         await MainActor.run {
                             exportingFileName = nil

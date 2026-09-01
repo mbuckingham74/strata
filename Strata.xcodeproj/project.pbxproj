@@ -63,6 +63,8 @@
 		A10000000000000000000037 /* RuntimeReadiness.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000037 /* RuntimeReadiness.swift */; };
 		A10000000000000000000038 /* RuntimeReadinessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000038 /* RuntimeReadinessTests.swift */; };
 		A10000000000000000000039 /* LocalMP3ExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000039 /* LocalMP3ExportTests.swift */; };
+		A1000000000000000000003A /* StorageLocationPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000003A /* StorageLocationPreferences.swift */; };
+		A1000000000000000000003B /* StorageLocationPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000003B /* StorageLocationPreferencesTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -124,6 +126,8 @@
 		B10000000000000000000037 /* RuntimeReadiness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeReadiness.swift; sourceTree = "<group>"; };
 		B10000000000000000000038 /* RuntimeReadinessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeReadinessTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000039 /* LocalMP3ExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalMP3ExportTests.swift; sourceTree = "<group>"; };
+		B1000000000000000000003A /* StorageLocationPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageLocationPreferences.swift; sourceTree = "<group>"; };
+		B1000000000000000000003B /* StorageLocationPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageLocationPreferencesTests.swift; sourceTree = "<group>"; };
 		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -204,6 +208,7 @@
 				B10000000000000000000013 /* AppTerminationCoordinator.swift */,
 				B10000000000000000000022 /* StemExporter.swift */,
 				B10000000000000000000024 /* ExportFolderPreference.swift */,
+				B1000000000000000000003A /* StorageLocationPreferences.swift */,
 				B1000000000000000000002D /* StrataProject.swift */,
 				B1000000000000000000002E /* StrataProjectPersistence.swift */,
 			);
@@ -267,6 +272,7 @@
 				B10000000000000000000035 /* InferenceControllerLocalTests.swift */,
 				B10000000000000000000038 /* RuntimeReadinessTests.swift */,
 				B10000000000000000000039 /* LocalMP3ExportTests.swift */,
+				B1000000000000000000003B /* StorageLocationPreferencesTests.swift */,
 			);
 			path = StrataTests;
 			sourceTree = "<group>";
@@ -441,6 +447,7 @@
 				A10000000000000000000037 /* RuntimeReadiness.swift in Sources */,
 				A10000000000000000000022 /* StemExporter.swift in Sources */,
 				A10000000000000000000024 /* ExportFolderPreference.swift in Sources */,
+				A1000000000000000000003A /* StorageLocationPreferences.swift in Sources */,
 				A1000000000000000000002D /* StrataProject.swift in Sources */,
 				A1000000000000000000002E /* StrataProjectPersistence.swift in Sources */,
 			);
@@ -479,6 +486,7 @@
 				A10000000000000000000035 /* InferenceControllerLocalTests.swift in Sources */,
 				A10000000000000000000038 /* RuntimeReadinessTests.swift in Sources */,
 				A10000000000000000000039 /* LocalMP3ExportTests.swift in Sources */,
+				A1000000000000000000003B /* StorageLocationPreferencesTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

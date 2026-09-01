@@ -32,59 +32,36 @@ final class SecurityScopedExportDirectory: @unchecked Sendable {
 final class ExportFolderPreference: @unchecked Sendable {
     static let bookmarkKey = "defaultExportDirectoryBookmark"
 
-    private let defaults: UserDefaults
+    private let storage: StorageLocationPreferences
 
     init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
+        self.storage = StorageLocationPreferences(defaults: defaults)
     }
 
     func setDefaultDirectory(_ directoryURL: URL) throws {
-        let values = try directoryURL.resourceValues(forKeys: [.isDirectoryKey])
-        guard values.isDirectory == true else {
+        do {
+            try storage.setExportDirectory(directoryURL)
+        } catch let e as StorageLocationPreferencesError {
+            switch e {
+            case .notDirectory:
+                throw ExportFolderPreferenceError.notDirectory
+            }
+        } catch let e as ExportFolderPreferenceError {
+            throw e
+        } catch {
+            // Map any other validation failure to notDirectory for compat.
             throw ExportFolderPreferenceError.notDirectory
         }
-
-        let bookmark = try directoryURL.bookmarkData(
-            options: [.withSecurityScope],
-            includingResourceValuesForKeys: nil,
-            relativeTo: nil
-        )
-        defaults.set(bookmark, forKey: Self.bookmarkKey)
     }
 
     func resolvedDefaultDirectory() -> SecurityScopedExportDirectory? {
-        guard let bookmark = defaults.data(forKey: Self.bookmarkKey) else {
-            return nil
-        }
-
-        do {
-            var isStale = false
-            let directoryURL = try URL(
-                resolvingBookmarkData: bookmark,
-                options: [.withSecurityScope, .withoutUI],
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            )
-            let access = SecurityScopedExportDirectory(url: directoryURL)
-            let values = try directoryURL.resourceValues(forKeys: [.isDirectoryKey])
-            guard values.isDirectory == true else {
-                throw ExportFolderPreferenceError.notDirectory
-            }
-
-            if isStale {
-                try setDefaultDirectory(directoryURL)
-            }
-            return access
-        } catch {
-            defaults.removeObject(forKey: Self.bookmarkKey)
-            return nil
-        }
+        storage.resolvedExportDirectoryAccess()
     }
 
     @MainActor
     func applyDefaultDirectory(to panel: NSSavePanel) -> SecurityScopedExportDirectory? {
-        let access = resolvedDefaultDirectory()
-        panel.directoryURL = access?.url
-        return access
+        // Delegate to StorageLocationPreferences which handles both bookmark and string
+        // resolution and sets panel.directoryURL to the resolved export URL.
+        storage.applyExportDefaultDirectory(to: panel)
     }
 }

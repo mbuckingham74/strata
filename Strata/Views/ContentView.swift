@@ -295,7 +295,8 @@ struct InferenceCard: View {
     @Bindable var stemPlaybackController: StemPlaybackController
     @Bindable var playbackController: PlaybackController
     @Binding var showingImporter: Bool
-    private let exportFolderPreference = ExportFolderPreference()
+    private let storagePreferences = StorageLocationPreferences()
+    @AppStorage("mp3Quality") private var mp3Quality: MP3Quality = .highVBR
     @State private var youTubeURLString = ""
     @State private var exportErrorMessage: String?
     @State private var youTubeSliderValue: Double = 0
@@ -845,14 +846,14 @@ struct InferenceCard: View {
         panel.canCreateDirectories = false
         panel.prompt = "Choose"
         panel.message = "Choose the default folder for future exports."
-        let defaultDirectoryAccess = exportFolderPreference.resolvedDefaultDirectory()
-        panel.directoryURL = defaultDirectoryAccess?.url
+        let defaultDirectoryAccess = storagePreferences.resolvedExportDirectoryAccess()
+        panel.directoryURL = storagePreferences.resolvedExportURL()
 
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
                 guard response == .OK, let directoryURL = panel.url else { return }
                 do {
-                    try exportFolderPreference.setDefaultDirectory(directoryURL)
+                    try storagePreferences.setExportDirectory(directoryURL)
                 } catch {
                     exportErrorMessage = error.localizedDescription
                 }
@@ -872,7 +873,8 @@ struct InferenceCard: View {
             sourceBaseName: inferenceController.effectiveExportBaseName
         )
         panel.canCreateDirectories = true
-        let defaultDirectoryAccess = exportFolderPreference.applyDefaultDirectory(to: panel)
+        let defaultDirectoryAccess = storagePreferences.applyExportDefaultDirectory(to: panel)
+        let capturedQuality = mp3Quality
 
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
@@ -880,7 +882,7 @@ struct InferenceCard: View {
                 let dest = destinationURL
                 exportingFileName = dest.lastPathComponent
                 savedFileName = nil
-                Task { [defaultDirectoryAccess] in
+                Task { [defaultDirectoryAccess, capturedQuality] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
@@ -889,7 +891,8 @@ struct InferenceCard: View {
                                 to: dest,
                                 format: format,
                                 metadata: metadata,
-                                artworkURL: artworkURL
+                                artworkURL: artworkURL,
+                                mp3Quality: capturedQuality
                             )
                         }.value
                         await MainActor.run {
@@ -916,6 +919,7 @@ struct InferenceCard: View {
         let metadata = format == .mp3 ? inferenceController.effectiveYouTubeMetadata : nil
         let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
         let gains = stemPlaybackController.stemGains
+        let capturedQuality = mp3Quality
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
         panel.nameFieldStringValue = StemExporter.defaultMixFilename(
@@ -924,7 +928,7 @@ struct InferenceCard: View {
             sourceBaseName: inferenceController.effectiveExportBaseName
         )
         panel.canCreateDirectories = true
-        let defaultDirectoryAccess = exportFolderPreference.applyDefaultDirectory(to: panel)
+        let defaultDirectoryAccess = storagePreferences.applyExportDefaultDirectory(to: panel)
 
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
@@ -932,7 +936,7 @@ struct InferenceCard: View {
                 let dest = destinationURL
                 exportingFileName = dest.lastPathComponent
                 savedFileName = nil
-                Task { [defaultDirectoryAccess] in
+                Task { [defaultDirectoryAccess, capturedQuality] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
@@ -942,7 +946,8 @@ struct InferenceCard: View {
                                 gains: gains,
                                 format: format,
                                 metadata: metadata,
-                                artworkURL: artworkURL
+                                artworkURL: artworkURL,
+                                mp3Quality: capturedQuality
                             )
                         }.value
                         await MainActor.run {
@@ -970,7 +975,8 @@ struct InferenceCard: View {
             metadata: filenameMetadata
         )
         panel.canCreateDirectories = true
-        let defaultDirectoryAccess = exportFolderPreference.applyDefaultDirectory(to: panel)
+        let defaultDirectoryAccess = storagePreferences.applyExportDefaultDirectory(to: panel)
+        let capturedQuality = mp3Quality
 
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
@@ -981,7 +987,7 @@ struct InferenceCard: View {
                 let capturedPreparationAudioURL = preparation.audioURL
                 exportingFileName = dest.lastPathComponent
                 savedFileName = nil
-                Task { [defaultDirectoryAccess] in
+                Task { [defaultDirectoryAccess, capturedQuality] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
@@ -989,7 +995,8 @@ struct InferenceCard: View {
                                 from: capturedPreparationAudioURL,
                                 to: dest,
                                 metadata: capturedMetadata,
-                                artworkURL: effectiveArtwork
+                                artworkURL: effectiveArtwork,
+                                mp3Quality: capturedQuality
                             )
                         }.value
                         await MainActor.run {
@@ -1019,7 +1026,8 @@ struct InferenceCard: View {
             fallbackURL: sourceURL
         )
         panel.canCreateDirectories = true
-        let defaultDirectoryAccess = exportFolderPreference.applyDefaultDirectory(to: panel)
+        let defaultDirectoryAccess = storagePreferences.applyExportDefaultDirectory(to: panel)
+        let capturedQuality = mp3Quality
 
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
@@ -1030,7 +1038,7 @@ struct InferenceCard: View {
                 let capturedSourceURL = sourceURL
                 exportingFileName = dest.lastPathComponent
                 savedFileName = nil
-                Task { [defaultDirectoryAccess] in
+                Task { [defaultDirectoryAccess, capturedQuality] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
@@ -1038,7 +1046,8 @@ struct InferenceCard: View {
                                 from: capturedSourceURL,
                                 to: dest,
                                 metadata: capturedMetadata,
-                                artworkURL: effectiveArtwork
+                                artworkURL: effectiveArtwork,
+                                mp3Quality: capturedQuality
                             )
                         }.value
                         await MainActor.run {
