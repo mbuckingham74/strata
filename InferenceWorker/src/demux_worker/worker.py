@@ -273,12 +273,13 @@ def _handle_separate(obj: dict, job_busy: bool) -> tuple[dict | None, bool]:
     staging_dir = None
     try:
         staging_dir = Path(tempfile.mkdtemp(prefix=f".staging-{job_id}-", dir=str(output_dir)))
-        print(f"staging dir {staging_dir}", file=sys.stderr)
+        print(f"staging dir {staging_dir}", file=sys.stderr, flush=True)
     except Exception as e:
-        print(f"failed to create staging: {e}", file=sys.stderr)
+        print(f"failed to create staging: {e}", file=sys.stderr, flush=True)
         emit(make_error(job_id, "internal", "failed to create staging"))
         return None, False
 
+    print(f"[{job_id}] emitting started", file=sys.stderr, flush=True)
     emit(make_started(job_id))
 
     # Run inference
@@ -290,15 +291,20 @@ def _handle_separate(obj: dict, job_busy: bool) -> tuple[dict | None, bool]:
             warnings.simplefilter("always")
             # Create temp input folder for session.infer (it expects folder with wavs)
             # Use staging's parent? Actually create temp input dir
+            print(f"[{job_id}] preparing tmp_input", file=sys.stderr, flush=True)
             tmp_input = Path(tempfile.mkdtemp(prefix=f".input-{job_id}-", dir=str(output_dir)))
+            print(f"[{job_id}] tmp_input {tmp_input}", file=sys.stderr, flush=True)
             try:
                 # Symlink or copy mixture.wav into tmp_input
                 # Use symlink if possible, else copy
                 link_path = tmp_input / input_path.name
                 try:
                     link_path.symlink_to(input_path)
-                except Exception:
+                    print(f"[{job_id}] symlinked {link_path} -> {input_path}", file=sys.stderr, flush=True)
+                except Exception as link_err:
+                    print(f"[{job_id}] symlink failed {link_err}, copying", file=sys.stderr, flush=True)
                     shutil.copy2(input_path, link_path)
+                    print(f"[{job_id}] copied {input_path} -> {link_path}", file=sys.stderr, flush=True)
                 # Run session's infer — must go through public session API
                 # session.infer will write mixture_<stem>.wav etc into staging_dir
                 # But we want to use staging_dir as store_dir directly
@@ -307,15 +313,16 @@ def _handle_separate(obj: dict, job_busy: bool) -> tuple[dict | None, bool]:
                 # Use the global _session
                 if _session is None:
                     raise RuntimeError("model not loaded")
-                result = _session.infer(str(tmp_input), store_dir=str(staging_dir), verbose=False, output_format="wav_float32")
+                print(f"[{job_id}] starting MLX infer verbose=True", file=sys.stderr, flush=True)
+                result = _session.infer(str(tmp_input), store_dir=str(staging_dir), verbose=True, output_format="wav_float32")
                 # result is OutputManifest but we will not rely on it; we will discover files
-                print(f"inference result outputs {result}", file=sys.stderr)
+                print(f"inference result outputs {result}", file=sys.stderr, flush=True)
             finally:
                 # Clean temp input folder (not staging)
                 shutil.rmtree(tmp_input, ignore_errors=True)
 
         inference_wall = time.monotonic() - inference_start
-        print(f"inference wall {inference_wall:.2f}s", file=sys.stderr)
+        print(f"inference wall {inference_wall:.2f}s", file=sys.stderr, flush=True)
 
         # Normalize upstream filenames such as mixture_<stem>.wav -> <stem>.wav
         # Exclude instrumental

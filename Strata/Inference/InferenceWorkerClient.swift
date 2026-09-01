@@ -642,6 +642,7 @@ actor InferenceWorkerClient {
                 }
                 group.addTask {
                     try await Task.sleep(for: timeout)
+                    await self.timeoutReadyWait(generation: generation)
                     throw InferenceError.startupTimeout
                 }
                 defer { group.cancelAll() }
@@ -651,6 +652,12 @@ actor InferenceWorkerClient {
             }
         } catch is CancellationError {
             throw InferenceError.cancellation
+        }
+    }
+
+    private func timeoutReadyWait(generation: UInt64) {
+        if readyWaitGeneration == generation {
+            readyWaitContinuation?.finish(throwing: InferenceError.startupTimeout)
         }
     }
 
@@ -934,7 +941,7 @@ actor InferenceWorkerClient {
 
         let overallDeadline = ContinuousClock.now + separationTimeout
         try writeCommand(data, generation: generation)
-        try await waitForStartedSignal(startedStream, timeout: startedTimeout)
+        try await waitForStartedSignal(startedStream, timeout: startedTimeout, jobID: job.jobId, generation: generation)
         // Existing worker .started is the product boundary between loading and separating.
         // Await the controller transition before waiting for result so a fast completion
         // cannot race and be overwritten by a delayed .separating.
@@ -943,13 +950,18 @@ actor InferenceWorkerClient {
         let remaining = ContinuousClock.now < overallDeadline
             ? overallDeadline - ContinuousClock.now
             : Duration.zero
-        guard remaining > .zero else { throw InferenceError.startupTimeout }
-        return try await waitForResultSignal(resultStream, timeout: remaining)
+        guard remaining > .zero else {
+            timeoutResultWait(jobID: job.jobId, generation: generation)
+            throw InferenceError.startupTimeout
+        }
+        return try await waitForResultSignal(resultStream, timeout: remaining, jobID: job.jobId, generation: generation)
     }
 
     private func waitForStartedSignal(
         _ stream: AsyncThrowingStream<Void, Error>,
-        timeout: Duration
+        timeout: Duration,
+        jobID: String,
+        generation: UInt64
     ) async throws {
         do {
             try await withThrowingTaskGroup(of: Void.self) { group in
@@ -961,6 +973,7 @@ actor InferenceWorkerClient {
                 }
                 group.addTask {
                     try await Task.sleep(for: timeout)
+                    await self.timeoutStartedWait(jobID: jobID, generation: generation)
                     throw InferenceError.startupTimeout
                 }
                 defer { group.cancelAll() }
@@ -973,7 +986,9 @@ actor InferenceWorkerClient {
 
     private func waitForResultSignal(
         _ stream: AsyncThrowingStream<SeparationResult, Error>,
-        timeout: Duration
+        timeout: Duration,
+        jobID: String,
+        generation: UInt64
     ) async throws -> SeparationResult {
         do {
             return try await withThrowingTaskGroup(of: SeparationResult.self) { group in
@@ -986,6 +1001,7 @@ actor InferenceWorkerClient {
                 }
                 group.addTask {
                     try await Task.sleep(for: timeout)
+                    await self.timeoutResultWait(jobID: jobID, generation: generation)
                     throw InferenceError.startupTimeout
                 }
                 defer { group.cancelAll() }
@@ -994,6 +1010,18 @@ actor InferenceWorkerClient {
             }
         } catch is CancellationError {
             throw InferenceError.cancellation
+        }
+    }
+
+    private func timeoutStartedWait(jobID: String, generation: UInt64) {
+        if startedWaitJobID == jobID && activeJobGeneration == generation {
+            startedWaitContinuation?.finish(throwing: InferenceError.startupTimeout)
+        }
+    }
+
+    private func timeoutResultWait(jobID: String, generation: UInt64) {
+        if resultWaitJobID == jobID && activeJobGeneration == generation {
+            finishResultWait(jobID: jobID, with: .failure(.startupTimeout))
         }
     }
 
