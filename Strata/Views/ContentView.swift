@@ -1474,9 +1474,9 @@ struct StemAudibilityControls: View {
                 stemPlaybackController.toggleMute(for: stem)
             } label: {
                 Text("Mute")
-                    .font(.system(size: 9, weight: isMuted ? .bold : .semibold, design: .rounded))
+                    .font(.caption.weight(isMuted ? .bold : .semibold))
                     .monospaced()
-                    .frame(width: 46, height: 22)
+                    .frame(width: 52, height: 26)
                     .background(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
                             .fill(isMuted ? Color.red : Color.white.opacity(0.06))
@@ -1494,12 +1494,31 @@ struct StemAudibilityControls: View {
             .accessibilityAddTraits(isMuted ? .isSelected : [])
             .help(isMuted ? "Unmute \(stem.rawValue.capitalized)" : "Mute \(stem.rawValue.capitalized)")
             .animation(.easeInOut(duration: 0.15), value: isMuted)
-            Toggle("Solo", isOn: soloBinding)
-                .toggleStyle(.button)
-                .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
-                .accessibilityIdentifier("StemSolo-\(stem.rawValue)")
+            Button {
+                stemPlaybackController.toggleSolo(for: stem)
+            } label: {
+                Text("Solo")
+                    .font(.caption.weight(isSoloed ? .bold : .semibold))
+                    .monospaced()
+                    .frame(width: 52, height: 26)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(isSoloed ? Color(red: 0.56, green: 0.46, blue: 0.95) : Color.white.opacity(0.06))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .stroke(isSoloed ? Color(red: 0.56, green: 0.46, blue: 0.95) : Color.white.opacity(0.10), lineWidth: 1)
+                    )
+                    .foregroundStyle(isSoloed ? Color.white : Color.secondary)
+                    .shadow(color: isSoloed ? Color(red: 0.56, green: 0.46, blue: 0.95).opacity(0.32) : .clear, radius: 4, y: 1)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("StemSolo-\(stem.rawValue)")
+            .accessibilityLabel(isSoloed ? "Unsolo \(stem.rawValue)" : "Solo \(stem.rawValue)")
+            .accessibilityAddTraits(isSoloed ? .isSelected : [])
+            .help(isSoloed ? "Unsolo \(stem.rawValue.capitalized)" : "Solo \(stem.rawValue.capitalized)")
+            .animation(.easeInOut(duration: 0.15), value: isSoloed)
         }
-        .controlSize(.small)
         .disabled(!stemPlaybackController.hasStems)
     }
 }

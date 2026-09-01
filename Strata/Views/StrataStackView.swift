@@ -9,10 +9,11 @@ import UniformTypeIdentifiers
 // - Display order is fixed: Vocals, Drums, Bass, Guitar, Piano, Other
 //   (not alphabetical sortedStems). Defined by `strataDisplayOrder`.
 // - Timeline alignment: every row's waveform occupies the same flex width.
-//   Left label column (110pt) and right control columns are fixed,
+//   Left label column (148pt) and right control columns (gain 118pt, audibility 136pt) are fixed,
 //   so GeometryReader-derived waveform widths are identical across rows.
 //   The shared ruler at the top uses the identical HStack insets, so its
-//   ticks line up with waveforms.
+//   ticks line up with waveforms. Waveform is flex (maxWidth: .infinity) and
+//   shrinks to fund the wider fixed columns, preserving height 52 and 6-row density.
 // - Playhead: vertical line at currentTime/duration rendered inside each
 //   waveform's ZStack at the same fractional x. Because widths match, the
 //   line visually reads as continuous across strata.
@@ -166,7 +167,7 @@ struct StrataRulerView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 8)
                             Text(StemPlaybackController.formattedTime(t))
-                                .font(.caption2.monospacedDigit())
+                                .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
@@ -214,19 +215,19 @@ struct StratumRowView: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
                         .fill(color.opacity(isMuted ? 0.14 : 0.18))
-                        .frame(width: 22, height: 22)
+                        .frame(width: 26, height: 26)
                     Image(systemName: strataIcon(for: artifact.name))
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.white.opacity(isMuted ? 0.86 : 1))
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(artifact.name.rawValue.capitalized)
-                        .font(.caption.weight(.semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.white.opacity(isMuted ? 0.84 : 1))
                         .lineLimit(1)
                 }
             }
-            .frame(width: 110, alignment: .leading)
+            .frame(width: 148, alignment: .leading)
             .opacity(isMuted ? 0.84 : 1)
             .saturation(isMuted ? 0.85 : 1)
             .animation(.easeInOut(duration: 0.18), value: isMuted)
@@ -263,16 +264,15 @@ struct StratumRowView: View {
                 .accessibilityIdentifier("GainSlider-\(artifact.name.rawValue)")
                 .disabled(!stemPlaybackController.hasStems)
                 Text("\(Int(stemPlaybackController.gainPercent(for: artifact.name).rounded()))%")
-                    .font(.system(size: 8, weight: .medium, design: .monospaced))
-                    .monospacedDigit()
-                    .foregroundStyle(.tertiary)
+                    .font(.caption.monospacedDigit().weight(.medium))
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            .frame(width: 96)
+            .frame(width: 118)
 
             // Audibility controls (preserve existing mute/solo)
             StemAudibilityControls(stemPlaybackController: stemPlaybackController, stem: artifact.name)
-                .frame(width: 112)
+                .frame(width: 136)
 
             // Export per stem — WAV does not require FFmpeg, MP3 does
             Menu {
@@ -281,7 +281,7 @@ struct StratumRowView: View {
                     .disabled(!isMp3ExportReady)
             } label: {
                 Image(systemName: "square.and.arrow.down")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 26, height: 26)
                     .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
@@ -393,7 +393,7 @@ struct StrataStackView: View {
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
                         Text("\(stemPlaybackController.formattedCurrentTime) / \(stemPlaybackController.formattedDuration)")
-                            .font(.caption.monospacedDigit())
+                            .font(.callout.monospacedDigit().weight(.medium))
                             .foregroundStyle(.white.opacity(0.92))
                             .contentTransition(.numericText())
                             .lineLimit(1)
@@ -404,7 +404,7 @@ struct StrataStackView: View {
                     HStack(spacing: 6) {
                         Circle().fill(stemPlaybackController.isPlaying ? Color.green : Color.white.opacity(0.28)).frame(width: 6, height: 6)
                         Text(stemPlaybackController.isPlaying ? "Playing" : "Paused")
-                            .font(.caption2.weight(.medium))
+                            .font(.caption.weight(.medium))
                             .foregroundStyle(.secondary)
                     }
                     .opacity(stemPlaybackController.hasStems ? 1 : 0.45)
@@ -413,7 +413,7 @@ struct StrataStackView: View {
 
                 // ONE obvious seek surface — full-width slider aligned to waveform column
                 HStack(spacing: 10) {
-                    Spacer().frame(width: 110)
+                    Spacer().frame(width: 148)
                     Slider(
                         value: Binding(
                             get: { isStrataDragging ? strataSliderValue : stemPlaybackController.currentTime },
@@ -434,15 +434,15 @@ struct StrataStackView: View {
                     .accessibilityLabel("Seek strata")
                     .accessibilityIdentifier("StrataSeekSlider")
 
-                    Spacer().frame(width: 96)
-                    Spacer().frame(width: 112)
+                    Spacer().frame(width: 118)
+                    Spacer().frame(width: 136)
                     Color.clear.frame(width: 26, height: 20)
                 }
                 .padding(.horizontal, 10)
 
                 // Shared ruler ticks — same insets, tap/drag to seek preserved (not a second Slider)
                 HStack(spacing: 10) {
-                    Spacer().frame(width: 110)
+                    Spacer().frame(width: 148)
                     StrataRulerView(
                         duration: stemPlaybackController.duration,
                         currentTime: stemPlaybackController.currentTime,
@@ -450,8 +450,8 @@ struct StrataStackView: View {
                     )
                     .frame(height: 18)
                     .frame(maxWidth: .infinity)
-                    Spacer().frame(width: 96)
-                    Spacer().frame(width: 112)
+                    Spacer().frame(width: 118)
+                    Spacer().frame(width: 136)
                     Color.clear.frame(width: 26, height: 20)
                 }
                 .padding(.horizontal, 10)
@@ -505,8 +505,8 @@ struct StrataStackView: View {
                     Button("Export Selected WAV") { exportMix(stemPlaybackController.selectedStems, as: .wav) }
                 } label: {
                     Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 11, weight: .medium))
-                        .frame(width: 22, height: 22)
+                        .font(.system(size: 12, weight: .medium))
+                        .frame(width: 26, height: 26)
                         .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
                 }
                 .menuStyle(.button)
