@@ -1,8 +1,23 @@
 # Strata
 
+![Strata app icon](Strata/Assets.xcassets/AppIcon.appiconset/AppIcon-256.png)
+
 Native macOS app for separating audio into six synchronized stems and mixing them.
 
 Load a YouTube source or a local audio file, play the original, optionally separate it into stems, then mix and export. Audio separation runs locally on this Mac; you do not need to separate a source just to play it or export its original audio as MP3.
+
+```mermaid
+flowchart LR
+    yt["YouTube URL"] --> ytdlp["yt-dlp<br/>download source"]
+    local["Local audio file"] --> ffmpeg["FFmpeg<br/>canonical audio"]
+    ytdlp --> ffmpeg
+    ffmpeg --> source["Loaded local source"]
+    source --> original["Original mix<br/>playback / Save MP3"]
+    source --> worker["Local ML separation<br/>MLX on Apple Silicon"]
+    worker --> strata["Six Stratas<br/>Vocals • Drums • Bass • Guitar • Piano • Other"]
+    strata --> controls["Synchronized playback<br/>Mute / Solo / Gain"]
+    controls --> exports["WAV / MP3 exports"]
+```
 
 ## What it does
 
