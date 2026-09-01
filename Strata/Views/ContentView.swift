@@ -309,7 +309,7 @@ struct InferenceCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("Separation", systemImage: "waveform.path.badge.magnifyingglass").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
+                Label("Separation", systemImage: "waveform").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
                 Spacer()
                 Button {
                     chooseDefaultExportFolder()
@@ -469,7 +469,7 @@ struct InferenceCard: View {
                                     inferenceController.startSeparationFromLoadedPreview()
                                 }
                             } label: {
-                                Label("Separate", systemImage: "waveform.path.badge.magnifyingglass").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                                Label("Separate", systemImage: "waveform").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
