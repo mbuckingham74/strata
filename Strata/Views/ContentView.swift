@@ -1433,10 +1433,31 @@ struct StemAudibilityControls: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Toggle("Mute", isOn: muteBinding)
-                .toggleStyle(.button)
-                .tint(.red)
-                .accessibilityIdentifier("StemMute-\(stem.rawValue)")
+            // Mute: unmistakable filled/selected state when explicitly muted; preserve identity via waveform, not button color
+            Button {
+                stemPlaybackController.toggleMute(for: stem)
+            } label: {
+                Text("Mute")
+                    .font(.system(size: 9, weight: isMuted ? .bold : .semibold, design: .rounded))
+                    .monospaced()
+                    .frame(width: 46, height: 22)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(isMuted ? Color.red : Color.white.opacity(0.06))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .stroke(isMuted ? Color.red : Color.white.opacity(0.10), lineWidth: 1)
+                    )
+                    .foregroundStyle(isMuted ? Color.white : Color.secondary)
+                    .shadow(color: isMuted ? Color.red.opacity(0.32) : .clear, radius: 4, y: 1)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("StemMute-\(stem.rawValue)")
+            .accessibilityLabel(isMuted ? "Unmute \(stem.rawValue)" : "Mute \(stem.rawValue)")
+            .accessibilityAddTraits(isMuted ? .isSelected : [])
+            .help(isMuted ? "Unmute \(stem.rawValue.capitalized)" : "Mute \(stem.rawValue.capitalized)")
+            .animation(.easeInOut(duration: 0.15), value: isMuted)
             Toggle("Solo", isOn: soloBinding)
                 .toggleStyle(.button)
                 .tint(Color(red: 0.56, green: 0.46, blue: 0.95))

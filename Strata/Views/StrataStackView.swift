@@ -53,6 +53,7 @@ struct WaveformView: View {
     let duration: TimeInterval
     let currentTime: TimeInterval
     let onSeek: (Double) -> Void
+    var isMuted: Bool = false
 
     @State private var samples: [Float]? = nil
     @State private var isLoading = true
@@ -65,10 +66,10 @@ struct WaveformView: View {
             let playheadX = fraction * w
 
             ZStack(alignment: .leading) {
-                // Track background
+                // Track background — slightly darker when muted so dimmed waveform still reads as a track
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.white.opacity(0.04))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.06), lineWidth: 1))
+                    .fill(Color.white.opacity(isMuted ? 0.025 : 0.04))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(isMuted ? 0.04 : 0.06), lineWidth: 1))
 
                 if let samples, !samples.isEmpty {
                     Canvas { context, size in
@@ -87,7 +88,6 @@ struct WaveformView: View {
                                 height: max(barH, 1.4)
                             )
                             let path = Path(roundedRect: rect, cornerRadius: 1.2)
-                            // Slight opacity lift for very low amps already handled in provider
                             context.fill(path, with: .color(color.opacity(0.92)))
                         }
                     }
@@ -205,27 +205,31 @@ struct StratumRowView: View {
     var isExportReady: Bool { isMp3ExportReady }
 
     private var color: Color { strataColor(for: artifact.name) }
+    private var isMuted: Bool { stemPlaybackController.mutedStems.contains(artifact.name) }
 
     var body: some View {
         HStack(spacing: 10) {
-            // Left: stem identity
+            // Left: stem identity — slightly dim when explicitly muted (not disabled row)
             HStack(spacing: 8) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(color.opacity(0.18))
+                        .fill(color.opacity(isMuted ? 0.14 : 0.18))
                         .frame(width: 22, height: 22)
                     Image(systemName: strataIcon(for: artifact.name))
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.white.opacity(isMuted ? 0.86 : 1))
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(artifact.name.rawValue.capitalized)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.white.opacity(isMuted ? 0.84 : 1))
                         .lineLimit(1)
                 }
             }
             .frame(width: 110, alignment: .leading)
+            .opacity(isMuted ? 0.84 : 1)
+            .saturation(isMuted ? 0.85 : 1)
+            .animation(.easeInOut(duration: 0.18), value: isMuted)
 
             // Center: waveform (flex — identical width across rows ensures timeline alignment)
             WaveformView(
@@ -236,10 +240,14 @@ struct StratumRowView: View {
                 onSeek: { fraction in
                     let t = fraction * stemPlaybackController.duration
                     stemPlaybackController.seek(to: t)
-                }
+                },
+                isMuted: isMuted
             )
             .frame(height: 34)
             .frame(maxWidth: .infinity)
+            .opacity(isMuted ? 0.42 : 1)
+            .saturation(isMuted ? 0.10 : 1)
+            .animation(.easeInOut(duration: 0.18), value: isMuted)
 
             // Per-stem gain slider (0% silent .. 100% original, live, separate from mute/solo)
             VStack(spacing: 2) {
