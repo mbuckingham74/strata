@@ -63,7 +63,7 @@ struct StemExporter {
             fallbackName = title
         } else if let url = fallbackURL {
             let name = url.deletingPathExtension().lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !name.isEmpty { fallbackName = name }
+            if !name.isEmpty, !name.hasPrefix(".") { fallbackName = name }
         }
         guard let raw = fallbackName, !raw.isEmpty else { return "Audio.mp3" }
         let sanitized = sanitizedLocalFilename(raw)

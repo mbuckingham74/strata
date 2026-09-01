@@ -495,10 +495,6 @@ struct InferenceCard: View {
                                 Text(r.sidebarStatus).font(.caption2).foregroundStyle(.red.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
                             }
                         }
-                        // Legacy identifier proxy for UI tests expecting SeparateFromYouTubeButton
-                        Color.clear.frame(width: 0, height: 0)
-                            .accessibilityIdentifier("SeparateFromYouTubeButton")
-                            .accessibilityHidden(true)
                     }
                     .padding(12)
                     .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.06)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.08), lineWidth: 1)))

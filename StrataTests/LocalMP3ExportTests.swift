@@ -36,7 +36,7 @@ final class LocalMP3ExportTests: XCTestCase {
         )
         XCTAssertEqual(
             StemExporter.defaultLocalMP3Filename(metadata: nil, fallbackTitle: nil, fallbackURL: URL(fileURLWithPath: "/tmp/a/b:c.wav")),
-            "a-b-c.mp3"
+            "b-c.mp3"
         )
     }
 
