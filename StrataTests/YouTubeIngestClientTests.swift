@@ -1247,4 +1247,251 @@ final class YouTubeIngestClientTests: XCTestCase {
         XCTAssertTrue(ffLine.contains("-ac 2"), "ffmpeg should contain -ac 2: \(ffLine)")
         XCTAssertTrue(ffLine.contains("-c:a pcm_f32le"), "ffmpeg should contain -c:a pcm_f32le: \(ffLine)")
     }
+
+    // MARK: - Conservative YouTube music metadata extraction
+
+    func testStructuredArtistAndTrackWinsOverChannelSplit() async throws {
+        let cacheBase = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase) }
+        let logFile = try makeLogFile()
+        defer { try? FileManager.default.removeItem(at: logFile) }
+        let ytScript = """
+        #!/usr/bin/python3
+        import sys, os
+        args = sys.argv[1:]
+        if "-o" in args:
+            idx = args.index("-o")
+            tmpl = args[idx+1]
+            os.makedirs(os.path.dirname(tmpl), exist_ok=True)
+            info = tmpl.replace("%(ext)s", "info.json")
+            with open(info, "w") as jf:
+                jf.write('{"artist":"Real Artist","track":"Real Track","title":"Wrong Artist - Wrong Title","channel":"Wrong Artist"}')
+            thumb = tmpl.replace("%(ext)s", "jpg")
+            with open(thumb, "wb") as tf:
+                tf.write(b"\\xff\\xd8\\xff\\xe0thumb")
+        sys.exit(0)
+        """
+        let ffScript = writeValidWavPythonScript(logPath: logFile.path)
+        let ytURL = try makeFakeExecutable(name: "yt-dlp", scriptContent: ytScript)
+        let ffURL = try makeFakeExecutable(name: "ffmpeg", scriptContent: ffScript)
+        defer {
+            try? FileManager.default.removeItem(at: ytURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: ffURL.deletingLastPathComponent())
+        }
+        let client = YouTubeIngestClient(ytDlpURL: ytURL, ffmpegURL: ffURL, cacheBaseURL: cacheBase)
+        let preview = try await client.fetchPreview(youTubeURL: validYouTubeURL())
+        XCTAssertEqual(preview.metadata?.artist, "Real Artist")
+        XCTAssertEqual(preview.metadata?.title, "Real Track")
+        XCTAssertEqual(preview.metadata?.channel, "Wrong Artist")
+    }
+
+    func testCreatorFallbackProvidesArtist() async throws {
+        let cacheBase = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase) }
+        let logFile = try makeLogFile()
+        defer { try? FileManager.default.removeItem(at: logFile) }
+        let ytScript = """
+        #!/usr/bin/python3
+        import sys, os
+        args = sys.argv[1:]
+        if "-o" in args:
+            idx = args.index("-o")
+            tmpl = args[idx+1]
+            os.makedirs(os.path.dirname(tmpl), exist_ok=True)
+            info = tmpl.replace("%(ext)s", "info.json")
+            with open(info, "w") as jf:
+                jf.write('{"creator":"Creator Artist","track":"Creator Track","title":"Some Video Title","channel":"Some Channel"}')
+            thumb = tmpl.replace("%(ext)s", "jpg")
+            with open(thumb, "wb") as tf:
+                tf.write(b"\\xff\\xd8\\xff\\xe0thumb")
+        sys.exit(0)
+        """
+        let ffScript = writeValidWavPythonScript(logPath: logFile.path)
+        let ytURL = try makeFakeExecutable(name: "yt-dlp", scriptContent: ytScript)
+        let ffURL = try makeFakeExecutable(name: "ffmpeg", scriptContent: ffScript)
+        defer {
+            try? FileManager.default.removeItem(at: ytURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: ffURL.deletingLastPathComponent())
+        }
+        let client = YouTubeIngestClient(ytDlpURL: ytURL, ffmpegURL: ffURL, cacheBaseURL: cacheBase)
+        let preview = try await client.fetchPreview(youTubeURL: validYouTubeURL())
+        XCTAssertEqual(preview.metadata?.artist, "Creator Artist")
+        XCTAssertEqual(preview.metadata?.title, "Creator Track")
+        XCTAssertEqual(preview.metadata?.channel, "Some Channel")
+    }
+
+    func testChannelCorroboratedSplitInfersArtistAndTitle() async throws {
+        let cacheBase = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase) }
+        let logFile = try makeLogFile()
+        defer { try? FileManager.default.removeItem(at: logFile) }
+        let ytScript = """
+        #!/usr/bin/python3
+        import sys, os
+        args = sys.argv[1:]
+        if "-o" in args:
+            idx = args.index("-o")
+            tmpl = args[idx+1]
+            os.makedirs(os.path.dirname(tmpl), exist_ok=True)
+            info = tmpl.replace("%(ext)s", "info.json")
+            with open(info, "w") as jf:
+                jf.write('{"title":"Patrick Watson - Je Te Laisserai Des Mots","channel":"Patrick Watson"}')
+            thumb = tmpl.replace("%(ext)s", "jpg")
+            with open(thumb, "wb") as tf:
+                tf.write(b"\\xff\\xd8\\xff\\xe0thumb")
+        sys.exit(0)
+        """
+        let ffScript = writeValidWavPythonScript(logPath: logFile.path)
+        let ytURL = try makeFakeExecutable(name: "yt-dlp", scriptContent: ytScript)
+        let ffURL = try makeFakeExecutable(name: "ffmpeg", scriptContent: ffScript)
+        defer {
+            try? FileManager.default.removeItem(at: ytURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: ffURL.deletingLastPathComponent())
+        }
+        let client = YouTubeIngestClient(ytDlpURL: ytURL, ffmpegURL: ffURL, cacheBaseURL: cacheBase)
+        let preview = try await client.fetchPreview(youTubeURL: validYouTubeURL())
+        XCTAssertEqual(preview.metadata?.artist, "Patrick Watson")
+        XCTAssertEqual(preview.metadata?.title, "Je Te Laisserai Des Mots")
+        XCTAssertEqual(preview.metadata?.channel, "Patrick Watson")
+    }
+
+    func testTopicChannelNormalizationInfersArtistAndTitle() async throws {
+        let cacheBase = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase) }
+        let logFile = try makeLogFile()
+        defer { try? FileManager.default.removeItem(at: logFile) }
+        let ytScript = """
+        #!/usr/bin/python3
+        import sys, os
+        args = sys.argv[1:]
+        if "-o" in args:
+            idx = args.index("-o")
+            tmpl = args[idx+1]
+            os.makedirs(os.path.dirname(tmpl), exist_ok=True)
+            info = tmpl.replace("%(ext)s", "info.json")
+            with open(info, "w") as jf:
+                jf.write('{"title":"Patrick Watson - Je Te Laisserai Des Mots","channel":"Patrick Watson - Topic"}')
+            thumb = tmpl.replace("%(ext)s", "jpg")
+            with open(thumb, "wb") as tf:
+                tf.write(b"\\xff\\xd8\\xff\\xe0thumb")
+        sys.exit(0)
+        """
+        let ffScript = writeValidWavPythonScript(logPath: logFile.path)
+        let ytURL = try makeFakeExecutable(name: "yt-dlp", scriptContent: ytScript)
+        let ffURL = try makeFakeExecutable(name: "ffmpeg", scriptContent: ffScript)
+        defer {
+            try? FileManager.default.removeItem(at: ytURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: ffURL.deletingLastPathComponent())
+        }
+        let client = YouTubeIngestClient(ytDlpURL: ytURL, ffmpegURL: ffURL, cacheBaseURL: cacheBase)
+        let preview = try await client.fetchPreview(youTubeURL: validYouTubeURL())
+        XCTAssertEqual(preview.metadata?.artist, "Patrick Watson")
+        XCTAssertEqual(preview.metadata?.title, "Je Te Laisserai Des Mots")
+        XCTAssertEqual(preview.metadata?.channel, "Patrick Watson - Topic")
+    }
+
+    func testNonMatchingChannelDoesNotInfer() async throws {
+        let cacheBase = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase) }
+        let logFile = try makeLogFile()
+        defer { try? FileManager.default.removeItem(at: logFile) }
+        let ytScript = """
+        #!/usr/bin/python3
+        import sys, os
+        args = sys.argv[1:]
+        if "-o" in args:
+            idx = args.index("-o")
+            tmpl = args[idx+1]
+            os.makedirs(os.path.dirname(tmpl), exist_ok=True)
+            info = tmpl.replace("%(ext)s", "info.json")
+            with open(info, "w") as jf:
+                jf.write('{"title":"Patrick Watson - Je Te Laisserai Des Mots","channel":"Some Other Channel"}')
+            thumb = tmpl.replace("%(ext)s", "jpg")
+            with open(thumb, "wb") as tf:
+                tf.write(b"\\xff\\xd8\\xff\\xe0thumb")
+        sys.exit(0)
+        """
+        let ffScript = writeValidWavPythonScript(logPath: logFile.path)
+        let ytURL = try makeFakeExecutable(name: "yt-dlp", scriptContent: ytScript)
+        let ffURL = try makeFakeExecutable(name: "ffmpeg", scriptContent: ffScript)
+        defer {
+            try? FileManager.default.removeItem(at: ytURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: ffURL.deletingLastPathComponent())
+        }
+        let client = YouTubeIngestClient(ytDlpURL: ytURL, ffmpegURL: ffURL, cacheBaseURL: cacheBase)
+        let preview = try await client.fetchPreview(youTubeURL: validYouTubeURL())
+        XCTAssertNil(preview.metadata?.artist)
+        XCTAssertEqual(preview.metadata?.title, "Patrick Watson - Je Te Laisserai Des Mots")
+        XCTAssertEqual(preview.metadata?.channel, "Some Other Channel")
+    }
+
+    func testRawTitleFallbackWithoutDash() async throws {
+        let cacheBase = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase) }
+        let logFile = try makeLogFile()
+        defer { try? FileManager.default.removeItem(at: logFile) }
+        let ytScript = """
+        #!/usr/bin/python3
+        import sys, os
+        args = sys.argv[1:]
+        if "-o" in args:
+            idx = args.index("-o")
+            tmpl = args[idx+1]
+            os.makedirs(os.path.dirname(tmpl), exist_ok=True)
+            info = tmpl.replace("%(ext)s", "info.json")
+            with open(info, "w") as jf:
+                jf.write('{"title":"Just A Video Title Without Dash Corroboration","channel":"Random Channel"}')
+            thumb = tmpl.replace("%(ext)s", "jpg")
+            with open(thumb, "wb") as tf:
+                tf.write(b"\\xff\\xd8\\xff\\xe0thumb")
+        sys.exit(0)
+        """
+        let ffScript = writeValidWavPythonScript(logPath: logFile.path)
+        let ytURL = try makeFakeExecutable(name: "yt-dlp", scriptContent: ytScript)
+        let ffURL = try makeFakeExecutable(name: "ffmpeg", scriptContent: ffScript)
+        defer {
+            try? FileManager.default.removeItem(at: ytURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: ffURL.deletingLastPathComponent())
+        }
+        let client = YouTubeIngestClient(ytDlpURL: ytURL, ffmpegURL: ffURL, cacheBaseURL: cacheBase)
+        let preview = try await client.fetchPreview(youTubeURL: validYouTubeURL())
+        XCTAssertNil(preview.metadata?.artist)
+        XCTAssertEqual(preview.metadata?.title, "Just A Video Title Without Dash Corroboration")
+        XCTAssertEqual(preview.metadata?.channel, "Random Channel")
+    }
+
+    func testStructuredArtistWithMissingTrackUsesCorroboratedSplitTitle() async throws {
+        let cacheBase = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase) }
+        let logFile = try makeLogFile()
+        defer { try? FileManager.default.removeItem(at: logFile) }
+        let ytScript = """
+        #!/usr/bin/python3
+        import sys, os
+        args = sys.argv[1:]
+        if "-o" in args:
+            idx = args.index("-o")
+            tmpl = args[idx+1]
+            os.makedirs(os.path.dirname(tmpl), exist_ok=True)
+            info = tmpl.replace("%(ext)s", "info.json")
+            with open(info, "w") as jf:
+                jf.write('{"artist":"Patrick Watson","title":"Patrick Watson - Je te laisserai des mots","channel":"Some Other Channel"}')
+            thumb = tmpl.replace("%(ext)s", "jpg")
+            with open(thumb, "wb") as tf:
+                tf.write(b"\\xff\\xd8\\xff\\xe0thumb")
+        sys.exit(0)
+        """
+        let ffScript = writeValidWavPythonScript(logPath: logFile.path)
+        let ytURL = try makeFakeExecutable(name: "yt-dlp", scriptContent: ytScript)
+        let ffURL = try makeFakeExecutable(name: "ffmpeg", scriptContent: ffScript)
+        defer {
+            try? FileManager.default.removeItem(at: ytURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: ffURL.deletingLastPathComponent())
+        }
+        let client = YouTubeIngestClient(ytDlpURL: ytURL, ffmpegURL: ffURL, cacheBaseURL: cacheBase)
+        let preview = try await client.fetchPreview(youTubeURL: validYouTubeURL())
+        XCTAssertEqual(preview.metadata?.artist, "Patrick Watson")
+        XCTAssertEqual(preview.metadata?.title, "Je te laisserai des mots")
+        XCTAssertEqual(preview.metadata?.channel, "Some Other Channel")
+    }
 }

@@ -148,6 +148,9 @@ private struct YTDLPInfo: Decodable {
     let uploader: String?
     let channelName: String?
     let duration: Double?
+    let artists: [String]?
+    let creator: String?
+    let creators: [String]?
 
     private enum CodingKeys: String, CodingKey {
         case artist
@@ -162,6 +165,9 @@ private struct YTDLPInfo: Decodable {
         case uploader
         case channelName = "channel_name"
         case duration
+        case artists
+        case creator
+        case creators
     }
 
     init(from decoder: Decoder) throws {
@@ -178,6 +184,9 @@ private struct YTDLPInfo: Decodable {
         uploader = try? container.decode(String.self, forKey: .uploader)
         channelName = try? container.decode(String.self, forKey: .channelName)
         duration = Self.double(forKey: .duration, in: container)
+        artists = try? container.decode([String].self, forKey: .artists)
+        creator = try? container.decode(String.self, forKey: .creator)
+        creators = try? container.decode([String].self, forKey: .creators)
     }
 
     private static func integer(
@@ -641,25 +650,101 @@ actor YouTubeIngestClient {
               let info = try? JSONDecoder().decode(YTDLPInfo.self, from: data) else {
             return nil
         }
+
+        // MARK: Metadata precedence (conservative)
+
+        // Helper: mirrors YouTubeTrackMetadata.metadataValue — trim, reject empty / "n/a" / "na"
+        func sanitized(_ value: String?) -> String? {
+            guard let value else { return nil }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  trimmed.lowercased() != "n/a",
+                  trimmed.lowercased() != "na" else {
+                return nil
+            }
+            return trimmed
+        }
+
+        // Normalize for comparison: trim, strip " - Topic" suffix, lowercased
+        func normalizedForComparison(_ value: String) -> String {
+            var t = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if t.hasSuffix(" - Topic") {
+                t = String(t.dropLast(" - Topic".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            return t.lowercased()
+        }
+
+        // Channel for display (preview card) — keep legacy candidates only
         let rawChannel: String? = {
             for candidate in [info.channel, info.uploader, info.channelName] {
-                if let c = candidate?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty {
-                    return c
-                }
+                if let c = sanitized(candidate) { return c }
             }
             return nil
         }()
-        let rawTitle: String? = {
-            for candidate in [info.track, info.title] {
-                if let value = candidate?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty {
-                    return value
-                }
+
+        // Artist precedence:
+        // a. First non-empty sanitized among artist, artists.first, creator, creators.first
+        // b. If found, use it
+        // c. Else try channel-corroborated split inference
+        // d. Else nil
+        let structuredArtist: String? = {
+            let candidates: [String?] = [info.artist, info.artists?.first, info.creator, info.creators?.first]
+            for c in candidates {
+                if let s = sanitized(c) { return s }
             }
             return nil
         }()
+
+        let structuredTrack: String? = sanitized(info.track)
+
+        // Fallback inference: only when structured insufficient.
+        // Split raw video title on first " - " and corroborate left side against channel/creator identity.
+        func inferredSplit() -> (left: String, right: String)? {
+            guard let rawTitle = info.title else { return nil }
+            let trimmedTitle = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedTitle.isEmpty else { return nil }
+            guard let range = trimmedTitle.range(of: " - ") else { return nil }
+            let left = String(trimmedTitle[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let right = String(trimmedTitle[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !left.isEmpty, !right.isEmpty else { return nil }
+            let normalizedLeft = normalizedForComparison(left)
+            guard !normalizedLeft.isEmpty else { return nil }
+            // Build set of normalized identities: channel/creator + structuredArtist
+            var normalizedCandidates = Set<String>()
+            let identityCandidates: [String?] = [info.channel, info.uploader, info.channelName, info.creator, info.creators?.first]
+            for cand in identityCandidates {
+                guard let s = sanitized(cand) else { continue }
+                let n = normalizedForComparison(s)
+                if !n.isEmpty { normalizedCandidates.insert(n) }
+            }
+            if let s = structuredArtist {
+                let n = normalizedForComparison(s)
+                if !n.isEmpty { normalizedCandidates.insert(n) }
+            }
+            guard normalizedCandidates.contains(normalizedLeft) else { return nil }
+            return (left, right)
+        }
+
+        let inferred = inferredSplit()
+
+        // Final artist: structured wins, otherwise inferred left
+        let finalArtist: String? = structuredArtist ?? inferred?.left
+
+        // Title precedence:
+        // a. Structured track if present
+        // b. Else if raw title has corroborated "Artist - Title" (left matches structuredArtist or channel/creator), use right side
+        // c. Else raw video title
+        let finalTitle: String? = {
+            if let t = structuredTrack { return t }
+            if let inf = inferred {
+                return inf.right
+            }
+            return sanitized(info.title)
+        }()
+
         return YouTubeTrackMetadata(
-            artist: info.artist,
-            title: rawTitle,
+            artist: finalArtist,
+            title: finalTitle,
             album: info.album,
             albumArtist: info.albumArtist,
             year: info.releaseYear.map(String.init),
