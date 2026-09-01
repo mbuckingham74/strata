@@ -142,7 +142,7 @@ struct SidebarView: View {
                     .font(.caption).fontWeight(.semibold).foregroundStyle(.secondary).textCase(.uppercase)
                 Spacer()
                 Button { showingImporter = true } label: {
-                    Image(systemName: "plus").font(.system(size: 11, weight: .semibold)).frame(width: 22, height: 22).background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                    Image(systemName: "plus").font(.system(size: 11, weight: .semibold)).frame(width: 22, height: 22).background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
                 }.buttonStyle(.plain).help("Add Audio").accessibilityLabel("Add Audio")
             }.padding(.horizontal, 14).padding(.vertical, 12)
             Divider().opacity(0.15)
@@ -163,7 +163,7 @@ struct SidebarView: View {
                 Circle().fill(sidebarDotColor).frame(width: 6, height: 6)
                 Text(sidebarStatusText).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 Spacer()
-            }.padding(.horizontal, 12).padding(.vertical, 10).background(.white.opacity(0.03)).overlay(Divider().opacity(0.1), alignment: .top)
+            }.padding(.horizontal, 12).padding(.vertical, 10).background(Color.primary.opacity(0.04)).overlay(Divider().opacity(0.1), alignment: .top)
                 .help(sidebarStatusText)
                 .accessibilityIdentifier("RuntimeReadinessStatus")
         }.background(Color(nsColor: .windowBackgroundColor))
@@ -197,7 +197,7 @@ struct SidebarEntry: View {
                 Text(duration).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-        }.padding(.horizontal, 10).padding(.vertical, 8).background(RoundedRectangle(cornerRadius: 8).fill(isSelected ? Color.white.opacity(0.08) : Color.clear)).overlay(RoundedRectangle(cornerRadius: 8).stroke(isSelected ? Color.white.opacity(0.08) : Color.clear, lineWidth: 1))
+        }.padding(.horizontal, 10).padding(.vertical, 8).background(RoundedRectangle(cornerRadius: 8).fill(isSelected ? Color.primary.opacity(0.08) : Color.clear)).overlay(RoundedRectangle(cornerRadius: 8).stroke(isSelected ? Color(nsColor: .separatorColor) : Color.clear, lineWidth: 1))
     }
 }
 
@@ -220,7 +220,7 @@ struct MainWorkspaceView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.09, green: 0.09, blue: 0.11).ignoresSafeArea()
+            Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if !isCompletedState {
@@ -229,7 +229,7 @@ struct MainWorkspaceView: View {
                             Color.clear.frame(height: 20)
                         } else if controller.hasFile {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(controller.title ?? "Untitled").font(.title3.weight(.semibold)).foregroundStyle(.white).lineLimit(1)
+                                Text(controller.title ?? "Untitled").font(.title3.weight(.semibold)).foregroundStyle(.primary).lineLimit(1)
                                 HStack(spacing: 6) {
                                     Text(controller.formattedDuration).font(.caption).foregroundStyle(.secondary)
                                     Text("·").foregroundStyle(.tertiary)
@@ -276,11 +276,11 @@ struct EmptyStateView: View {
     var body: some View {
         VStack(spacing: 20) {
             ZStack {
-                RoundedRectangle(cornerRadius: 16).fill(Color.white.opacity(0.06)).frame(width: 72, height: 72)
+                RoundedRectangle(cornerRadius: 16).fill(Color.primary.opacity(0.06)).frame(width: 72, height: 72)
                 Image(systemName: "music.note").font(.system(size: 30, weight: .light)).foregroundStyle(Color(red: 0.56, green: 0.46, blue: 0.95))
             }
             VStack(spacing: 8) {
-                Text("No audio selected").font(.title3.weight(.semibold)).foregroundStyle(.white)
+                Text("No audio selected").font(.title3.weight(.semibold)).foregroundStyle(.primary)
                 Text("Add a local audio file to play, pause, and seek through AVAudioEngine.").font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 360)
             }
             Button { showingImporter = true } label: { Label("Add Audio", systemImage: "plus").font(.callout.weight(.medium)).padding(.horizontal, 16).padding(.vertical, 8) }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).accessibilityLabel("Add Audio")
@@ -349,7 +349,7 @@ struct InferenceCard: View {
                 .help("Choose the default folder shown by export save panels")
                 .accessibilityIdentifier("ChooseDefaultExportFolder")
                 if !shouldShowPhaseList && inferenceController.isSeparating {
-                    ProgressView().scaleEffect(0.7).tint(.white)
+                    ProgressView().scaleEffect(0.7).tint(.secondary)
                 }
             }
             if !isCompletedState {
@@ -392,18 +392,18 @@ struct InferenceCard: View {
                         if playbackController.hasFile, let title = playbackController.title {
                             Label(title, systemImage: "doc.fill").font(.caption.weight(.medium)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                             if let url = playbackController.sourceURL {
-                                Text(url.lastPathComponent).font(.caption2).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
+                                Text(url.lastPathComponent).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                             }
                             Spacer()
                             Button { showingImporter = true } label: {
                                 Label("Change", systemImage: "arrow.triangle.2.circlepath").font(.caption.weight(.medium))
-                            }.buttonStyle(.bordered).tint(.white).disabled(inferenceController.isSeparating)
+                            }.buttonStyle(.bordered).tint(.secondary).disabled(inferenceController.isSeparating)
                         } else {
                             Text("No file selected — Add audio to separate").font(.caption).foregroundStyle(.tertiary)
                             Spacer()
                             Button { showingImporter = true } label: {
                                 Label("Add Audio", systemImage: "plus").font(.caption.weight(.medium))
-                            }.buttonStyle(.bordered).tint(.white).disabled(inferenceController.isSeparating)
+                            }.buttonStyle(.bordered).tint(.secondary).disabled(inferenceController.isSeparating)
                         }
                     }
                 }
@@ -443,7 +443,7 @@ struct InferenceCard: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(youTubeDisplayTitle())
                                         .font(.callout.weight(.semibold))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(.primary)
                                         .lineLimit(1)
                                     Text(youTubeDisplayArtist())
                                         .font(.caption)
@@ -558,7 +558,7 @@ struct InferenceCard: View {
                             }
                         }
                         .padding(12)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.06)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.08), lineWidth: 1)))
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.08)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(nsColor: .separatorColor), lineWidth: 1)))
                     }
                 }
 
@@ -616,7 +616,7 @@ struct InferenceCard: View {
                 }
 
             }
-        }.padding(isCompletedState ? 10 : 12).background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.06)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1)))
+        }.padding(isCompletedState ? 10 : 12).background(RoundedRectangle(cornerRadius: 14).fill(Color.primary.opacity(0.12)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.13), lineWidth: 1)))
             .onChange(of: inferenceController.result) { _, result in
                 guard let result else { return }
                 loadCompletedResult(result)
@@ -662,7 +662,7 @@ struct InferenceCard: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(youTubeDisplayTitle())
                             .font(.callout.weight(.semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.primary)
                             .lineLimit(1)
                         Text(youTubeDisplayArtist())
                             .font(.caption)
@@ -672,13 +672,13 @@ struct InferenceCard: View {
                             if let durationText = youTubeDisplayDuration() {
                                 Text(durationText)
                                     .font(.caption2.monospacedDigit())
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(.secondary)
                             }
                             if let channel = youTubeDisplayChannel(), !channel.isEmpty {
                                 if youTubeDisplayDuration() != nil { Text("·").font(.caption2).foregroundStyle(.tertiary) }
                                 Text(channel)
                                     .font(.caption2)
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }
                         }
@@ -720,34 +720,34 @@ struct InferenceCard: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.06)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.08), lineWidth: 1)))
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.09)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor), lineWidth: 1)))
         } else {
             // Local compact summary
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 10) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)).frame(width: 36, height: 36)
+                        RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.08)).frame(width: 36, height: 36)
                         Image(systemName: "waveform").font(.system(size: 14, weight: .medium)).foregroundStyle(Color(red: 0.56, green: 0.46, blue: 0.95))
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(playbackController.title ?? inferenceController.exportBaseName ?? "Untitled")
                             .font(.callout.weight(.semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.primary)
                             .lineLimit(1)
                         HStack(spacing: 6) {
                             Text(playbackController.formattedDuration)
                                 .font(.caption2.monospacedDigit())
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                             if let url = playbackController.sourceURL {
                                 Text("·").font(.caption2).foregroundStyle(.tertiary)
                                 Text(url.lastPathComponent)
                                     .font(.caption2)
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(.secondary)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
                             } else if let base = inferenceController.exportBaseName, !base.isEmpty {
                                 Text("·").font(.caption2).foregroundStyle(.tertiary)
-                                Text(base).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                                Text(base).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                             }
                         }
                     }
@@ -783,7 +783,7 @@ struct InferenceCard: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.06)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.08), lineWidth: 1)))
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.09)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor), lineWidth: 1)))
         }
     }
 
@@ -791,15 +791,15 @@ struct InferenceCard: View {
         HStack(spacing: 6) {
             Text("✓ 6 strata created")
                 .font(.caption.weight(.medium))
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(Color.primary.opacity(0.88))
             Spacer()
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color.white.opacity(0.06))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.08), lineWidth: 1))
+                .fill(Color.primary.opacity(0.08))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
         )
         .accessibilityIdentifier("PhaseListCompact")
     }
@@ -808,7 +808,7 @@ struct InferenceCard: View {
     private func exportStatus(accessibilityIdentifier: String) -> some View {
         if let exportingFileName {
             HStack(spacing: 6) {
-                ProgressView().scaleEffect(0.6).tint(.white)
+                ProgressView().scaleEffect(0.6).tint(.secondary)
                 Text("Exporting \(exportingFileName)…").font(.caption).foregroundStyle(.secondary)
             }
             .accessibilityIdentifier(accessibilityIdentifier)
@@ -1086,14 +1086,14 @@ struct InferenceCard: View {
                     .clipped()
             } else {
                 ZStack {
-                    RoundedRectangle(cornerRadius: cornerRadius).fill(Color.white.opacity(0.08))
+                    RoundedRectangle(cornerRadius: cornerRadius).fill(Color.primary.opacity(0.08))
                     Image(systemName: "waveform").font(.system(size: symbolSize, weight: .medium)).foregroundStyle(.secondary)
                 }
                 .frame(width: size, height: size)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-        .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(Color.white.opacity(0.12), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
     }
 
     @ViewBuilder
@@ -1207,8 +1207,8 @@ struct InferenceCard: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color.white.opacity(0.06))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.08), lineWidth: 1))
+                .fill(Color.primary.opacity(0.08))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
         )
         .accessibilityIdentifier("PhaseList")
     }
@@ -1227,7 +1227,7 @@ struct InferenceCard: View {
                 case .current:
                     ProgressView()
                         .scaleEffect(0.6)
-                        .tint(.white)
+                        .tint(.secondary)
                         .frame(width: 12, height: 12)
                 case .future:
                     Image(systemName: "circle")
@@ -1252,8 +1252,8 @@ struct InferenceCard: View {
 
     private func colorForPhaseRow(state: PhaseRowState) -> Color {
         switch state {
-        case .completed: return Color.white.opacity(0.85)
-        case .current: return Color.white
+        case .completed: return Color.primary.opacity(0.85)
+        case .current: return Color.primary
         case .future: return Color.secondary
         }
     }
@@ -1395,9 +1395,9 @@ struct EditableMetadataEditor: View {
                                     .scaledToFit()
                                     .frame(width: 56, height: 56)
                                     .clipShape(RoundedRectangle(cornerRadius: 6))
-                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
+                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
                             } else {
-                                RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.06)).frame(width: 56, height: 56).overlay(Image(systemName: "photo").foregroundStyle(.secondary))
+                                RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)).frame(width: 56, height: 56).overlay(Image(systemName: "photo").foregroundStyle(.secondary))
                             }
                             Text(previewURL.lastPathComponent).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                             Spacer()
@@ -1422,7 +1422,7 @@ struct EditableMetadataEditor: View {
                     }
                 }
             }
-        }.padding(12).background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.05)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.08), lineWidth: 1)))
+        }.padding(12).background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.08)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor), lineWidth: 1)))
     }
 
     private var artworkStatusText: String {
@@ -1488,11 +1488,11 @@ struct StemAudibilityControls: View {
                     .frame(width: 52, height: 26)
                     .background(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(isMuted ? Color.red : Color.white.opacity(0.06))
+                            .fill(isMuted ? Color.red : Color.primary.opacity(0.06))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .stroke(isMuted ? Color.red : Color.white.opacity(0.10), lineWidth: 1)
+                            .stroke(isMuted ? Color.red : Color(nsColor: .separatorColor), lineWidth: 1)
                     )
                     .foregroundStyle(isMuted ? Color.white : Color.secondary)
                     .shadow(color: isMuted ? Color.red.opacity(0.32) : .clear, radius: 4, y: 1)
@@ -1512,11 +1512,11 @@ struct StemAudibilityControls: View {
                     .frame(width: 52, height: 26)
                     .background(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(isSoloed ? Color(red: 0.56, green: 0.46, blue: 0.95) : Color.white.opacity(0.06))
+                            .fill(isSoloed ? Color(red: 0.56, green: 0.46, blue: 0.95) : Color.primary.opacity(0.06))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .stroke(isSoloed ? Color(red: 0.56, green: 0.46, blue: 0.95) : Color.white.opacity(0.10), lineWidth: 1)
+                            .stroke(isSoloed ? Color(red: 0.56, green: 0.46, blue: 0.95) : Color(nsColor: .separatorColor), lineWidth: 1)
                     )
                     .foregroundStyle(isSoloed ? Color.white : Color.secondary)
                     .shadow(color: isSoloed ? Color(red: 0.56, green: 0.46, blue: 0.95).opacity(0.32) : .clear, radius: 4, y: 1)
@@ -1555,7 +1555,7 @@ struct TransportCard: View {
                     Text(controller.isPlaying ? "Playing" : "Paused").font(.caption).foregroundStyle(.secondary)
                 }
             }
-        }.padding(12).background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.06)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.08), lineWidth: 1))).onChange(of: controller.currentTime) { _, newValue in if !isDragging { sliderValue = newValue } }.onAppear { sliderValue = controller.currentTime }
+        }.padding(12).background(RoundedRectangle(cornerRadius: 14).fill(Color.primary.opacity(0.11)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.13), lineWidth: 1))).onChange(of: controller.currentTime) { _, newValue in if !isDragging { sliderValue = newValue } }.onAppear { sliderValue = controller.currentTime }
     }
 }
 
@@ -1566,10 +1566,10 @@ struct OriginalMixRow: View {
     var body: some View {
         HStack(spacing: 12) {
             ZStack { RoundedRectangle(cornerRadius: 8).fill(Color(red: 0.56, green: 0.46, blue: 0.95).opacity(0.18)).frame(width: 32, height: 32); Image(systemName: "waveform.path.ecg").font(.system(size: 14, weight: .medium)).foregroundStyle(Color(red: 0.56, green: 0.46, blue: 0.95)) }
-            Text("Original mix").font(.callout.weight(.medium)).foregroundStyle(.white)
+            Text("Original mix").font(.callout.weight(.medium)).foregroundStyle(.primary)
             Spacer()
             Text(controller.formattedDuration).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-        }.padding(.horizontal, 14).padding(.vertical, 12).background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.05)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.07), lineWidth: 1)))
+        }.padding(.horizontal, 14).padding(.vertical, 12).background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.11)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.13), lineWidth: 1)))
     }
 }
 

@@ -31,7 +31,7 @@ private func strataColor(for stem: StemName) -> Color {
     case .bass: return Color(red: 0.38, green: 0.68, blue: 0.92) // sky
     case .guitar: return Color(red: 0.45, green: 0.82, blue: 0.58) // mint
     case .piano: return Color(red: 0.95, green: 0.78, blue: 0.45) // amber
-    case .other: return Color.white.opacity(0.55)
+    case .other: return Color(nsColor: .secondaryLabelColor)
     }
 }
 
@@ -69,8 +69,8 @@ struct WaveformView: View {
             ZStack(alignment: .leading) {
                 // Track background — slightly darker when muted so dimmed waveform still reads as a track
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.white.opacity(isMuted ? 0.025 : 0.04))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(isMuted ? 0.04 : 0.06), lineWidth: 1))
+                    .fill(Color.primary.opacity(isMuted ? 0.03 : 0.06))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
 
                 if let samples, !samples.isEmpty {
                     Canvas { context, size in
@@ -93,18 +93,18 @@ struct WaveformView: View {
                         }
                     }
                 } else if isLoading {
-                    HStack { Spacer(); ProgressView().scaleEffect(0.55).tint(.white.opacity(0.35)); Spacer() }
+                    HStack { Spacer(); ProgressView().scaleEffect(0.55).tint(.secondary); Spacer() }
                 } else {
                     // Empty but not loading: thin midline so alignment still reads as a stratum
-                    Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1).frame(maxHeight: .infinity, alignment: .center)
+                    Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 1).frame(maxHeight: .infinity, alignment: .center)
                 }
 
                 // Vertical playhead — 1pt line + dot
                 if duration > 0 {
                     Rectangle()
-                        .fill(Color.white.opacity(0.95))
+                        .fill(Color.primary)
                         .frame(width: 1.2, height: h)
-                        .shadow(color: Color.black.opacity(0.45), radius: 2, x: 0, y: 0)
+                        .shadow(color: Color.black.opacity(0.35), radius: 2, x: 0, y: 0)
                         .offset(x: playheadX)
                     Circle()
                         .fill(color)
@@ -165,7 +165,7 @@ struct StrataRulerView: View {
                         let f = tickCount == 1 ? 0 : Double(idx) / Double(tickCount - 1)
                         let t = duration * f
                         VStack(alignment: .leading, spacing: 3) {
-                            Rectangle().fill(Color.white.opacity(0.14)).frame(width: 1, height: 8)
+                            Rectangle().fill(Color.primary.opacity(0.22)).frame(width: 1, height: 8)
                             Text(StemPlaybackController.formattedTime(t))
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
@@ -176,7 +176,7 @@ struct StrataRulerView: View {
                 }
                 // Ruler playhead (thin line)
                 if duration > 0 {
-                    Rectangle().fill(Color.white.opacity(0.55)).frame(width: 1, height: geo.size.height).offset(x: fraction * w)
+                    Rectangle().fill(Color.primary.opacity(0.45)).frame(width: 1, height: geo.size.height).offset(x: fraction * w)
                 }
             }
             .contentShape(Rectangle())
@@ -218,12 +218,12 @@ struct StratumRowView: View {
                         .frame(width: 26, height: 26)
                     Image(systemName: strataIcon(for: artifact.name))
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(isMuted ? 0.86 : 1))
+                        .foregroundStyle(Color.primary.opacity(isMuted ? 0.86 : 1))
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(artifact.name.rawValue.capitalized)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white.opacity(isMuted ? 0.84 : 1))
+                        .foregroundStyle(Color.primary.opacity(isMuted ? 0.84 : 1))
                         .lineLimit(1)
                 }
             }
@@ -284,7 +284,7 @@ struct StratumRowView: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 26, height: 26)
-                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                    .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
             }
             .menuStyle(.button)
             .buttonStyle(.plain)
@@ -362,11 +362,11 @@ struct StrataStackView: View {
                     } label: {
                         Image(systemName: stemPlaybackController.isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.black)
+                            .foregroundStyle(Color(nsColor: .windowBackgroundColor))
                             .frame(width: 44, height: 44)
-                            .background(Color.white, in: Circle())
+                            .background(Color.primary, in: Circle())
                             .shadow(color: Color.black.opacity(0.22), radius: 8, y: 3)
-                            .overlay(Circle().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                            .overlay(Circle().stroke(Color.primary.opacity(0.12), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .disabled(!stemPlaybackController.hasStems)
@@ -378,10 +378,10 @@ struct StrataStackView: View {
                     } label: {
                         Image(systemName: "stop.fill")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.primary)
                             .frame(width: 32, height: 32)
-                            .background(Color.white.opacity(0.12), in: Circle())
-                            .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                            .background(Color.primary.opacity(0.10), in: Circle())
+                            .overlay(Circle().stroke(Color.primary.opacity(0.12), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .disabled(!stemPlaybackController.hasStems)
@@ -396,7 +396,7 @@ struct StrataStackView: View {
                             .textCase(.uppercase)
                         Text("\(stemPlaybackController.formattedCurrentTime) / \(stemPlaybackController.formattedDuration)")
                             .font(.callout.monospacedDigit().weight(.medium))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(.primary)
                             .contentTransition(.numericText())
                             .lineLimit(1)
                     }
@@ -404,7 +404,7 @@ struct StrataStackView: View {
                     Spacer()
 
                     HStack(spacing: 6) {
-                        Circle().fill(stemPlaybackController.isPlaying ? Color.green : Color.white.opacity(0.28)).frame(width: 6, height: 6)
+                        Circle().fill(stemPlaybackController.isPlaying ? Color.green : Color.secondary.opacity(0.45)).frame(width: 6, height: 6)
                         Text(stemPlaybackController.isPlaying ? "Playing" : "Paused")
                             .font(.caption.weight(.medium))
                             .foregroundStyle(.secondary)
@@ -431,7 +431,7 @@ struct StrataStackView: View {
                             }
                         }
                     )
-                    .tint(Color.white.opacity(0.92))
+                    .tint(Color.primary)
                     .disabled(!stemPlaybackController.hasStems)
                     .accessibilityLabel("Seek strata")
                     .accessibilityIdentifier("StrataSeekSlider")
@@ -460,7 +460,7 @@ struct StrataStackView: View {
             }
             .padding(.top, 10)
             .padding(.bottom, 6)
-            .background(Color.white.opacity(0.04))
+            .background(Color.primary.opacity(0.08))
             .onChange(of: stemPlaybackController.currentTime) { _, newValue in
                 if !isStrataDragging {
                     strataSliderValue = newValue
@@ -489,7 +489,7 @@ struct StrataStackView: View {
                     }
                 }
             }
-            .background(Color.white.opacity(0.02))
+            .background(Color.primary.opacity(0.06))
 
             // Footer: selected-mix export (kept outside per-row flow) — WAV does not require FFmpeg
             HStack(spacing: 10) {
@@ -509,7 +509,7 @@ struct StrataStackView: View {
                     Image(systemName: "ellipsis.circle")
                         .font(.system(size: 12, weight: .medium))
                         .frame(width: 26, height: 26)
-                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
                 }
                 .menuStyle(.button)
                 .buttonStyle(.plain)
@@ -519,17 +519,17 @@ struct StrataStackView: View {
                 Spacer()
                 Text(effectiveDisplayTitle)
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .accessibilityIdentifier("StrataDisplayTitle")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(Color.white.opacity(0.03))
+            .background(Color.primary.opacity(0.07))
             if let exportingFileName {
                 HStack(spacing: 6) {
-                    ProgressView().scaleEffect(0.6).tint(.white)
+                    ProgressView().scaleEffect(0.6).tint(.secondary)
                     Text("Exporting \(exportingFileName)…").font(.caption).foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 12)
@@ -551,8 +551,8 @@ struct StrataStackView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.05))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.08), lineWidth: 1))
+                .fill(Color.primary.opacity(0.12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.13), lineWidth: 1))
         )
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .alert("Export Failed", isPresented: Binding(
