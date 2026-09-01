@@ -116,30 +116,127 @@ Default save names are based on the available metadata and source:
 
 The save panel lets you change any default filename before exporting.
 
-## Requirements and setup
+## Prerequisites
 
-- macOS on Apple Silicon.
-- FFmpeg executable at `/opt/homebrew/bin/ffmpeg`. It is required for YouTube loading, local separation, and all MP3 exports.
-- `yt-dlp` executable at `/opt/homebrew/bin/yt-dlp`. It is required to download YouTube sources. Once a YouTube source is loaded, separating or saving that loaded source does not need another `yt-dlp` run.
-- `uv` for the local separation worker. From the repository root:
+**Supported platform:** Apple Silicon Mac (arm64) running macOS 26 (Tahoe) or later. Intel Macs are not supported — the ML worker asserts `arm64` and uses MLX/Metal on MPS. The Xcode project deployment target is `26.0` (Swift 6).
 
-  ```bash
-  cd InferenceWorker
-  uv sync
-  uv run prepare-model
-  ```
+**Required tools:**
 
-  `uv sync` creates the worker environment using the pinned Python version. `uv run prepare-model` is required before the first separation because the worker does not download model assets automatically. To check already prepared assets without downloading, use `uv run prepare-model --check-only`.
+- **Xcode** — from the Mac App Store (includes Command Line Tools). Strata builds with the `Strata` scheme in `Strata.xcodeproj` and uses the macOS 26 SDK.
+- **Homebrew** — from <https://brew.sh> (Apple Silicon path `/opt/homebrew/bin`).
 
-When running a Debug build from Xcode, Strata looks for `InferenceWorker/.venv` in the repository. If the worker is elsewhere, set `DEMUX_WORKER_DIRECTORY` to its absolute `InferenceWorker` directory. A worker is needed for separation; WAV exports remain available without FFmpeg once stems exist.
-
-The app shows setup status in the sidebar and Separation card. Missing FFmpeg disables YouTube loading, local separation, and MP3 exports; missing `yt-dlp` disables downloading new YouTube sources; missing the worker disables separation.
-
-## Running
+If Homebrew was just installed and this terminal does not yet find `brew`, initialize the Apple Silicon Homebrew environment before continuing:
 
 ```bash
-open Strata.xcodeproj
-# Select scheme Strata, destination My Mac, and Run.
+eval "$(/opt/homebrew/bin/brew shellenv)"
 ```
 
-On first launch, click **Add Audio** for a local file or paste a YouTube URL into **Paste YouTube URL**. Check the setup status if you plan to separate audio.
+**Supported external versions** (pinned in `Strata/Inference/ExternalToolCompatibility.swift`):
+
+| Tool | Supported version | Path / role |
+|------|-------------------|-------------|
+| FFmpeg | `9.0.1` | `/opt/homebrew/bin/ffmpeg` — externally installed runtime dependency |
+| yt-dlp | `2026.08.19` | `/opt/homebrew/bin/yt-dlp` — externally installed runtime dependency |
+| Node.js | `26.8.1` | `/opt/homebrew/bin/node` — externally installed runtime dependency |
+| uv | `0.12.8` | `uv` — used to create `InferenceWorker/.venv` (not called at runtime) |
+
+FFmpeg, yt-dlp, and Node are externally installed runtime dependencies Strata executes at `/opt/homebrew/bin/*`. `uv` is only used to prepare the local Python worker environment (`InferenceWorker/.venv` from `InferenceWorker/pyproject.toml` / `uv.lock` / `.python-version`). **Model files and third-party executables are not bundled in the repository or in `Strata.app`.**
+
+Install the external tools in one command:
+
+```bash
+brew install ffmpeg yt-dlp node uv
+```
+
+Homebrew installs its current formula versions; this command does not itself pin Strata’s supported versions. Strata validates the supported FFmpeg, yt-dlp, and Node runtime versions at their fixed `/opt/homebrew/bin` paths and rejects an unsupported version rather than silently running an unvalidated one. `uv` is a setup prerequisite and is not called by the app at runtime.
+
+Before continuing, confirm that the exact executables Strata uses report the supported versions:
+
+```bash
+brew --prefix                         # expect: /opt/homebrew
+command -v uv                         # expect: /opt/homebrew/bin/uv
+/opt/homebrew/bin/ffmpeg -version | head -n 1  # expect: ffmpeg version 9.0.1
+/opt/homebrew/bin/yt-dlp --version             # expect: 2026.08.19
+/opt/homebrew/bin/node --version               # expect: v26.8.1
+uv --version                                  # expect: uv 0.12.8
+```
+
+If any expected version differs, stop here and resolve it as described in [Troubleshooting](#troubleshooting) before cloning or running the app.
+
+## Build from source
+
+Run the shell commands below in one continuous terminal session. Start in any directory where you want the checkout; the commands themselves establish the later working directories. If a command fails, stop and fix it before continuing.
+
+### Clone
+
+```bash
+git clone https://github.com/mbuckingham74/strata.git
+cd strata                 # now: the cloned repository root
+```
+
+SSH alternative: `git@github.com:mbuckingham74/strata.git`.
+
+### Prepare the Python worker
+
+The pinned Python version is in `InferenceWorker/.python-version` (`3.12.12`). From the repository root:
+
+```bash
+cd InferenceWorker        # now: <repository root>/InferenceWorker
+uv sync                   # stays in <repository root>/InferenceWorker
+uv run prepare-model      # stays in <repository root>/InferenceWorker
+cd ..                     # now: <repository root>
+```
+
+- `uv sync` creates `InferenceWorker/.venv` (downloads the pinned Python via `uv` if needed) from `InferenceWorker/pyproject.toml` and `InferenceWorker/uv.lock`.
+- `uv run prepare-model` downloads and verifies model assets into `~/Library/Caches/Demux/Models/roformer-model-bs-roformer-sw-by-jarredou/` — **~667 MB checkpoint `BS-Rofo-SW-Fixed.ckpt` (699,412,152 bytes) + ~5 KB config**, ~670 MB total, SHA-256 verified (see `InferenceWorker/src/demux_worker/constants.py`). The worker does **not** download models automatically; this step is required before the first separation. Re-running is idempotent — valid cached files are skipped.
+- To validate cached assets without downloading, run `uv run prepare-model --check-only` while the current directory is `InferenceWorker` (the troubleshooting sequence shows the required `cd` commands).
+
+When running a Debug build from Xcode, Strata looks for `InferenceWorker/.venv` in the repository. If the worker lives elsewhere, set `DEMUX_WORKER_DIRECTORY` to its absolute `InferenceWorker` directory in Xcode under **Product ▸ Scheme ▸ Edit Scheme… ▸ Run ▸ Arguments ▸ Environment Variables**. A worker is needed for separation; WAV exports remain available without FFmpeg once stems exist.
+
+The app shows setup status in the sidebar and Separation card. Missing or unsupported FFmpeg disables YouTube loading, local separation, and MP3 exports; missing or unsupported yt-dlp/Node disables YouTube; missing the worker disables separation.
+
+### Run in Xcode
+
+The preceding `cd ..` leaves the terminal in the repository root:
+
+```bash
+open Strata.xcodeproj  # run this from the repository root
+```
+
+In Xcode, select scheme **Strata**, destination **My Mac**, then choose **Product ▸ Run** (⌘R). If Xcode asks to accept its license or install platform components, complete those prompts and run again.
+
+No separate metadata-generation step is required — the `AboutMetadata.json` build phase invokes `python3` on `scripts/generate-about-metadata.py` automatically with `${SRCROOT}`-absolute repository paths.
+
+### First run
+
+On first launch, click **Add Audio** for a local file or paste a YouTube URL into **Paste YouTube URL** and click **Load source**. Check the setup status if you plan to separate audio. Separation will show `Loading model…` → `Separating…` once the cached model is present; if `prepare-model` was not run, separation reports the missing cache and will not download it.
+
+> Model files (`~/Library/Caches/Demux/Models/...`) and the Homebrew executables (`/opt/homebrew/bin/ffmpeg`, `/opt/homebrew/bin/yt-dlp`, `/opt/homebrew/bin/node`) are not committed and are not embedded in the app — they must be present as described above.
+
+## Troubleshooting
+
+Run the checks below from the repository root. If you followed the build sequence, the terminal is already there after `cd ..` in worker setup. The worker check must run from `InferenceWorker`, where its `pyproject.toml` is located, and the final `cd ..` returns to the repository root.
+
+```bash
+# Current directory: repository root
+brew --prefix                         # expect: /opt/homebrew
+command -v ffmpeg yt-dlp node uv       # expect: /opt/homebrew/bin/*
+ls -l /opt/homebrew/bin/ffmpeg /opt/homebrew/bin/yt-dlp /opt/homebrew/bin/node
+/opt/homebrew/bin/ffmpeg -version | head -n 1  # expect: ffmpeg version 9.0.1
+/opt/homebrew/bin/yt-dlp --version             # expect: 2026.08.19
+/opt/homebrew/bin/node --version               # expect: v26.8.1
+uv --version                                  # expect: uv 0.12.8
+
+cd InferenceWorker                    # now: <repository root>/InferenceWorker
+ls -l .venv/bin/python3
+cat .python-version                    # expect: 3.12.12
+uv run prepare-model --check-only      # validates cache without downloading
+cd ..                                  # now: <repository root>
+```
+
+- `Setup needed · missing FFmpeg at /opt/homebrew/bin/ffmpeg` or `Setup needed · FFmpeg version mismatch …` → install or make the supported FFmpeg `9.0.1` available at that exact path. Intel Homebrew at `/usr/local/bin` is not used.
+- `YouTube disabled · missing yt-dlp at /opt/homebrew/bin/yt-dlp` or `YouTube disabled · yt-dlp version mismatch …` → make yt-dlp `2026.08.19` available at that exact path.
+- `YouTube disabled · missing Node at /opt/homebrew/bin/node` or `YouTube disabled · Node version mismatch …` → make Node `26.8.1` available at that exact path.
+- Homebrew formulae advance independently of this repository. `brew upgrade` does not guarantee one of the supported versions; if the current formula is newer, install a supported versioned formula or another supported package source, then rerun the absolute-path checks. The repository does not include a Homebrew version pin or downgrade installer.
+- `Setup needed · missing worker Python at …/.venv/bin/python3` → from the repository root, run `cd InferenceWorker`, then `uv sync`, then `cd ..`. Do not run `uv sync` from the repository root.
+- A worker error about a missing cached asset → from `InferenceWorker`, run `uv run prepare-model` (without `--check-only`) to download and verify the model files.
