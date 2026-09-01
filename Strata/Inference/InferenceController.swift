@@ -903,6 +903,8 @@ final class InferenceController {
     }
 
     /// Deferred Save MP3 from preview: downloads audio-only then prepares MP3 export.
+    /// Raw download is an export intermediate only — must not set loadedYouTubeSource
+    /// (which triggers PlaybackController.load via ContentView observer and fails for WebM).
     func prepareYouTubeMP3ExportFromLoadedPreview() {
         if youTubeCleanupFailed { return }
         guard let preview = loadedYouTubePreview, let url = loadedYouTubeURL else {
@@ -914,6 +916,13 @@ final class InferenceController {
                 state = .idle
                 statusMessage = "Ready to save MP3"
                 errorMessage = nil
+            } else if let prepared = preparedYouTubeMP3Export, FileManager.default.fileExists(atPath: prepared.audioURL.path) {
+                youTubeExportMetadata = prepared.metadata
+                youTubeExportArtworkURL = prepared.artworkURL
+                exportBaseName = prepared.metadata?.exportBaseName
+                state = .idle
+                statusMessage = "Ready to save MP3"
+                errorMessage = nil
             }
             return
         }
@@ -922,6 +931,15 @@ final class InferenceController {
             youTubeExportArtworkURL = loaded.artworkURL
             exportBaseName = loaded.metadata?.exportBaseName
             preparedYouTubeMP3Export = loaded
+            state = .idle
+            statusMessage = "Ready to save MP3"
+            errorMessage = nil
+            return
+        }
+        if let prepared = preparedYouTubeMP3Export, FileManager.default.fileExists(atPath: prepared.audioURL.path) {
+            youTubeExportMetadata = prepared.metadata ?? preview.metadata
+            youTubeExportArtworkURL = prepared.artworkURL ?? preview.artworkURL
+            exportBaseName = prepared.metadata?.exportBaseName ?? preview.metadata?.exportBaseName
             state = .idle
             statusMessage = "Ready to save MP3"
             errorMessage = nil
@@ -949,7 +967,6 @@ final class InferenceController {
                 try Task.checkCancellation()
                 guard generation == self.latestGeneration else { return }
                 guard !Task.isCancelled else { throw CancellationError() }
-                self.loadedYouTubeSource = ingestResult
                 self.preparedYouTubeMP3Export = ingestResult
                 self.youTubeExportMetadata = ingestResult.metadata ?? capturePreview.metadata
                 self.youTubeExportArtworkURL = ingestResult.artworkURL ?? capturePreview.artworkURL

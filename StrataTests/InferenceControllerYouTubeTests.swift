@@ -355,6 +355,9 @@ final class InferenceControllerYouTubeTests: XCTestCase {
         XCTAssertEqual(controller.state, .idle)
         XCTAssertEqual(controller.statusMessage, "Ready to save MP3")
         XCTAssertEqual(controller.preparedYouTubeMP3Export, audioResult)
+        XCTAssertNil(controller.loadedYouTubeSource, "Save MP3 must NOT set loadedYouTubeSource to raw download (WebM would trigger playback)")
+        XCTAssertTrue(controller.isYouTubePreviewLoaded, "Preview must remain after Save MP3")
+        XCTAssertTrue(controller.isYouTubeSourceLoaded, "isYouTubeSourceLoaded true via preview, not raw source")
         XCTAssertEqual(controller.youTubeExportMetadata, metadata)
         XCTAssertEqual(controller.editableArtist, "Preview Artist")
         XCTAssertEqual(controller.editableTitle, "Preview Title")
@@ -367,13 +370,60 @@ final class InferenceControllerYouTubeTests: XCTestCase {
         XCTAssertFalse(sawWorker.value, "Save MP3 must not start inference")
         XCTAssertNil(controller.result)
 
-        // Second Save should reuse without re-download
+        // Second Save should reuse preparedYouTubeMP3Export without re-download
         controller.prepareYouTubeMP3ExportFromLoadedPreview()
-        // No new task should be created because loadedYouTubeSource already exists; state remains idle
+        // No new task should be created because preparedYouTubeMP3Export already exists; state remains idle
         // Allow a short hop
         try await Task.sleep(nanoseconds: 100_000_000)
         let downloadCountAfterSecond = await ingest.downloadCallCount
-        XCTAssertEqual(downloadCountAfterSecond, 1, "Second Save should reuse without re-download")
+        XCTAssertEqual(downloadCountAfterSecond, 1, "Second Save should reuse prepared export without re-download")
+        // Still no loadedYouTubeSource after reuse
+        XCTAssertNil(controller.loadedYouTubeSource, "Reuse must still not set loadedYouTubeSource")
+        XCTAssertEqual(controller.preparedYouTubeMP3Export, audioResult)
+        await controller.shutdownWorker(policy: .testShort())
+    }
+
+    func testPrepareYouTubeMP3ExportFromLoadedPreviewWithWebMDoesNotTriggerPlayback() async throws {
+        // Raw bestaudio may be .webm (Opus) — Save MP3 must keep it as intermediate only, not trigger PlaybackController.load
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let previewArtwork = directory.appendingPathComponent("preview.jpg")
+        try Data([0xFF, 0xD8, 0xFF, 0xE0]).write(to: previewArtwork)
+        let metadata = try XCTUnwrap(YouTubeTrackMetadata(artist: "WebM Artist", title: "WebM Title", channel: "Channel"))
+        let preview = YouTubePreviewResult(metadata: metadata, artworkURL: previewArtwork, duration: 42.0)
+
+        let webmFile = directory.appendingPathComponent("source.webm")
+        try Data(repeating: 0, count: 2048).write(to: webmFile)
+        let webmResult = YouTubeIngestResult(audioURL: webmFile, metadata: metadata, artworkURL: previewArtwork)
+
+        let ingest = MockYouTubePreviewFlow(preview: preview, downloadResult: webmResult)
+        let workerDir = try makeFakeWorker(script: floatSuccessScript())
+        defer { try? FileManager.default.removeItem(at: workerDir) }
+        let client = InferenceWorkerClient(readinessTimeout: .seconds(3), startedTimeout: .seconds(2), separationTimeout: .seconds(3), workerDirectory: workerDir)
+        let sawWorker = AtomicBool()
+        await client.setTestHook { _ in sawWorker.setTrue() }
+
+        let controller = InferenceController(client: client, outputBase: directory, youTubeIngest: ingest)
+        let url = URL(string: "https://www.youtube.com/watch?v=webm-save")!
+        controller.loadYouTubeSource(youTubeURL: url)
+        let loadTask = try XCTUnwrap(controller.debugCurrentTask())
+        await loadTask.value
+
+        controller.prepareYouTubeMP3ExportFromLoadedPreview()
+        let saveTask = try XCTUnwrap(controller.debugCurrentTask())
+        await saveTask.value
+
+        XCTAssertEqual(controller.preparedYouTubeMP3Export?.audioURL.pathExtension, "webm", "Raw intermediate may be webm")
+        XCTAssertEqual(controller.preparedYouTubeMP3Export, webmResult)
+        XCTAssertNil(controller.loadedYouTubeSource, "WebM raw must NOT be assigned to loadedYouTubeSource (would trigger PlaybackController.load and fail)")
+        XCTAssertTrue(controller.isYouTubePreviewLoaded, "Preview must remain; UI shows Preview only, not playing")
+        XCTAssertEqual(controller.statusMessage, "Ready to save MP3")
+        XCTAssertFalse(sawWorker.value, "WebM Save must not start inference; FFmpeg transcode happens at export time")
+        // Simulate exportability: StemExporter can handle webm via FFmpeg, ensure file still exists
+        XCTAssertTrue(FileManager.default.fileExists(atPath: webmFile.path))
+        let downloadCount = await ingest.downloadCallCount
+        XCTAssertEqual(downloadCount, 1)
         await controller.shutdownWorker(policy: .testShort())
     }
 
