@@ -91,6 +91,8 @@ struct RuntimeReadiness: Sendable, Equatable {
     var isLoadedSeparationReady: Bool { workerAvailable }
     var isWorkerReady: Bool { workerAvailable }
 
+    var isProductReady: Bool { workerAvailable && modelAvailable && ffmpegAvailable && ytDlpAvailable && nodeAvailable }
+
     var isYouTubeAcquisitionReady: Bool { ffmpegAvailable && ytDlpAvailable && nodeAvailable }
 
     // Granular YouTube readiness per metadata-first workflow (prefer combining existing readiness properties)

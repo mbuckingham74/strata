@@ -431,6 +431,52 @@ final class RuntimeReadinessTests: XCTestCase {
         XCTAssertTrue(ytDlpMissing.sidebarStatus.contains("yt-dlp"))
     }
 
+    // MARK: - Aggregate product readiness
+
+    private func productReadiness(
+        worker: Bool = true,
+        model: Bool = true,
+        ffmpeg: Bool = true,
+        ytDlp: Bool = true,
+        node: Bool = true
+    ) -> RuntimeReadiness {
+        RuntimeReadiness(
+            workerAvailable: worker,
+            workerError: nil,
+            workerPythonPath: "/tmp/worker/.venv/bin/python3",
+            ffmpegAvailable: ffmpeg,
+            ytDlpAvailable: ytDlp,
+            nodeAvailable: node,
+            modelAvailable: model,
+            modelError: nil,
+            modelCheckpointPath: "/tmp/models/checkpoint.ckpt"
+        )
+    }
+
+    func testIsProductReady_trueWhenFullyReady() {
+        XCTAssertTrue(productReadiness().isProductReady)
+    }
+
+    func testIsProductReady_falseWhenWorkerMissing() {
+        XCTAssertFalse(productReadiness(worker: false).isProductReady)
+    }
+
+    func testIsProductReady_falseWhenModelMissing() {
+        XCTAssertFalse(productReadiness(model: false).isProductReady)
+    }
+
+    func testIsProductReady_falseWhenFFmpegMissing() {
+        XCTAssertFalse(productReadiness(ffmpeg: false).isProductReady)
+    }
+
+    func testIsProductReady_falseWhenYtDlpMissing() {
+        XCTAssertFalse(productReadiness(ytDlp: false).isProductReady)
+    }
+
+    func testIsProductReady_falseWhenNodeMissing() {
+        XCTAssertFalse(productReadiness(node: false).isProductReady)
+    }
+
     @MainActor
     func testPendingState_nilReadinessMeansChecking() {
         let controller = InferenceController()
