@@ -5,16 +5,24 @@ import Foundation
 enum InferenceSetupStage: Equatable, Sendable {
     case idle
     case checkingTools
-    case provisioning
-    case finalizing
+    case preparingFFmpeg
+    case preparingYtDlp
+    case preparingNode
+    case preparingWorker
+    case verifying
+    case succeeded
     case failed(String)
 
     var displayText: String {
         switch self {
         case .idle: return ""
         case .checkingTools: return "Checking tools…"
-        case .provisioning: return "Setting up audio separation…"
-        case .finalizing: return "Finalizing…"
+        case .preparingFFmpeg: return "Preparing FFmpeg…"
+        case .preparingYtDlp: return "Preparing yt-dlp…"
+        case .preparingNode: return "Preparing Node…"
+        case .preparingWorker: return "Preparing worker and model…"
+        case .verifying: return "Verifying setup…"
+        case .succeeded: return "Strata is ready"
         case .failed(let msg): return msg
         }
     }
@@ -26,8 +34,8 @@ enum InferenceSetupStage: Equatable, Sendable {
 
     var isRunning: Bool {
         switch self {
-        case .checkingTools, .provisioning, .finalizing: return true
-        case .idle, .failed: return false
+        case .checkingTools, .preparingFFmpeg, .preparingYtDlp, .preparingNode, .preparingWorker, .verifying: return true
+        case .idle, .succeeded, .failed: return false
         }
     }
 }

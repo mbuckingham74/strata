@@ -12,7 +12,7 @@ struct InferenceSetupView: View {
                 Spacer()
             }
 
-            Text("First launch needs a local worker and model. This runs on your Mac and may take a few minutes.")
+            Text("First launch prepares what Strata needs to run on your Mac. This may take a few minutes.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -36,6 +36,16 @@ struct InferenceSetupView: View {
                     .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
                     .accessibilityIdentifier("SetupTryAgainButton")
                 }
+            } else if controller.setupStage == .succeeded {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text("Strata is ready")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("SetupSuccessText")
+                    Spacer()
+                }
             } else if controller.isSetupInProgress {
                 HStack(spacing: 10) {
                     ProgressView()
@@ -58,7 +68,7 @@ struct InferenceSetupView: View {
                         .padding(.vertical, 6)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
+                .tint(.green)
                 .accessibilityIdentifier("SetupStartButton")
             }
         }
@@ -77,10 +87,18 @@ struct InferenceSetupView: View {
             return "Ready"
         case .checkingTools:
             return "Checking tools…"
-        case .provisioning:
-            return "Setting up audio separation…"
-        case .finalizing:
-            return "Finalizing…"
+        case .preparingFFmpeg:
+            return "Preparing FFmpeg…"
+        case .preparingYtDlp:
+            return "Preparing yt-dlp…"
+        case .preparingNode:
+            return "Preparing Node…"
+        case .preparingWorker:
+            return "Preparing worker and model…"
+        case .verifying:
+            return "Verifying setup…"
+        case .succeeded:
+            return "Strata is ready"
         case .failed(let msg):
             return msg
         }

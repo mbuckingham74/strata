@@ -160,6 +160,8 @@ final class InferenceSetupTests: XCTestCase {
                 return .success(uvURL)
             },
             resolveFFmpeg: { ffmpegAlreadyResolved() },
+            resolveYtDlp: { ffmpegAlreadyResolved() },
+            resolveNode: { ffmpegAlreadyResolved() },
             provisionWorker: { url in
                 provisionCount.increment()
                 provisionURL.set(url)
@@ -175,11 +177,12 @@ final class InferenceSetupTests: XCTestCase {
         XCTAssertEqual(provisionCount.value, 1)
         XCTAssertEqual(provisionURL.value, uvURL, "provision must receive resolved uv URL")
         XCTAssertEqual(refreshCount.value, 1, "refresh must be called once on success")
-        XCTAssertEqual(controller.setupStage, .idle)
+        XCTAssertEqual(controller.setupStage, .succeeded)
         XCTAssertNil(controller.setupErrorMessage)
         XCTAssertTrue(controller.isProductReady)
         XCTAssertFalse(controller.needsSetup)
         XCTAssertFalse(controller.isSetupInProgress)
+        await expectSucceededThenIdle(controller)
     }
 
     // MARK: - runSetup failure when ensureAvailable fails
@@ -203,6 +206,8 @@ final class InferenceSetupTests: XCTestCase {
                 return .failure(.installFailed(exitCode: 1, message: "network down"))
             },
             resolveFFmpeg: { ffmpegAlreadyResolved() },
+            resolveYtDlp: { ffmpegAlreadyResolved() },
+            resolveNode: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in
                 provisionCount.increment()
                 return .success
@@ -226,13 +231,17 @@ final class InferenceSetupTests: XCTestCase {
         await controller.runSetup(
             ensureUvAvailable: { .success(uvURL) },
             resolveFFmpeg: { ffmpegAlreadyResolved() },
+            resolveYtDlp: { ffmpegAlreadyResolved() },
+            resolveNode: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .success },
             refreshReadiness: {
                 await ctrl.refreshRuntimeReadiness(checker: readyChecker)
             }
         )
-        XCTAssertEqual(controller.setupStage, .idle)
+        XCTAssertEqual(controller.setupStage, .succeeded)
         XCTAssertTrue(controller.isProductReady)
+        XCTAssertFalse(controller.isSetupInProgress)
+        await expectSucceededThenIdle(controller)
     }
 
     // MARK: - runSetup failure when provision fails (syncFailed) with truncation + Try Again
@@ -250,6 +259,8 @@ final class InferenceSetupTests: XCTestCase {
         await controller.runSetup(
             ensureUvAvailable: { .success(uvURL) },
             resolveFFmpeg: { ffmpegAlreadyResolved() },
+            resolveYtDlp: { ffmpegAlreadyResolved() },
+            resolveNode: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .failure(.syncFailed(exitCode: 1, message: longMsg)) },
             refreshReadiness: {
                 refreshCount.increment()
@@ -271,11 +282,15 @@ final class InferenceSetupTests: XCTestCase {
         await controller.runSetup(
             ensureUvAvailable: { .success(uvURL) },
             resolveFFmpeg: { ffmpegAlreadyResolved() },
+            resolveYtDlp: { ffmpegAlreadyResolved() },
+            resolveNode: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .success },
             refreshReadiness: { await ctrl.refreshRuntimeReadiness(checker: readyChecker) }
         )
-        XCTAssertEqual(controller.setupStage, .idle)
+        XCTAssertEqual(controller.setupStage, .succeeded)
         XCTAssertTrue(controller.isProductReady)
+        XCTAssertFalse(controller.isSetupInProgress)
+        await expectSucceededThenIdle(controller)
     }
 
     func testRunSetupProvisionPrepareModelFailed_truncatedAndDoesNotRefresh() async {
@@ -290,6 +305,8 @@ final class InferenceSetupTests: XCTestCase {
         await controller.runSetup(
             ensureUvAvailable: { .success(uvURL) },
             resolveFFmpeg: { ffmpegAlreadyResolved() },
+            resolveYtDlp: { ffmpegAlreadyResolved() },
+            resolveNode: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .failure(.prepareModelFailed(exitCode: 2, message: longMsg)) },
             refreshReadiness: {
                 refreshCount.increment()
@@ -308,10 +325,15 @@ final class InferenceSetupTests: XCTestCase {
         await controller.runSetup(
             ensureUvAvailable: { .success(uvURL) },
             resolveFFmpeg: { ffmpegAlreadyResolved() },
+            resolveYtDlp: { ffmpegAlreadyResolved() },
+            resolveNode: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .success },
             refreshReadiness: { await ctrl.refreshRuntimeReadiness(checker: readyChecker) }
         )
-        XCTAssertEqual(controller.setupStage, .idle)
+        XCTAssertEqual(controller.setupStage, .succeeded)
+        XCTAssertTrue(controller.isProductReady)
+        XCTAssertFalse(controller.isSetupInProgress)
+        await expectSucceededThenIdle(controller)
     }
 
     // MARK: - runSetup failure when refresh leaves not ready
@@ -329,6 +351,8 @@ final class InferenceSetupTests: XCTestCase {
         await controller.runSetup(
             ensureUvAvailable: { .success(uvURL) },
             resolveFFmpeg: { ffmpegAlreadyResolved() },
+            resolveYtDlp: { ffmpegAlreadyResolved() },
+            resolveNode: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .success },
             refreshReadiness: {
                 await ctrl.refreshRuntimeReadiness(checker: stillNotReady)
@@ -372,6 +396,8 @@ final class InferenceSetupTests: XCTestCase {
                     return .success(uvURL)
                 },
                 resolveFFmpeg: { ffmpegAlreadyResolved() },
+                resolveYtDlp: { ffmpegAlreadyResolved() },
+                resolveNode: { ffmpegAlreadyResolved() },
                 provisionWorker: { url in
                     usleep(UInt32(provisionDelay / 1_000))
                     // Verify uv correct
@@ -387,35 +413,47 @@ final class InferenceSetupTests: XCTestCase {
 
         // Poll stage transitions
         // Don't break on initial idle; require having seen checkingTools first so early idle doesn't cause missed stages
-        for _ in 0..<200 {
+        // Success is transient (.succeeded auto-clears to .idle after ~2s), so allow enough polls to observe the final idle.
+        for _ in 0..<600 {
             let stage = controller.setupStage
             if observed.isEmpty || observed.last != stage {
                 observed.append(stage)
             }
-            if observed.contains(.checkingTools) && controller.setupStage == .idle && !controller.isSetupInProgress { break }
+            if observed.contains(.checkingTools) && observed.contains(.succeeded) && controller.setupStage == .idle && !controller.isSetupInProgress { break }
             try? await Task.sleep(nanoseconds: 5_000_000)
             if task.isCancelled { break }
         }
         await task.value
-        // Final poll
+        // Final poll: capture transient succeeded if runSetup just finished, then wait for auto-clear to idle.
         if observed.last != controller.setupStage {
             observed.append(controller.setupStage)
+        }
+        if observed.contains(.succeeded) && observed.last != .idle {
+            for _ in 0..<500 {
+                try? await Task.sleep(nanoseconds: 5_000_000)
+                let stage = controller.setupStage
+                if observed.last != stage {
+                    observed.append(stage)
+                }
+                if stage == .idle && !controller.isSetupInProgress { break }
+            }
         }
 
         // Verify uv passed correctly
         XCTAssertEqual(observedBox.value, uvURL.path)
 
-        // Verify truthful progression: checkingTools -> provisioning -> finalizing -> idle (single opaque provisioning stage)
+        // Verify truthful progression: checkingTools -> preparingWorker -> verifying -> succeeded -> idle (tools already resolved, so per-tool preparing stages skipped)
         let filtered = observed // already unique by insertion
         XCTAssertTrue(filtered.contains(.checkingTools), "must observe checkingTools, got \(filtered)")
-        XCTAssertTrue(filtered.contains(.provisioning), "must observe provisioning, got \(filtered)")
-        XCTAssertTrue(filtered.contains(.finalizing), "must observe finalizing, got \(filtered)")
+        XCTAssertTrue(filtered.contains(.preparingWorker), "must observe preparingWorker, got \(filtered)")
+        XCTAssertTrue(filtered.contains(.verifying), "must observe verifying, got \(filtered)")
+        XCTAssertTrue(filtered.contains(.succeeded), "must observe succeeded, got \(filtered)")
         XCTAssertEqual(filtered.last, .idle)
 
-        // Verify order: indices increasing for required stages (use last idle after finalizing, ignore initial idle)
+        // Verify order: indices increasing for required stages (use last idle after verifying/succeeded, ignore initial idle)
         func idx(_ s: InferenceSetupStage) -> Int? { filtered.firstIndex(of: s) }
-        if let a = idx(.checkingTools), let b = idx(.provisioning), let d = idx(.finalizing), let e = filtered.lastIndex(of: .idle) {
-            XCTAssertTrue(a < b && b < d && d < e, "order must be checking -> provisioning -> finalizing -> idle, got \(filtered)")
+        if let a = idx(.checkingTools), let b = idx(.preparingWorker), let d = idx(.verifying), let s = idx(.succeeded), let e = filtered.lastIndex(of: .idle) {
+            XCTAssertTrue(a < b && b < d && d < s && s < e, "order must be checking -> preparingWorker -> verifying -> succeeded -> idle, got \(filtered)")
         } else {
             XCTFail("missing required stage in observed \(filtered)")
         }
@@ -440,6 +478,8 @@ final class InferenceSetupTests: XCTestCase {
                     return .success(uvURL)
                 },
                 resolveFFmpeg: { ffmpegAlreadyResolved() },
+                resolveYtDlp: { ffmpegAlreadyResolved() },
+                resolveNode: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in
                     usleep(150_000)
                     return .success
@@ -464,6 +504,8 @@ final class InferenceSetupTests: XCTestCase {
                 return .success(uvURL)
             },
             resolveFFmpeg: { ffmpegAlreadyResolved() },
+            resolveYtDlp: { ffmpegAlreadyResolved() },
+            resolveNode: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .success },
             refreshReadiness: { await ctrl.refreshRuntimeReadiness(checker: readyChecker) }
         )
@@ -472,7 +514,8 @@ final class InferenceSetupTests: XCTestCase {
 
         await task.value
         XCTAssertFalse(controller.isSetupInProgress)
-        XCTAssertEqual(controller.setupStage, .idle)
+        XCTAssertEqual(controller.setupStage, .succeeded)
+        await expectSucceededThenIdle(controller)
     }
 
     // MARK: - Do NOT disturb Library/session
@@ -527,6 +570,8 @@ final class InferenceSetupTests: XCTestCase {
         await controller.runSetup(
             ensureUvAvailable: { .failure(.installFailed(exitCode: 1, message: "fail")) },
             resolveFFmpeg: { ffmpegAlreadyResolved() },
+            resolveYtDlp: { ffmpegAlreadyResolved() },
+            resolveNode: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .success },
             refreshReadiness: { await controller.refreshRuntimeReadiness(checker: makeChecker(workerAvailable: false)) }
         )
@@ -608,6 +653,17 @@ final class InferenceSetupTests: XCTestCase {
         let checkingIsCompleted = (checkingController.state == .completed && checkingController.result != nil)
         XCTAssertTrue(checkingIsCompleted)
         XCTAssertFalse(shouldShowSetup(for: checkingController, isCompleted: checkingIsCompleted), "checking with completed must not show setup")
+    }
+
+    // Helper: transient success (.succeeded auto-clears to .idle after ~2s)
+    private func expectSucceededThenIdle(_ controller: InferenceController) async {
+        XCTAssertEqual(controller.setupStage, .succeeded, "successful runSetup must show transient succeeded")
+        XCTAssertFalse(controller.isSetupInProgress)
+        let deadline = Date().addingTimeInterval(3.5)
+        while controller.setupStage != .idle && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertEqual(controller.setupStage, .idle, "succeeded must auto-clear to idle")
     }
 
     // Helper for gains

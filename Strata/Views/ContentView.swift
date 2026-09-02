@@ -449,6 +449,8 @@ struct InferenceCard: View {
                     EditableMetadataEditor(inferenceController: inferenceController, isCollapsible: true, isInitiallyExpanded: false)
                 }
 
+            } else if inferenceController.setupStage == .succeeded {
+                InferenceSetupView(controller: inferenceController)
             } else if let readiness = inferenceController.runtimeReadiness, !readiness.isProductReady {
                 InferenceSetupView(controller: inferenceController)
             } else if inferenceController.runtimeReadiness == nil {

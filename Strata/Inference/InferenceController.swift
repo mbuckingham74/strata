@@ -284,6 +284,7 @@ final class InferenceController {
         // Managed FFmpeg: reuse a compatible resolved copy; provision only when unresolved.
         let ffmpegResolved: Bool = await Task.detached(priority: .userInitiated) { resolveFFmpeg().isAvailable }.value
         if !ffmpegResolved {
+            setupStage = .preparingFFmpeg
             let ffmpegResult: FFmpegAvailabilityResult = await Task.detached(priority: .userInitiated) { ensureFfmpegAvailable() }.value
             switch ffmpegResult {
             case .success:
@@ -298,6 +299,7 @@ final class InferenceController {
         // Managed yt-dlp: reuse a compatible resolved copy; provision only when unresolved.
         let ytDlpResolved: Bool = await Task.detached(priority: .userInitiated) { resolveYtDlp().isAvailable }.value
         if !ytDlpResolved {
+            setupStage = .preparingYtDlp
             let ytDlpResult: YtDlpAvailabilityResult = await Task.detached(priority: .userInitiated) { ensureYtDlpAvailable() }.value
             switch ytDlpResult {
             case .success:
@@ -312,6 +314,7 @@ final class InferenceController {
         // Managed Node: reuse a compatible resolved copy (>=22); provision pinned 26.8.1 only when unresolved.
         let nodeResolved: Bool = await Task.detached(priority: .userInitiated) { resolveNode().isAvailable }.value
         if !nodeResolved {
+            setupStage = .preparingNode
             let nodeResult: NodeAvailabilityResult = await Task.detached(priority: .userInitiated) { ensureNodeAvailable() }.value
             switch nodeResult {
             case .success:
@@ -323,7 +326,7 @@ final class InferenceController {
             }
         }
 
-        setupStage = .provisioning
+        setupStage = .preparingWorker
         let provisionResult: WorkerProvisioningResult = await Task.detached(priority: .userInitiated) { provisionWorker(uvURL) }.value
         switch provisionResult {
         case .failure(let err):
@@ -334,7 +337,7 @@ final class InferenceController {
             break
         }
 
-        setupStage = .finalizing
+        setupStage = .verifying
         if let refresh = refreshReadiness {
             await refresh()
         } else {
@@ -342,7 +345,14 @@ final class InferenceController {
         }
 
         if isProductReady {
-            setupStage = .idle
+            setupStage = .succeeded
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard let self else { return }
+                if self.setupStage == .succeeded {
+                    self.setupStage = .idle
+                }
+            }
         } else {
             let hint = runtimeReadiness?.sidebarStatus ?? "Worker still not ready."
             setupStage = .failed(String(hint.prefix(500)))
