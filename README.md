@@ -138,9 +138,9 @@ eval "$(/opt/homebrew/bin/brew shellenv)"
 | FFmpeg | `9.0.1` | `/opt/homebrew/bin/ffmpeg` — externally installed runtime dependency |
 | yt-dlp | `2026.08.19` | `/opt/homebrew/bin/yt-dlp` — externally installed runtime dependency |
 | Node.js | `26.8.1` | `/opt/homebrew/bin/node` — externally installed runtime dependency |
-| uv | `0.12.8` | `uv` — used to create `InferenceWorker/.venv` (not called at runtime) |
+| uv | `0.12.8` | `uv` — setup/update only; creates the worker `.venv` (installed: `~/Library/Application Support/Strata/InferenceWorker/.venv` via `scripts/install-inference-worker.sh`; dev: `InferenceWorker/.venv`); not called at runtime |
 
-FFmpeg, yt-dlp, and Node are externally installed runtime dependencies Strata executes at `/opt/homebrew/bin/*`. `uv` is only used to prepare the local Python worker environment (`InferenceWorker/.venv` from `InferenceWorker/pyproject.toml` / `uv.lock` / `.python-version`). **Model files and third-party executables are not bundled in the repository or in `Strata.app`.**
+FFmpeg, yt-dlp, and Node are externally installed runtime dependencies Strata executes at `/opt/homebrew/bin/*`. `uv` is only used to prepare the Python worker environment (from `InferenceWorker/pyproject.toml` / `uv.lock` / `.python-version` into either the installed `~/Library/Application Support/Strata/InferenceWorker/.venv` or the dev `InferenceWorker/.venv`). **Model files and third-party executables are not bundled in the repository or in `Strata.app`.**
 
 Install the external tools in one command:
 
@@ -178,7 +178,29 @@ SSH alternative: `git@github.com:mbuckingham74/strata.git`.
 
 ### Prepare the Python worker
 
-The pinned Python version is in `InferenceWorker/.python-version` (`3.12.12`). From the repository root:
+The pinned Python version is in `InferenceWorker/.python-version` (`3.12.12`), with dependencies pinned in `InferenceWorker/pyproject.toml` and `InferenceWorker/uv.lock`.
+
+#### Installed (V1 canonical) location
+
+The V1 installed worker lives at `$HOME/Library/Application Support/Strata/InferenceWorker` (canonical — `~/Library/Application Support/Strata/InferenceWorker`). At runtime Strata launches `<worker-root>/.venv/bin/python3 -m demux_worker` — `uv` is not called at runtime.
+
+For an installed or once-per-machine setup, run from the repository root:
+
+```bash
+scripts/install-inference-worker.sh
+```
+
+The script derives the repository root relative to its own location (run it from the repo root as shown), invokes `/opt/homebrew/bin/uv` explicitly, and syncs with `UV_PROJECT_ENVIRONMENT="$worker_root/.venv" --locked --no-dev --no-editable --managed-python --reinstall-package demux-worker`. This installs `demux-worker` non-editably so the installed app has no runtime dependency on the repository checkout. After syncing, the script runs `prepare-model` — it reuses valid cached files and downloads only if missing (see model details below). The script creates or recreates only `$HOME/Library/Application Support/Strata/InferenceWorker/.venv`; it never deletes `$HOME/Library/Application Support/Strata` itself.
+
+#### Model assets
+
+`prepare-model` (also run automatically by the installer after sync) downloads and verifies model assets into `~/Library/Caches/Demux/Models/roformer-model-bs-roformer-sw-by-jarredou/` — **~667 MB checkpoint `BS-Rofo-SW-Fixed.ckpt` (699,412,152 bytes) + ~5 KB config**, ~670 MB total, SHA-256 verified (see `InferenceWorker/src/demux_worker/constants.py`). The worker does **not** download models automatically; this step is required before the first separation. Re-running is idempotent — valid cached files are skipped.
+
+To validate cached assets without downloading, run `uv run prepare-model --check-only` while the current directory is `InferenceWorker`, or for the installed location run `$HOME/Library/Application Support/Strata/InferenceWorker/.venv/bin/python3 -m demux_worker.prepare_model --check-only` (the troubleshooting sequence shows both checks).
+
+#### Development alternative
+
+For Xcode Debug builds, `SRCROOT/InferenceWorker/.venv` still works via the source-tree fallback — this is a dev convenience, not the V1 installed location. From the repository root:
 
 ```bash
 cd InferenceWorker        # now: <repository root>/InferenceWorker
@@ -188,10 +210,9 @@ cd ..                     # now: <repository root>
 ```
 
 - `uv sync` creates `InferenceWorker/.venv` (downloads the pinned Python via `uv` if needed) from `InferenceWorker/pyproject.toml` and `InferenceWorker/uv.lock`.
-- `uv run prepare-model` downloads and verifies model assets into `~/Library/Caches/Demux/Models/roformer-model-bs-roformer-sw-by-jarredou/` — **~667 MB checkpoint `BS-Rofo-SW-Fixed.ckpt` (699,412,152 bytes) + ~5 KB config**, ~670 MB total, SHA-256 verified (see `InferenceWorker/src/demux_worker/constants.py`). The worker does **not** download models automatically; this step is required before the first separation. Re-running is idempotent — valid cached files are skipped.
-- To validate cached assets without downloading, run `uv run prepare-model --check-only` while the current directory is `InferenceWorker` (the troubleshooting sequence shows the required `cd` commands).
+- `uv run prepare-model` is the same model step described above.
 
-When running a Debug build from Xcode, Strata looks for `InferenceWorker/.venv` in the repository. If the worker lives elsewhere, set `DEMUX_WORKER_DIRECTORY` to its absolute `InferenceWorker` directory in Xcode under **Product ▸ Scheme ▸ Edit Scheme… ▸ Run ▸ Arguments ▸ Environment Variables**. A worker is needed for separation; WAV exports remain available without FFmpeg once stems exist.
+If the worker lives elsewhere, set `DEMUX_WORKER_DIRECTORY` to its absolute `InferenceWorker` directory in Xcode under **Product ▸ Scheme ▸ Edit Scheme… ▸ Run ▸ Arguments ▸ Environment Variables** (works for both installed and dev locations). A worker is needed for separation; WAV exports remain available without FFmpeg once stems exist.
 
 The app shows setup status in the sidebar and Separation card. Missing or unsupported FFmpeg disables YouTube loading, local separation, and MP3 exports; missing or unsupported yt-dlp/Node disables YouTube; missing the worker disables separation.
 
@@ -215,7 +236,7 @@ On first launch, click **Add Audio** for a local file or paste a YouTube URL int
 
 ## Troubleshooting
 
-Run the checks below from the repository root. If you followed the build sequence, the terminal is already there after `cd ..` in worker setup. The worker check must run from `InferenceWorker`, where its `pyproject.toml` is located, and the final `cd ..` returns to the repository root.
+Run the checks below from the repository root. If you followed the build sequence, the terminal is already there after `cd ..` in worker setup. The dev worker check must run from `InferenceWorker`, where its `pyproject.toml` is located, and the final `cd ..` returns to the repository root. The installed worker check uses the canonical V1 path.
 
 ```bash
 # Current directory: repository root
@@ -227,6 +248,11 @@ ls -l /opt/homebrew/bin/ffmpeg /opt/homebrew/bin/yt-dlp /opt/homebrew/bin/node
 /opt/homebrew/bin/node --version               # expect: v26.8.1
 uv --version                                  # expect: uv 0.12.8
 
+# Installed worker (V1 canonical)
+ls -l "$HOME/Library/Application Support/Strata/InferenceWorker/.venv/bin/python3"
+"$HOME/Library/Application Support/Strata/InferenceWorker/.venv/bin/python3" -m demux_worker.prepare_model --check-only  # validates cache without downloading
+
+# Dev worker (Xcode Debug fallback)
 cd InferenceWorker                    # now: <repository root>/InferenceWorker
 ls -l .venv/bin/python3
 cat .python-version                    # expect: 3.12.12
@@ -238,5 +264,5 @@ cd ..                                  # now: <repository root>
 - `YouTube disabled · missing yt-dlp at /opt/homebrew/bin/yt-dlp` or `YouTube disabled · yt-dlp version mismatch …` → make yt-dlp `2026.08.19` available at that exact path.
 - `YouTube disabled · missing Node at /opt/homebrew/bin/node` or `YouTube disabled · Node version mismatch …` → make Node `26.8.1` available at that exact path.
 - Homebrew formulae advance independently of this repository. `brew upgrade` does not guarantee one of the supported versions; if the current formula is newer, install a supported versioned formula or another supported package source, then rerun the absolute-path checks. The repository does not include a Homebrew version pin or downgrade installer.
-- `Setup needed · missing worker Python at …/.venv/bin/python3` → from the repository root, run `cd InferenceWorker`, then `uv sync`, then `cd ..`. Do not run `uv sync` from the repository root.
-- A worker error about a missing cached asset → from `InferenceWorker`, run `uv run prepare-model` (without `--check-only`) to download and verify the model files.
+- `Setup needed · missing worker Python at …/.venv/bin/python3` → for installed apps the expected path is `$HOME/Library/Application Support/Strata/InferenceWorker/.venv/bin/python3` — run `scripts/install-inference-worker.sh` from the repository root to (re)create it (only `.venv` is recreated, not `Application Support/Strata` itself). For dev/Xcode Debug builds using the repo checkout, run `cd InferenceWorker`, then `uv sync`, then `cd ..` instead. `DEMUX_WORKER_DIRECTORY` can override the worker root in either case (Product ▸ Scheme ▸ Edit Scheme… ▸ Run ▸ Arguments ▸ Environment Variables). Do not run `uv sync` from the repository root.
+- A worker error about a missing cached asset → for the installed worker run `"$HOME/Library/Application Support/Strata/InferenceWorker/.venv/bin/python3" -m demux_worker.prepare_model` (or `scripts/install-inference-worker.sh` which re-runs prepare-model after sync); for the dev worker, from `InferenceWorker` run `uv run prepare-model` (without `--check-only`) to download and verify the model files.
