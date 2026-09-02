@@ -72,6 +72,8 @@
 		A10000000000000000000043 /* SessionStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000043 /* SessionStoreTests.swift */; };
 		A10000000000000000000044 /* SessionLibraryNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000044 /* SessionLibraryNavigationTests.swift */; };
 		A10000000000000000000045 /* WorkerLaunchConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000045 /* WorkerLaunchConfigurationTests.swift */; };
+		A10000000000000000000046 /* WorkerProvisioner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000046 /* WorkerProvisioner.swift */; };
+		A10000000000000000000047 /* WorkerProvisionerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000047 /* WorkerProvisionerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -142,6 +144,8 @@
 		B10000000000000000000043 /* SessionStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStoreTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000044 /* SessionLibraryNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLibraryNavigationTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000045 /* WorkerLaunchConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerLaunchConfigurationTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000046 /* WorkerProvisioner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerProvisioner.swift; sourceTree = "<group>"; };
+		B10000000000000000000047 /* WorkerProvisionerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerProvisionerTests.swift; sourceTree = "<group>"; };
 		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -251,6 +255,7 @@
 				B10000000000000000000015 /* TrustedInferenceIdentity.swift */,
 				B10000000000000000000037 /* RuntimeReadiness.swift */,
 				B10000000000000000000040 /* ExternalToolCompatibility.swift */,
+				B10000000000000000000046 /* WorkerProvisioner.swift */,
 			);
 			path = Inference;
 			sourceTree = "<group>";
@@ -302,6 +307,7 @@
 				B10000000000000000000043 /* SessionStoreTests.swift */,
 				B10000000000000000000044 /* SessionLibraryNavigationTests.swift */,
 				B10000000000000000000045 /* WorkerLaunchConfigurationTests.swift */,
+				B10000000000000000000047 /* WorkerProvisionerTests.swift */,
 			);
 			path = StrataTests;
 			sourceTree = "<group>";
@@ -334,6 +340,7 @@
 				G00000000000000000000001 /* Sources */,
 				D10000000000000000000001 /* Frameworks */,
 				J00000000000000000000001 /* Generate AboutMetadata.json */,
+				J00000000000000000000002 /* Bundle InferenceWorker Project */,
 				G00000000000000000000002 /* Resources */,
 			);
 			buildRules = (
@@ -469,6 +476,44 @@
 			shellScript = "set -euo pipefail\nOUTPUT=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/AboutMetadata.json\"\nmkdir -p \"${OUTPUT%/*}\"\npython3 \"${SRCROOT}/scripts/generate-about-metadata.py\" --pyproject \"${SRCROOT}/InferenceWorker/pyproject.toml\" --lock \"${SRCROOT}/InferenceWorker/uv.lock\" --python-version \"${SRCROOT}/InferenceWorker/.python-version\" --output \"$OUTPUT\"\necho \"Generated AboutMetadata.json at $OUTPUT\"\n";
 			name = "Generate AboutMetadata.json";
 		};
+		J00000000000000000000002 /* Bundle InferenceWorker Project */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/InferenceWorker/pyproject.toml",
+				"$(SRCROOT)/InferenceWorker/uv.lock",
+				"$(SRCROOT)/InferenceWorker/.python-version",
+				"$(SRCROOT)/InferenceWorker/README.md",
+				"$(SRCROOT)/InferenceWorker/src",
+				"$(SRCROOT)/InferenceWorker/src/demux_worker/__init__.py",
+				"$(SRCROOT)/InferenceWorker/src/demux_worker/__main__.py",
+				"$(SRCROOT)/InferenceWorker/src/demux_worker/audio.py",
+				"$(SRCROOT)/InferenceWorker/src/demux_worker/constants.py",
+				"$(SRCROOT)/InferenceWorker/src/demux_worker/prepare_model.py",
+				"$(SRCROOT)/InferenceWorker/src/demux_worker/protocol.py",
+				"$(SRCROOT)/InferenceWorker/src/demux_worker/worker.py",
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/InferenceWorker/pyproject.toml",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/InferenceWorker/uv.lock",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/InferenceWorker/.python-version",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/InferenceWorker/README.md",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/InferenceWorker/src",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/InferenceWorker/src/demux_worker/__init__.py",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/InferenceWorker/src/demux_worker/__main__.py",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/InferenceWorker/src/demux_worker/audio.py",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/InferenceWorker/src/demux_worker/constants.py",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/InferenceWorker/src/demux_worker/prepare_model.py",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/InferenceWorker/src/demux_worker/protocol.py",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/InferenceWorker/src/demux_worker/worker.py",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nSRC_INFERENCEWORKER=\"${SRCROOT}/InferenceWorker\"\nDEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/InferenceWorker\"\nmkdir -p \"$DEST\"\nmkdir -p \"$DEST/src/demux_worker\"\ncp -p -X \"$SRC_INFERENCEWORKER/pyproject.toml\" \"$DEST/\"\ncp -p -X \"$SRC_INFERENCEWORKER/uv.lock\" \"$DEST/\"\ncp -p -X \"$SRC_INFERENCEWORKER/.python-version\" \"$DEST/\"\ncp -p -X \"$SRC_INFERENCEWORKER/README.md\" \"$DEST/\"\nfor f in \"$SRC_INFERENCEWORKER/src/demux_worker\"/*.py; do cp -p -X \"$f\" \"$DEST/src/demux_worker/\"; done\n";
+			name = "Bundle InferenceWorker Project";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -505,6 +550,7 @@
 				A1000000000000000000002D /* StrataProject.swift in Sources */,
 				A1000000000000000000002E /* StrataProjectPersistence.swift in Sources */,
 				A10000000000000000000042 /* SessionStore.swift in Sources */,
+				A10000000000000000000046 /* WorkerProvisioner.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -546,6 +592,7 @@
 				A10000000000000000000043 /* SessionStoreTests.swift in Sources */,
 				A10000000000000000000044 /* SessionLibraryNavigationTests.swift in Sources */,
 				A10000000000000000000045 /* WorkerLaunchConfigurationTests.swift in Sources */,
+				A10000000000000000000047 /* WorkerProvisionerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
