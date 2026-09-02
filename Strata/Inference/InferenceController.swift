@@ -257,6 +257,8 @@ final class InferenceController {
         ensureUvAvailable: @escaping @Sendable () -> UvAvailabilityResult = { UvAvailability().ensureAvailable() },
         resolveFFmpeg: @escaping @Sendable () -> ResolvedExternalTool = { ExternalToolResolver.live.resolveFFmpeg() },
         ensureFfmpegAvailable: @escaping @Sendable () -> FFmpegAvailabilityResult = { FFmpegAvailability().ensureAvailable() },
+        resolveYtDlp: @escaping @Sendable () -> ResolvedExternalTool = { ExternalToolResolver.live.resolveYtDlp() },
+        ensureYtDlpAvailable: @escaping @Sendable () -> YtDlpAvailabilityResult = { YtDlpAvailability().ensureAvailable() },
         provisionWorker: @escaping @Sendable (URL) -> WorkerProvisioningResult = { url in WorkerProvisioner(uvExecutableURL: url).provision() },
         refreshReadiness: (@Sendable () async -> Void)? = nil
     ) async {
@@ -286,6 +288,20 @@ final class InferenceController {
             case .failure(let err):
                 let msg = err.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
                 setupStage = .failed(msg.isEmpty ? "FFmpeg installation failed." : String(msg.prefix(500)))
+                return
+            }
+        }
+
+        // Managed yt-dlp: reuse a compatible resolved copy; provision only when unresolved.
+        let ytDlpResolved: Bool = await Task.detached(priority: .userInitiated) { resolveYtDlp().isAvailable }.value
+        if !ytDlpResolved {
+            let ytDlpResult: YtDlpAvailabilityResult = await Task.detached(priority: .userInitiated) { ensureYtDlpAvailable() }.value
+            switch ytDlpResult {
+            case .success:
+                break
+            case .failure(let err):
+                let msg = err.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                setupStage = .failed(msg.isEmpty ? "yt-dlp installation failed." : String(msg.prefix(500)))
                 return
             }
         }
