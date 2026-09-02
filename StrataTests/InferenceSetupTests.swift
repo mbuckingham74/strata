@@ -673,3 +673,94 @@ final class InferenceSetupTests: XCTestCase {
         return g
     }
 }
+
+@MainActor
+final class SetupChecklistTests: XCTestCase {
+
+    private func states(for stage: InferenceSetupStage, failedStep: SetupChecklistStep? = nil) -> [SetupChecklistRowState] {
+        SetupChecklist.rowStates(for: stage, failedStep: failedStep)
+    }
+
+    func testRowStates_progressInOrder() {
+        XCTAssertEqual(states(for: .checkingTools), [.pending, .pending, .pending, .pending, .pending, .pending])
+        XCTAssertEqual(states(for: .preparingFFmpeg), [.current, .pending, .pending, .pending, .pending, .pending])
+        XCTAssertEqual(states(for: .preparingYtDlp), [.completed, .current, .pending, .pending, .pending, .pending])
+        XCTAssertEqual(states(for: .preparingNode), [.completed, .completed, .current, .pending, .pending, .pending])
+        XCTAssertEqual(states(for: .preparingWorker), [.completed, .completed, .completed, .current, .pending, .pending])
+        XCTAssertEqual(states(for: .verifying), [.completed, .completed, .completed, .completed, .completed, .current])
+        XCTAssertEqual(states(for: .succeeded), [.completed, .completed, .completed, .completed, .completed, .completed])
+    }
+
+    func testRowStates_failedMarksAttributedStep() {
+        XCTAssertEqual(
+            states(for: .failed("Node installation failed."), failedStep: .node),
+            [.completed, .completed, .failed, .pending, .pending, .pending]
+        )
+        XCTAssertEqual(
+            states(for: .failed("prepare-model failed (exit 2)"), failedStep: .model),
+            [.completed, .completed, .completed, .completed, .failed, .pending]
+        )
+    }
+
+    func testRowStates_failedWithoutStepFallsBackToGeneric() {
+        XCTAssertEqual(states(for: .failed("boom")), [.pending, .pending, .pending, .pending, .pending, .pending])
+    }
+
+    func testSetupFailedStep_prepareModelFailedMapsToModel() async {
+        let controller = InferenceController()
+        await controller.refreshRuntimeReadiness(checker: makeChecker(workerAvailable: false))
+        let uvURL = URL(fileURLWithPath: "/tmp/fake/uv")
+
+        await controller.runSetup(
+            ensureUvAvailable: { .success(uvURL) },
+            resolveFFmpeg: { ffmpegAlreadyResolved() },
+            resolveYtDlp: { ffmpegAlreadyResolved() },
+            resolveNode: { ffmpegAlreadyResolved() },
+            provisionWorker: { _ in .failure(.prepareModelFailed(exitCode: 2, message: "no model")) },
+            refreshReadiness: { }
+        )
+
+        XCTAssertTrue(controller.setupStage.isFailed)
+        XCTAssertEqual(controller.setupFailedStep, .model)
+    }
+
+    func testSetupFailedStep_workerFailuresMapToWorker() async {
+        for error in [
+            WorkerProvisioningError.syncFailed(exitCode: 1, message: "sync broke"),
+            WorkerProvisioningError.missingPython("no python"),
+        ] {
+            let controller = InferenceController()
+            await controller.refreshRuntimeReadiness(checker: makeChecker(workerAvailable: false))
+            let uvURL = URL(fileURLWithPath: "/tmp/fake/uv")
+
+            await controller.runSetup(
+                ensureUvAvailable: { .success(uvURL) },
+                resolveFFmpeg: { ffmpegAlreadyResolved() },
+                resolveYtDlp: { ffmpegAlreadyResolved() },
+                resolveNode: { ffmpegAlreadyResolved() },
+                provisionWorker: { _ in .failure(error) },
+                refreshReadiness: { }
+            )
+
+            XCTAssertTrue(controller.setupStage.isFailed)
+            XCTAssertEqual(controller.setupFailedStep, .worker, "worker failure must attribute the Separation engine row (\(error))")
+        }
+    }
+
+    func testSetupFailedStep_uvFailureHasNoAttribution() async {
+        let controller = InferenceController()
+        await controller.refreshRuntimeReadiness(checker: makeChecker(workerAvailable: false))
+
+        await controller.runSetup(
+            ensureUvAvailable: { .failure(.installFailed(exitCode: 1, message: "network down")) },
+            resolveFFmpeg: { ffmpegAlreadyResolved() },
+            resolveYtDlp: { ffmpegAlreadyResolved() },
+            resolveNode: { ffmpegAlreadyResolved() },
+            provisionWorker: { _ in .success },
+            refreshReadiness: { }
+        )
+
+        XCTAssertTrue(controller.setupStage.isFailed)
+        XCTAssertNil(controller.setupFailedStep, "uv failure must not attribute any checklist row")
+    }
+}

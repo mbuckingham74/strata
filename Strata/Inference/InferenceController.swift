@@ -240,6 +240,9 @@ final class InferenceController {
 
     private(set) var setupStage: InferenceSetupStage = .idle
     private(set) var isSetupInProgress: Bool = false
+    /// Presentation-only: which checklist step a setup failure belongs to, if any.
+    /// Set at each failure site in runSetup; nil means a general failure with no row attribution.
+    private(set) var setupFailedStep: SetupChecklistStep? = nil
 
     /// True when product not ready and setup should be offered. Nil readiness (checking) returns false.
     var needsSetup: Bool {
@@ -269,6 +272,7 @@ final class InferenceController {
         isSetupInProgress = true
         defer { isSetupInProgress = false }
 
+        setupFailedStep = nil
         setupStage = .checkingTools
         let uvResult: UvAvailabilityResult = await Task.detached(priority: .userInitiated) { ensureUvAvailable() }.value
         let uvURL: URL
@@ -277,6 +281,8 @@ final class InferenceController {
             uvURL = url
         case .failure(let err):
             let msg = err.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+            // uv preparation failure is general: no checklist row attribution.
+            setupFailedStep = nil
             setupStage = .failed(msg.isEmpty ? "Failed to prepare tools." : String(msg.prefix(500)))
             return
         }
@@ -291,6 +297,7 @@ final class InferenceController {
                 break
             case .failure(let err):
                 let msg = err.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                setupFailedStep = .ffmpeg
                 setupStage = .failed(msg.isEmpty ? "FFmpeg installation failed." : String(msg.prefix(500)))
                 return
             }
@@ -306,6 +313,7 @@ final class InferenceController {
                 break
             case .failure(let err):
                 let msg = err.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                setupFailedStep = .ytdlp
                 setupStage = .failed(msg.isEmpty ? "yt-dlp installation failed." : String(msg.prefix(500)))
                 return
             }
@@ -321,6 +329,7 @@ final class InferenceController {
                 break
             case .failure(let err):
                 let msg = err.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                setupFailedStep = .node
                 setupStage = .failed(msg.isEmpty ? "Node installation failed." : String(msg.prefix(500)))
                 return
             }
@@ -331,6 +340,11 @@ final class InferenceController {
         switch provisionResult {
         case .failure(let err):
             let msg = err.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+            if case .prepareModelFailed = err {
+                setupFailedStep = .model
+            } else {
+                setupFailedStep = .worker
+            }
             setupStage = .failed(msg.isEmpty ? "Worker installation failed." : String(msg.prefix(500)))
             return
         case .success:
@@ -345,6 +359,7 @@ final class InferenceController {
         }
 
         if isProductReady {
+            setupFailedStep = nil
             setupStage = .succeeded
             Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -355,6 +370,7 @@ final class InferenceController {
             }
         } else {
             let hint = runtimeReadiness?.sidebarStatus ?? "Worker still not ready."
+            setupFailedStep = .final
             setupStage = .failed(String(hint.prefix(500)))
         }
     }
