@@ -197,7 +197,7 @@ struct SidebarView: View {
                         Image(systemName: "music.note").font(.system(size: 28, weight: .light)).foregroundStyle(.secondary)
                         Text("No audio loaded").font(.callout).foregroundStyle(.secondary)
                         Text("Add a local audio file to begin.").font(.caption).foregroundStyle(.tertiary).multilineTextAlignment(.center).padding(.horizontal, 20)
-                        Button { showingImporter = true } label: { Text("Add Audio").font(.callout.weight(.medium)).padding(.horizontal, 14).padding(.vertical, 6) }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).accessibilityLabel("Add Audio")
+                        Button { showingImporter = true } label: { Text("Add Audio").font(.callout.weight(.medium)).padding(.horizontal, 14).padding(.vertical, 6) }.buttonStyle(.borderedProminent).tint(Color(red: 0, green: 150 / 255, blue: 1)).accessibilityLabel("Add Audio")
                         Spacer()
                     }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -328,15 +328,27 @@ struct EmptyStateView: View {
     @Binding var showingImporter: Bool
     var body: some View {
         VStack(spacing: 20) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 16).fill(Color.primary.opacity(0.06)).frame(width: 72, height: 72)
-                Image(systemName: "music.note").font(.system(size: 30, weight: .light)).foregroundStyle(Color(red: 0.56, green: 0.46, blue: 0.95))
+            Group {
+                if let nsImage = NSApp.applicationIconImage {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 72, height: 72)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 4)
+                } else {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 16).fill(Color.primary.opacity(0.06)).frame(width: 72, height: 72)
+                        Image(systemName: "music.note").font(.system(size: 30, weight: .light)).foregroundStyle(Color(red: 0, green: 150 / 255, blue: 1))
+                    }
+                }
             }
+            .accessibilityHidden(true)
             VStack(spacing: 8) {
                 Text("No audio selected").font(.title3.weight(.semibold)).foregroundStyle(.primary)
                 Text("Add a local audio file to play, pause, and seek through AVAudioEngine.").font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 360)
             }
-            Button { showingImporter = true } label: { Label("Add Audio", systemImage: "plus").font(.callout.weight(.medium)).padding(.horizontal, 16).padding(.vertical, 8) }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).accessibilityLabel("Add Audio")
+            Button { showingImporter = true } label: { Label("Add Audio", systemImage: "plus").font(.callout.weight(.medium)).padding(.horizontal, 16).padding(.vertical, 8) }.buttonStyle(.borderedProminent).tint(Color(red: 0, green: 150 / 255, blue: 1)).accessibilityLabel("Add Audio")
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -499,7 +511,7 @@ struct InferenceCard: View {
                             Label("Load source", systemImage: "arrow.down.circle").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
+                        .tint(Color(red: 0, green: 150 / 255, blue: 1))
                         .disabled(youTubeURLBinding.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating || !inferenceController.isYouTubePreviewReady)
                         .accessibilityIdentifier("LoadYouTubeSourceButton")
                     }
@@ -606,7 +618,7 @@ struct InferenceCard: View {
                                     Label("Create Strata", systemImage: "waveform").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
                                 }
                                 .buttonStyle(.borderedProminent)
-                                .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
+                                .tint(Color(red: 0, green: 150 / 255, blue: 1))
                                 .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating || !inferenceController.isYouTubeSeparationReady)
                                 .accessibilityIdentifier("SeparateLoadedYouTubeButton")
 
@@ -646,7 +658,7 @@ struct InferenceCard: View {
                             inferenceController.startSeparation(localFileURL: url)
                         } label: {
                             Label("Create Strata", systemImage: "waveform").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
-                        }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).disabled(!playbackController.hasFile || playbackController.sourceURL == nil || inferenceController.isSeparating || !inferenceController.isLocalSeparationReady)
+                        }.buttonStyle(.borderedProminent).tint(Color(red: 0, green: 150 / 255, blue: 1)).disabled(!playbackController.hasFile || playbackController.sourceURL == nil || inferenceController.isSeparating || !inferenceController.isLocalSeparationReady)
                         .accessibilityIdentifier("LocalSeparateButton")
                         Button {
                             exportLocalMP3()
