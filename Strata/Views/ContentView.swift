@@ -223,6 +223,7 @@ struct SidebarView: View {
 
     private var sidebarStatusText: String {
         guard let r = inferenceController.runtimeReadiness else { return "Checking setup…" }
+        if !r.isWorkerReady { return "Setup needed" }
         return r.sidebarStatus
     }
 

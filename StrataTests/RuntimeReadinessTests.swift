@@ -388,6 +388,49 @@ final class RuntimeReadinessTests: XCTestCase {
         XCTAssertFalse(r.isYouTubeSeparationReady)
     }
 
+    // MARK: - Sidebar footer presentation (first-launch)
+
+    func testSidebarFooterHidesWorkerDiagnosticsWhenNotReady() {
+        func sidebarFooterText(for readiness: RuntimeReadiness?) -> String {
+            guard let r = readiness else { return "Checking setup…" }
+            if !r.isWorkerReady { return "Setup needed" }
+            return r.sidebarStatus
+        }
+
+        // Case 1: worker not executable — sidebarStatus contains path detail
+        let missingWorker = checker(ffmpeg: true, ytDlp: true, workerAvailable: false).check()
+        XCTAssertFalse(missingWorker.isWorkerReady)
+        XCTAssertTrue(missingWorker.sidebarStatus.contains("worker Python"), "diagnostics preserved in model")
+        XCTAssertTrue(missingWorker.sidebarStatus.contains("/tmp/worker/.venv/bin/python3"))
+        let footer1 = sidebarFooterText(for: missingWorker)
+        XCTAssertEqual(footer1, "Setup needed")
+        XCTAssertFalse(footer1.contains("Launch configuration"))
+        XCTAssertFalse(footer1.contains("missing worker Python"))
+        XCTAssertFalse(footer1.contains("/tmp/worker"))
+
+        // Case 2: launch configuration error — sidebarStatus contains diagnostic path
+        let launchError = checker(ffmpeg: true, ytDlp: true, resolveThrows: true).check()
+        XCTAssertFalse(launchError.isWorkerReady)
+        XCTAssertNotNil(launchError.workerError)
+        XCTAssertTrue(launchError.sidebarStatus.contains("Setup needed"))
+        // diagnostics preserved in model (error contains path)
+        XCTAssertTrue(launchError.sidebarStatus.contains("/missing") || launchError.sidebarStatus.contains("worker"))
+        let footer2 = sidebarFooterText(for: launchError)
+        XCTAssertEqual(footer2, "Setup needed")
+        XCTAssertFalse(footer2.contains("Launch configuration"))
+        XCTAssertFalse(footer2.contains("/missing"))
+        XCTAssertFalse(footer2.contains("missing worker Python"))
+
+        // Nil readiness still shows checking state
+        XCTAssertEqual(sidebarFooterText(for: nil), "Checking setup…")
+
+        // When worker ready, footer preserves detailed status (e.g. yt-dlp missing)
+        let ytDlpMissing = checker(ffmpeg: true, ytDlp: false, workerAvailable: true).check()
+        XCTAssertTrue(ytDlpMissing.isWorkerReady)
+        XCTAssertEqual(sidebarFooterText(for: ytDlpMissing), ytDlpMissing.sidebarStatus)
+        XCTAssertTrue(ytDlpMissing.sidebarStatus.contains("yt-dlp"))
+    }
+
     @MainActor
     func testPendingState_nilReadinessMeansChecking() {
         let controller = InferenceController()
