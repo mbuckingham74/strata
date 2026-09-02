@@ -516,4 +516,30 @@ final class WorkerProvisionerTests: XCTestCase {
             if case .missingBundledProject = err { } else { XCTFail("Expected missingBundledProject for nil resourceURL") }
         } else { XCTFail("Expected failure") }
     }
+
+    // MARK: - Hermetic build backend (fresh-install isolated build)
+
+    func testBundledPyprojectUsesHermeticUvBuildBackend() {
+        let resourceURLs = [
+            Bundle.main.resourceURL,
+            Bundle(for: WorkerProvisionerTests.self).resourceURL
+        ].compactMap { $0 }
+        var contents: String?
+        for resourceURL in resourceURLs {
+            let url = resourceURL.appendingPathComponent("InferenceWorker/pyproject.toml")
+            if FileManager.default.fileExists(atPath: url.path) {
+                contents = try? String(contentsOf: url, encoding: .utf8)
+                break
+            }
+        }
+        guard let text = contents else {
+            XCTFail("Bundled InferenceWorker/pyproject.toml not found in test bundles")
+            return
+        }
+        XCTAssertTrue(text.contains("build-backend = \"uv_build\""), "pyproject must use uv_build backend for isolated builds without network")
+        XCTAssertTrue(text.contains("uv_build>=0.12.8,<0.13"), "pyproject must pin uv_build to the bundled uv range")
+        XCTAssertFalse(text.lowercased().contains("hatchling"), "pyproject must not require hatchling (unpinned, needs PyPI fetch)")
+        XCTAssertFalse(text.contains("[tool.hatch"), "pyproject must not contain hatch tool config")
+        XCTAssertFalse(text.contains("tool.hatch"), "pyproject must not reference tool.hatch")
+    }
 }

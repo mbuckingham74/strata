@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.12.8,<0.13"]
+build-backend = "uv_build"
 
 [project]
 name = "demux-worker"
@@ -33,12 +33,6 @@ dev = [
 [project.scripts]
 prepare-model = "demux_worker.prepare_model:main"
 demux-worker = "demux_worker.worker:main"
-
-[tool.hatch.metadata]
-allow-direct-references = true
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/demux_worker"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
