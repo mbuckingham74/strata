@@ -339,7 +339,8 @@ final class InferenceController {
     static func makeDefaultYouTubeIngest() -> any YouTubeIngesting {
         YouTubeIngestClient(
             ytDlpURL: URL(fileURLWithPath: "/opt/homebrew/bin/yt-dlp"),
-            ffmpegURL: URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+            ffmpegURL: URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg"),
+            nodeURL: URL(fileURLWithPath: "/opt/homebrew/bin/node")
         )
     }
 

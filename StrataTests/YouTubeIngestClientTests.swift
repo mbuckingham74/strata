@@ -117,9 +117,17 @@ final class YouTubeIngestClientTests: XCTestCase {
         XCTAssertTrue(lines[0].contains("--write-thumbnail"), "yt-dlp should request artwork")
         XCTAssertTrue(lines[0].contains("source.%(ext)s"), "yt-dlp should contain source template")
         XCTAssertTrue(lines[0].contains("--ffmpeg-location"), "yt-dlp should contain --ffmpeg-location for GUI PATH")
-        XCTAssertTrue(lines[0].contains("/opt/homebrew/bin/ffmpeg"), "yt-dlp --ffmpeg-location value must be literal /opt/homebrew/bin/ffmpeg")
+        XCTAssertTrue(lines[0].contains(ffURL.path), "yt-dlp --ffmpeg-location value must equal injected ffmpegURL.path \(ffURL.path): \(lines[0])")
+        // Verify --ffmpeg-location value exactly matches injected path
+        if let idx = lines[0].range(of: "--ffmpeg-location") {
+            let after = lines[0][idx.upperBound...].trimmingCharacters(in: .whitespaces)
+            XCTAssertTrue(after.hasPrefix(ffURL.path) || after.contains(ffURL.path), "--ffmpeg-location should be followed by \(ffURL.path), got: \(after)")
+        }
         XCTAssertTrue(lines[0].contains("--js-runtimes"), "yt-dlp should contain --js-runtimes for Node")
-        XCTAssertTrue(lines[0].contains("node:/opt/homebrew/bin/node"), "yt-dlp --js-runtimes value must be node:/opt/homebrew/bin/node")
+        // Default nodeURL is /opt/homebrew/bin/node when not injected
+        XCTAssertTrue(lines[0].contains("node:/opt/homebrew/bin/node"), "yt-dlp --js-runtimes value must be node:/opt/homebrew/bin/node for default: \(lines[0])")
+        // Also verify injected path pattern when default used
+        XCTAssertTrue(lines[0].contains("node:\(URL(fileURLWithPath: "/opt/homebrew/bin/node").path)"), "yt-dlp --js-runtimes should contain injected node path")
         // Check absolute path in yt-dlp -o arg
         XCTAssertTrue(lines[0].contains(cacheBase.path) || lines[0].contains("/tmp") || lines[0].contains("/private"), "yt-dlp template should be absolute")
         // ffmpeg args contain -ar 44100, -ac 2, pcm_f32le, and mixture.wav
@@ -138,6 +146,88 @@ final class YouTubeIngestClientTests: XCTestCase {
         if let nostdinRange = lines[1].range(of: "-nostdin"), let yRange = lines[1].range(of: " -y ") {
             XCTAssertTrue(nostdinRange.lowerBound < yRange.lowerBound, "-nostdin should appear before -y: \(lines[1])")
         }
+    }
+
+    func testInjectedNodeURLPassedToYtDlp() async throws {
+        // Proves custom nodeURL reaches yt-dlp for entry points not already covered
+        // by default-node ingest check in testYtDlpToFFmpegLaunchOrderAndArguments.
+        // Covers fetchPreview and downloadAudioOnly (ingest default already proves ingest path).
+        let cacheBase = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase) }
+        let logFile = try makeLogFile()
+        defer { try? FileManager.default.removeItem(at: logFile) }
+        let customNode = URL(fileURLWithPath: "/tmp/custom/node")
+
+        func ytDlpLine(ytScript: String, operation: (YouTubeIngestClient) async throws -> Void) async throws -> String {
+            let ffScript = writeValidWavPythonScript(logPath: logFile.path)
+            let ytURL = try makeFakeExecutable(name: "yt-dlp", scriptContent: ytScript)
+            let ffURL = try makeFakeExecutable(name: "ffmpeg", scriptContent: ffScript)
+            defer {
+                try? FileManager.default.removeItem(at: ytURL.deletingLastPathComponent())
+                try? FileManager.default.removeItem(at: ffURL.deletingLastPathComponent())
+            }
+            try "".write(to: logFile, atomically: true, encoding: .utf8)
+            let client = YouTubeIngestClient(ytDlpURL: ytURL, ffmpegURL: ffURL, nodeURL: customNode, cacheBaseURL: cacheBase)
+            try await operation(client)
+            let log = try String(contentsOf: logFile, encoding: .utf8)
+            if let dirs = try? FileManager.default.contentsOfDirectory(at: cacheBase, includingPropertiesForKeys: nil) {
+                for d in dirs { try? FileManager.default.removeItem(at: d) }
+            }
+            try "".write(to: logFile, atomically: true, encoding: .utf8)
+            return log.split(separator: "\n").first(where: { $0.hasPrefix("yt-dlp ") }).map(String.init) ?? ""
+        }
+
+        let previewScript = """
+        #!/usr/bin/python3
+        import sys, os
+        log_path = "\(logFile.path)"
+        with open(log_path, "a") as f:
+            f.write("yt-dlp " + " ".join(sys.argv[1:]) + "\\n")
+        args = sys.argv[1:]
+        if "-o" in args:
+            idx = args.index("-o")
+            tmpl = args[idx+1]
+            os.makedirs(os.path.dirname(tmpl), exist_ok=True)
+            info = tmpl.replace("%(ext)s", "info.json")
+            with open(info, "w") as jf:
+                jf.write('{"artist":"Preview Artist","track":"Preview Title","duration":10}')
+            thumb = tmpl.replace("%(ext)s", "jpg")
+            with open(thumb, "wb") as tf:
+                tf.write(b"\\xff\\xd8\\xff\\xe0thumb")
+        sys.exit(0)
+        """
+        let previewLine = try await ytDlpLine(ytScript: previewScript) { client in
+            _ = try await client.fetchPreview(youTubeURL: validYouTubeURL())
+        }
+        XCTAssertTrue(previewLine.contains("node:/tmp/custom/node"), "fetchPreview should pass injected node: \(previewLine)")
+        XCTAssertFalse(previewLine.contains("node:/opt/homebrew/bin/node"), "Should not contain default when custom injected")
+
+        let audioScript = """
+        #!/usr/bin/python3
+        import sys, os
+        log_path = "\(logFile.path)"
+        with open(log_path, "a") as f:
+            f.write("yt-dlp " + " ".join(sys.argv[1:]) + "\\n")
+        args = sys.argv[1:]
+        if "-o" in args:
+            idx = args.index("-o")
+            tmpl = args[idx+1]
+            out = tmpl.replace("%(ext)s", "m4a")
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            with open(out, "wb") as outf:
+                outf.write(b"\\x00" * 512)
+            info = tmpl.replace("%(ext)s", "info.json")
+            with open(info, "w") as jf:
+                jf.write('{"artist":"A","track":"T"}')
+            thumb = tmpl.replace("%(ext)s", "jpg")
+            with open(thumb, "wb") as tf:
+                tf.write(b"\\xff\\xd8\\xff\\xe0thumb")
+        sys.exit(0)
+        """
+        let audioLine = try await ytDlpLine(ytScript: audioScript) { client in
+            _ = try await client.downloadAudioOnly(youTubeURL: validYouTubeURL())
+        }
+        XCTAssertTrue(audioLine.contains("node:/tmp/custom/node"), "downloadAudioOnly should pass injected node: \(audioLine)")
     }
 
     func testFFmpegInvokedWithNostdinAndDetachedStdin() async throws {

@@ -235,6 +235,7 @@ struct YouTubePreviewResult: Sendable, Equatable {
 actor YouTubeIngestClient {
     let ytDlpURL: URL
     let ffmpegURL: URL
+    let nodeURL: URL
     let fileManager: FileManager
     private let cacheBaseOverride: URL?
 
@@ -250,9 +251,10 @@ actor YouTubeIngestClient {
     private var cancellationRequested = false
     private let processRunner: AudioProcessRunner
 
-    init(ytDlpURL: URL, ffmpegURL: URL, cacheBaseURL: URL? = nil, fileManager: FileManager = .default, isRunningCheck: @escaping @Sendable (Process) -> Bool = { $0.isRunning }) {
+    init(ytDlpURL: URL, ffmpegURL: URL, nodeURL: URL = URL(fileURLWithPath: "/opt/homebrew/bin/node"), cacheBaseURL: URL? = nil, fileManager: FileManager = .default, isRunningCheck: @escaping @Sendable (Process) -> Bool = { $0.isRunning }) {
         self.ytDlpURL = ytDlpURL
         self.ffmpegURL = ffmpegURL
+        self.nodeURL = nodeURL
         self.fileManager = fileManager
         self.cacheBaseOverride = cacheBaseURL
         self.processRunner = AudioProcessRunner(isRunningCheck: isRunningCheck)
@@ -278,6 +280,9 @@ actor YouTubeIngestClient {
         }
         guard isAbsoluteFileURL(ffmpegURL) else {
             throw YouTubeIngestError.invalidCanonicalOutput("ffmpegURL must be absolute file URL: \(ffmpegURL)")
+        }
+        guard isAbsoluteFileURL(nodeURL) else {
+            throw YouTubeIngestError.invalidCanonicalOutput("nodeURL must be absolute file URL: \(nodeURL)")
         }
 
         // Already running guard
@@ -310,8 +315,8 @@ actor YouTubeIngestClient {
                 "--no-playlist",
                 "--write-info-json",
                 "--write-thumbnail",
-                "--ffmpeg-location", "/opt/homebrew/bin/ffmpeg",
-                "--js-runtimes", "node:/opt/homebrew/bin/node",
+                "--ffmpeg-location", ffmpegURL.path,
+                "--js-runtimes", "node:\(nodeURL.path)",
             ]
             onProgress(.downloading)
             let ytStatus = try await runTool(
@@ -428,6 +433,9 @@ actor YouTubeIngestClient {
         guard isAbsoluteFileURL(ytDlpURL) else {
             throw YouTubeIngestError.invalidCanonicalOutput("ytDlpURL must be absolute file URL: \(ytDlpURL)")
         }
+        guard isAbsoluteFileURL(nodeURL) else {
+            throw YouTubeIngestError.invalidCanonicalOutput("nodeURL must be absolute file URL: \(nodeURL)")
+        }
         if await processRunner.hasActiveProcess() || activeRunDirectory != nil {
             throw YouTubeIngestError.alreadyRunning
         }
@@ -452,7 +460,7 @@ actor YouTubeIngestClient {
                 "--no-playlist",
                 "--write-info-json",
                 "--write-thumbnail",
-                "--js-runtimes", "node:/opt/homebrew/bin/node",
+                "--js-runtimes", "node:\(nodeURL.path)",
             ]
             let ytStatus = try await runTool(
                 toolName: "yt-dlp",
@@ -532,6 +540,9 @@ actor YouTubeIngestClient {
         guard isAbsoluteFileURL(ffmpegURL) else {
             throw YouTubeIngestError.invalidCanonicalOutput("ffmpegURL must be absolute file URL: \(ffmpegURL)")
         }
+        guard isAbsoluteFileURL(nodeURL) else {
+            throw YouTubeIngestError.invalidCanonicalOutput("nodeURL must be absolute file URL: \(nodeURL)")
+        }
         if await processRunner.hasActiveProcess() || activeRunDirectory != nil {
             throw YouTubeIngestError.alreadyRunning
         }
@@ -556,8 +567,8 @@ actor YouTubeIngestClient {
                 "--no-playlist",
                 "--write-info-json",
                 "--write-thumbnail",
-                "--ffmpeg-location", "/opt/homebrew/bin/ffmpeg",
-                "--js-runtimes", "node:/opt/homebrew/bin/node",
+                "--ffmpeg-location", ffmpegURL.path,
+                "--js-runtimes", "node:\(nodeURL.path)",
             ]
             let ytStatus = try await runTool(
                 toolName: "yt-dlp",
