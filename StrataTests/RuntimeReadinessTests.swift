@@ -393,7 +393,7 @@ final class RuntimeReadinessTests: XCTestCase {
     func testSidebarFooterHidesWorkerDiagnosticsWhenNotReady() {
         func sidebarFooterText(for readiness: RuntimeReadiness?) -> String {
             guard let r = readiness else { return "Checking setup…" }
-            if !r.isWorkerReady { return "Setup needed" }
+            if !r.isProductReady { return "Setup needed" }
             return r.sidebarStatus
         }
 
@@ -424,11 +424,19 @@ final class RuntimeReadinessTests: XCTestCase {
         // Nil readiness still shows checking state
         XCTAssertEqual(sidebarFooterText(for: nil), "Checking setup…")
 
-        // When worker ready, footer preserves detailed status (e.g. yt-dlp missing)
-        let ytDlpMissing = checker(ffmpeg: true, ytDlp: false, workerAvailable: true).check()
+        // When product not ready (e.g. yt-dlp missing though worker ready),
+        // footer hides diagnostics and shows setup needed; detail stays in the model.
+        let ytDlpMissing = productReadiness(ytDlp: false)
         XCTAssertTrue(ytDlpMissing.isWorkerReady)
-        XCTAssertEqual(sidebarFooterText(for: ytDlpMissing), ytDlpMissing.sidebarStatus)
+        XCTAssertFalse(ytDlpMissing.isProductReady)
+        XCTAssertEqual(sidebarFooterText(for: ytDlpMissing), "Setup needed")
         XCTAssertTrue(ytDlpMissing.sidebarStatus.contains("yt-dlp"))
+
+        // When fully product ready, footer preserves the detailed status.
+        let fullyReady = productReadiness()
+        XCTAssertTrue(fullyReady.isProductReady)
+        XCTAssertEqual(sidebarFooterText(for: fullyReady), fullyReady.sidebarStatus)
+        XCTAssertEqual(fullyReady.sidebarStatus, "Separation ready · runs on this Mac")
     }
 
     // MARK: - Aggregate product readiness

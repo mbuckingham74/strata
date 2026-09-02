@@ -206,6 +206,7 @@ final class InferenceController {
     var isLocalSeparationReady: Bool { runtimeReadiness?.isLocalSeparationReady ?? false }
     var isLoadedSeparationReady: Bool { runtimeReadiness?.isLoadedSeparationReady ?? false }
     var isWorkerReady: Bool { runtimeReadiness?.isWorkerReady ?? false }
+    var isProductReady: Bool { runtimeReadiness?.isProductReady ?? false }
     var isYouTubeAcquisitionReady: Bool { runtimeReadiness?.isYouTubeAcquisitionReady ?? false }
     // Granular YouTube readiness per metadata-first workflow (combining existing readiness properties)
     var isYouTubePreviewReady: Bool { runtimeReadiness?.isYouTubePreviewReady ?? false }
@@ -240,10 +241,10 @@ final class InferenceController {
     private(set) var setupStage: InferenceSetupStage = .idle
     private(set) var isSetupInProgress: Bool = false
 
-    /// True when worker not ready and setup should be offered. Nil readiness (checking) returns false.
+    /// True when product not ready and setup should be offered. Nil readiness (checking) returns false.
     var needsSetup: Bool {
         guard let r = runtimeReadiness else { return false }
-        return !r.isWorkerReady
+        return !r.isProductReady
     }
 
     var setupErrorMessage: String? {
@@ -340,7 +341,7 @@ final class InferenceController {
             await refreshRuntimeReadiness()
         }
 
-        if isWorkerReady {
+        if isProductReady {
             setupStage = .idle
         } else {
             let hint = runtimeReadiness?.sidebarStatus ?? "Worker still not ready."

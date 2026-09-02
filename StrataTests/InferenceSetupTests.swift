@@ -41,19 +41,23 @@ private func makeWorkerConfig(pythonPath: String = "/tmp/fakeWorker/.venv/bin/py
     )
 }
 
-private func makeReadiness(workerAvailable: Bool, ffmpegAvailable: Bool = true, ytDlpAvailable: Bool = true, nodeAvailable: Bool = true, pythonPath: String = "/tmp/fakeWorker/.venv/bin/python3") -> RuntimeReadiness {
+private func makeReadiness(workerAvailable: Bool, ffmpegAvailable: Bool = true, ytDlpAvailable: Bool = true, nodeAvailable: Bool = true, modelAvailable: Bool = true, pythonPath: String = "/tmp/fakeWorker/.venv/bin/python3") -> RuntimeReadiness {
     RuntimeReadiness(
         workerAvailable: workerAvailable,
         workerError: workerAvailable ? nil : "python not executable at \(pythonPath)",
         workerPythonPath: pythonPath,
         ffmpegAvailable: ffmpegAvailable,
         ytDlpAvailable: ytDlpAvailable,
-        nodeAvailable: nodeAvailable
+        nodeAvailable: nodeAvailable,
+        modelAvailable: modelAvailable
     )
 }
 
-private func makeChecker(workerAvailable: Bool, ffmpegAvailable: Bool = true, ytDlpAvailable: Bool = true, nodeAvailable: Bool = true, pythonPath: String = "/tmp/fakeWorker/.venv/bin/python3") -> RuntimeReadinessChecker {
+private func makeChecker(workerAvailable: Bool, ffmpegAvailable: Bool = true, ytDlpAvailable: Bool = true, nodeAvailable: Bool = true, modelAvailable: Bool = true, pythonPath: String = "/tmp/fakeWorker/.venv/bin/python3") -> RuntimeReadinessChecker {
     let cfg = makeWorkerConfig(pythonPath: pythonPath)
+    let modelsRoot = URL(fileURLWithPath: "/tmp/fakeModels")
+    let checkpointPath = TrustedInferenceIdentity.checkpointURL(modelsRoot: modelsRoot).path
+    let configPath = TrustedInferenceIdentity.configURL(modelsRoot: modelsRoot).path
     return RuntimeReadinessChecker(
         isExecutable: { path in
             if path == RuntimeReadiness.ffmpegPath { return ffmpegAvailable }
@@ -62,7 +66,21 @@ private func makeChecker(workerAvailable: Bool, ffmpegAvailable: Bool = true, yt
             if path == pythonPath { return workerAvailable }
             return false
         },
-        resolveWorker: { cfg }
+        resolveWorker: { cfg },
+        fileExists: { modelAvailable && ($0 == checkpointPath || $0 == configPath) },
+        fileSize: {
+            guard modelAvailable else { return nil }
+            if $0 == checkpointPath { return TrustedInferenceIdentity.checkpointBytes }
+            if $0 == configPath { return TrustedInferenceIdentity.configBytes }
+            return nil
+        },
+        fileSHA256: {
+            guard modelAvailable else { return nil }
+            if $0 == checkpointPath { return TrustedInferenceIdentity.checkpointSHA256 }
+            if $0 == configPath { return TrustedInferenceIdentity.configSHA256 }
+            return nil
+        },
+        modelsRoot: modelsRoot
     )
 }
 
@@ -97,6 +115,7 @@ final class InferenceSetupTests: XCTestCase {
         await controller.refreshRuntimeReadiness(checker: checker)
         XCTAssertNotNil(controller.runtimeReadiness)
         XCTAssertFalse(controller.isWorkerReady)
+        XCTAssertFalse(controller.isProductReady)
         XCTAssertTrue(controller.needsSetup)
     }
 
@@ -105,7 +124,17 @@ final class InferenceSetupTests: XCTestCase {
         let checker = makeChecker(workerAvailable: true)
         await controller.refreshRuntimeReadiness(checker: checker)
         XCTAssertTrue(controller.isWorkerReady)
+        XCTAssertTrue(controller.isProductReady)
         XCTAssertFalse(controller.needsSetup)
+    }
+
+    func testNeedsSetup_trueWhenWorkerReadyButDependencyMissing() async {
+        let controller = InferenceController()
+        let checker = makeChecker(workerAvailable: true, ffmpegAvailable: false)
+        await controller.refreshRuntimeReadiness(checker: checker)
+        XCTAssertTrue(controller.isWorkerReady)
+        XCTAssertFalse(controller.isProductReady)
+        XCTAssertTrue(controller.needsSetup, "setup must still be offered while any required dependency is missing")
     }
 
     // MARK: - runSetup success path
@@ -148,7 +177,7 @@ final class InferenceSetupTests: XCTestCase {
         XCTAssertEqual(refreshCount.value, 1, "refresh must be called once on success")
         XCTAssertEqual(controller.setupStage, .idle)
         XCTAssertNil(controller.setupErrorMessage)
-        XCTAssertTrue(controller.isWorkerReady)
+        XCTAssertTrue(controller.isProductReady)
         XCTAssertFalse(controller.needsSetup)
         XCTAssertFalse(controller.isSetupInProgress)
     }
@@ -203,7 +232,7 @@ final class InferenceSetupTests: XCTestCase {
             }
         )
         XCTAssertEqual(controller.setupStage, .idle)
-        XCTAssertTrue(controller.isWorkerReady)
+        XCTAssertTrue(controller.isProductReady)
     }
 
     // MARK: - runSetup failure when provision fails (syncFailed) with truncation + Try Again
@@ -246,7 +275,7 @@ final class InferenceSetupTests: XCTestCase {
             refreshReadiness: { await ctrl.refreshRuntimeReadiness(checker: readyChecker) }
         )
         XCTAssertEqual(controller.setupStage, .idle)
-        XCTAssertTrue(controller.isWorkerReady)
+        XCTAssertTrue(controller.isProductReady)
     }
 
     func testRunSetupProvisionPrepareModelFailed_truncatedAndDoesNotRefresh() async {
@@ -308,6 +337,7 @@ final class InferenceSetupTests: XCTestCase {
 
         XCTAssertTrue(controller.setupStage.isFailed)
         XCTAssertFalse(controller.isWorkerReady)
+        XCTAssertFalse(controller.isProductReady)
         // Hint should be sidebarStatus prefix truncated to 500
         if case .failed(let msg) = controller.setupStage {
             XCTAssertEqual(msg, String(expectedHint.prefix(500)))
@@ -538,11 +568,12 @@ final class InferenceSetupTests: XCTestCase {
         XCTAssertNotNil(controller.result)
         XCTAssertTrue(controller.result?.isComplete ?? false)
 
-        // Now make worker not ready (as after relaunch without provisioning)
+        // Now make product not ready (as after relaunch without provisioning)
         let notReadyChecker = makeChecker(workerAvailable: false)
         await controller.refreshRuntimeReadiness(checker: notReadyChecker)
         XCTAssertFalse(controller.isWorkerReady)
-        XCTAssertTrue(controller.needsSetup, "worker not ready should request setup when not completed")
+        XCTAssertFalse(controller.isProductReady)
+        XCTAssertTrue(controller.needsSetup, "product not ready should request setup when not completed")
         XCTAssertNotNil(controller.runtimeReadiness)
 
         // View logic: completedResult takes priority over setup
@@ -551,7 +582,7 @@ final class InferenceSetupTests: XCTestCase {
 
         func shouldShowSetup(for ctrl: InferenceController, isCompleted: Bool) -> Bool {
             if isCompleted { return false }
-            if let readiness = ctrl.runtimeReadiness, !readiness.isWorkerReady { return true }
+            if let readiness = ctrl.runtimeReadiness, !readiness.isProductReady { return true }
             return false
         }
         func shouldShowCompleted(for ctrl: InferenceController, isCompleted: Bool) -> Bool {
@@ -559,14 +590,14 @@ final class InferenceSetupTests: XCTestCase {
         }
 
         XCTAssertTrue(shouldShowCompleted(for: controller, isCompleted: isCompletedState), "view should prioritize completed UI")
-        XCTAssertFalse(shouldShowSetup(for: controller, isCompleted: isCompletedState), "view must NOT show setup when completed result exists, even if worker not ready")
+        XCTAssertFalse(shouldShowSetup(for: controller, isCompleted: isCompletedState), "view must NOT show setup when completed result exists, even if product not ready")
 
-        // Also verify non-completed path still shows setup when worker not ready
+        // Also verify non-completed path still shows setup when product not ready
         let freshController = InferenceController()
         await freshController.refreshRuntimeReadiness(checker: notReadyChecker)
         let freshIsCompleted = (freshController.state == .completed && freshController.result != nil)
         XCTAssertFalse(freshIsCompleted)
-        XCTAssertTrue(shouldShowSetup(for: freshController, isCompleted: freshIsCompleted), "non-completed worker-not-ready must show setup")
+        XCTAssertTrue(shouldShowSetup(for: freshController, isCompleted: freshIsCompleted), "non-completed product-not-ready must show setup")
 
         // When checking (nil readiness), completed still wins and non-completed shows checking not setup
         let checkingController = InferenceController()

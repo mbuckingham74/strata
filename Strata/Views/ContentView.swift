@@ -223,7 +223,7 @@ struct SidebarView: View {
 
     private var sidebarStatusText: String {
         guard let r = inferenceController.runtimeReadiness else { return "Checking setup…" }
-        if !r.isWorkerReady { return "Setup needed" }
+        if !r.isProductReady { return "Setup needed" }
         return r.sidebarStatus
     }
 
@@ -418,7 +418,7 @@ struct InferenceCard: View {
                     ProgressView().scaleEffect(0.7).tint(.secondary)
                 }
             }
-            if !isCompletedState, inferenceController.runtimeReadiness?.isWorkerReady == true {
+            if !isCompletedState, inferenceController.runtimeReadiness?.isProductReady == true {
                 Text("Separation runs locally on this Mac.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
 
@@ -449,7 +449,7 @@ struct InferenceCard: View {
                     EditableMetadataEditor(inferenceController: inferenceController, isCollapsible: true, isInitiallyExpanded: false)
                 }
 
-            } else if let readiness = inferenceController.runtimeReadiness, !readiness.isWorkerReady {
+            } else if let readiness = inferenceController.runtimeReadiness, !readiness.isProductReady {
                 InferenceSetupView(controller: inferenceController)
             } else if inferenceController.runtimeReadiness == nil {
                 HStack(spacing: 8) {
