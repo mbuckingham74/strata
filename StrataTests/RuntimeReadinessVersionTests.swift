@@ -457,4 +457,20 @@ final class RuntimeReadinessVersionTests: XCTestCase {
         XCTAssertLessThan(elapsed, 3.0, "versionTimeout+escalation must remain bounded; elapsed \(elapsed)")
         XCTAssertGreaterThanOrEqual(elapsed, 1.9)
     }
+
+    func testCaptureVersionOutput_quickExitDoesNotLoseData_raceRegression() {
+        // Regression for race: old code read availableData outside lock, then delayed before append.
+        // Exit path snapshot could miss those bytes (already consumed) while nonblocking drain saw nothing -> empty output -> installed unknown.
+        // Fixed by moving availableData inside lock so consume+append is atomic and snapshot waits for in-flight handler.
+        for i in 0..<50 {
+            let result = RuntimeReadinessChecker.captureVersionOutput(
+                executablePath: "/bin/sh",
+                arguments: ["-c", "printf 'ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers\\n'"],
+                timeout: 2.0
+            )
+            XCTAssertNotNil(result, "quick exit iteration \(i) must not be nil (race regression)")
+            XCTAssertEqual(result?.trimmingCharacters(in: .whitespacesAndNewlines), "ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers", "iteration \(i) content must be intact")
+            XCTAssertEqual(ExternalToolCompatibility.parseFFmpegVersion(from: result ?? ""), "9.0.1", "iteration \(i) parse must succeed")
+        }
+    }
 }

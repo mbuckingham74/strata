@@ -171,20 +171,20 @@ struct RuntimeReadinessChecker: Sendable {
         let lock = NSLock()
 
         outPipe.fileHandleForReading.readabilityHandler = { handle in
+            lock.lock()
             let d = handle.availableData
             if !d.isEmpty {
-                lock.lock()
                 outBox.data.append(d)
-                lock.unlock()
             }
+            lock.unlock()
         }
         errPipe.fileHandleForReading.readabilityHandler = { handle in
+            lock.lock()
             let d = handle.availableData
             if !d.isEmpty {
-                lock.lock()
                 errBox.data.append(d)
-                lock.unlock()
             }
+            lock.unlock()
         }
 
         do {
