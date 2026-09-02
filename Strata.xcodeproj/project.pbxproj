@@ -70,6 +70,7 @@
 		A10000000000000000000041 /* RuntimeReadinessVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000041 /* RuntimeReadinessVersionTests.swift */; };
 		A10000000000000000000042 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000042 /* SessionStore.swift */; };
 		A10000000000000000000043 /* SessionStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000043 /* SessionStoreTests.swift */; };
+		A10000000000000000000044 /* SessionLibraryNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000044 /* SessionLibraryNavigationTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -138,6 +139,7 @@
 		B10000000000000000000041 /* RuntimeReadinessVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeReadinessVersionTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000042 /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 		B10000000000000000000043 /* SessionStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStoreTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000044 /* SessionLibraryNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLibraryNavigationTests.swift; sourceTree = "<group>"; };
 		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -296,6 +298,7 @@
 				B10000000000000000000039 /* LocalMP3ExportTests.swift */,
 				B1000000000000000000003B /* StorageLocationPreferencesTests.swift */,
 				B10000000000000000000043 /* SessionStoreTests.swift */,
+				B10000000000000000000044 /* SessionLibraryNavigationTests.swift */,
 			);
 			path = StrataTests;
 			sourceTree = "<group>";
@@ -538,6 +541,7 @@
 				A10000000000000000000039 /* LocalMP3ExportTests.swift in Sources */,
 				A1000000000000000000003B /* StorageLocationPreferencesTests.swift in Sources */,
 				A10000000000000000000043 /* SessionStoreTests.swift in Sources */,
+				A10000000000000000000044 /* SessionLibraryNavigationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

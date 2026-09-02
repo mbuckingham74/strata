@@ -34,6 +34,7 @@ struct ContentView: View {
 
     @State private var showingImporter = false
     @State private var showingError = false
+    @Environment(SessionStore.self) private var sessionStore: SessionStore?
 
     var body: some View {
         NavigationSplitView {
@@ -87,7 +88,13 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { showingImporter = true } label: { Label("Add Audio", systemImage: "plus") }.help("Add Audio")
+                Button {
+                    if let store = sessionStore {
+                        store.newSession(playbackController: playbackController, inferenceController: inferenceController, stemPlaybackController: stemPlaybackController)
+                    } else {
+                        showingImporter = true
+                    }
+                } label: { Label("New Session", systemImage: "plus") }.help("New Session").accessibilityLabel("New Session")
             }
         }
     }
@@ -100,6 +107,7 @@ struct SidebarView: View {
     @Bindable var stemPlaybackController: StemPlaybackController
     @Bindable var inferenceController: InferenceController
     @Binding var showingImporter: Bool
+    @Environment(SessionStore.self) private var sessionStore: SessionStore?
 
     // Primary initializer (YouTube-aware)
     init(
@@ -141,22 +149,58 @@ struct SidebarView: View {
                 Label("Library", systemImage: "music.note.list")
                     .font(.caption).fontWeight(.semibold).foregroundStyle(.secondary).textCase(.uppercase)
                 Spacer()
-                Button { showingImporter = true } label: {
+                Button {
+                    if let store = sessionStore {
+                        store.newSession(playbackController: controller, inferenceController: inferenceController, stemPlaybackController: stemPlaybackController)
+                    } else {
+                        showingImporter = true
+                    }
+                } label: {
                     Image(systemName: "plus").font(.system(size: 11, weight: .semibold)).frame(width: 22, height: 22).background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-                }.buttonStyle(.plain).help("Add Audio").accessibilityLabel("Add Audio")
+                }.buttonStyle(.plain).help("New Session").accessibilityLabel("New Session")
             }.padding(.horizontal, 14).padding(.vertical, 12)
             Divider().opacity(0.15)
-            if effectiveHasFile, let title = effectiveTitle {
-                ScrollView { VStack(spacing: 6) { SidebarEntry(title: title, duration: effectiveDuration, isSelected: true).padding(.horizontal, 8).padding(.top, 8) } }
+            if let store = sessionStore {
+                if store.projects.isEmpty {
+                    VStack(spacing: 12) {
+                        Spacer()
+                        Image(systemName: "music.note").font(.system(size: 28, weight: .light)).foregroundStyle(.secondary)
+                        Text("No sessions yet").font(.callout).foregroundStyle(.secondary)
+                        Text("Create a Strata or add audio to begin.").font(.caption).foregroundStyle(.tertiary).multilineTextAlignment(.center).padding(.horizontal, 20)
+                        Spacer()
+                    }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        VStack(spacing: 6) {
+                            ForEach(store.projects.sorted(by: { $0.lastOpenedAt > $1.lastOpenedAt }), id: \.id) { project in
+                                Button {
+                                    do {
+                                        try store.reopen(projectID: project.id, playbackController: controller, inferenceController: inferenceController, stemPlaybackController: stemPlaybackController)
+                                    } catch {
+                                        // SessionStore.lastError is already set (bounded); presented via alert — no second error model.
+                                    }
+                                } label: {
+                                    SidebarEntry(title: project.displayTitle, duration: project.source.kind == .youTube ? "YouTube" : "Local", isSelected: project.id == store.selectedProjectID)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(project.displayTitle)
+                            }
+                        }.padding(.horizontal, 8).padding(.top, 8)
+                    }
+                }
             } else {
-                VStack(spacing: 12) {
-                    Spacer()
-                    Image(systemName: "music.note").font(.system(size: 28, weight: .light)).foregroundStyle(.secondary)
-                    Text("No audio loaded").font(.callout).foregroundStyle(.secondary)
-                    Text("Add a local audio file to begin.").font(.caption).foregroundStyle(.tertiary).multilineTextAlignment(.center).padding(.horizontal, 20)
-                    Button { showingImporter = true } label: { Text("Add Audio").font(.callout.weight(.medium)).padding(.horizontal, 14).padding(.vertical, 6) }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).accessibilityLabel("Add Audio")
-                    Spacer()
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                if effectiveHasFile, let title = effectiveTitle {
+                    ScrollView { VStack(spacing: 6) { SidebarEntry(title: title, duration: effectiveDuration, isSelected: true).padding(.horizontal, 8).padding(.top, 8) } }
+                } else {
+                    VStack(spacing: 12) {
+                        Spacer()
+                        Image(systemName: "music.note").font(.system(size: 28, weight: .light)).foregroundStyle(.secondary)
+                        Text("No audio loaded").font(.callout).foregroundStyle(.secondary)
+                        Text("Add a local audio file to begin.").font(.caption).foregroundStyle(.tertiary).multilineTextAlignment(.center).padding(.horizontal, 20)
+                        Button { showingImporter = true } label: { Text("Add Audio").font(.callout.weight(.medium)).padding(.horizontal, 14).padding(.vertical, 6) }.buttonStyle(.borderedProminent).tint(Color(red: 0.56, green: 0.46, blue: 0.95)).accessibilityLabel("Add Audio")
+                        Spacer()
+                    }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
             Spacer(minLength: 0)
             HStack(spacing: 6) {
@@ -167,6 +211,14 @@ struct SidebarView: View {
                 .help(sidebarStatusText)
                 .accessibilityIdentifier("RuntimeReadinessStatus")
         }.background(Color(nsColor: .windowBackgroundColor))
+        .alert("Session Error", isPresented: Binding(
+            get: { sessionStore?.lastError != nil },
+            set: { if !$0 { sessionStore?.lastError = nil } }
+        )) {
+            Button("OK") { sessionStore?.lastError = nil }
+        } message: {
+            if let msg = sessionStore?.lastError { Text(msg) }
+        }
     }
 
     private var sidebarStatusText: String {
