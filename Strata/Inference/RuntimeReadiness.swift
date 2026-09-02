@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import CryptoKit
 
 struct RuntimeReadiness: Sendable, Equatable {
     let workerAvailable: Bool
@@ -23,6 +24,9 @@ struct RuntimeReadiness: Sendable, Equatable {
     let ffmpegAttemptedPath: String?
     let ytDlpAttemptedPath: String?
     let nodeAttemptedPath: String?
+    let modelAvailable: Bool
+    let modelError: String?
+    let modelCheckpointPath: String?
 
     static let ffmpegPath = "/opt/homebrew/bin/ffmpeg"
     static let ytDlpPath = "/opt/homebrew/bin/yt-dlp"
@@ -49,7 +53,10 @@ struct RuntimeReadiness: Sendable, Equatable {
         nodeManagedURL: URL? = nil,
         ffmpegAttemptedPath: String? = nil,
         ytDlpAttemptedPath: String? = nil,
-        nodeAttemptedPath: String? = nil
+        nodeAttemptedPath: String? = nil,
+        modelAvailable: Bool = false,
+        modelError: String? = nil,
+        modelCheckpointPath: String? = nil
     ) {
         self.workerAvailable = workerAvailable
         self.workerError = workerError
@@ -72,6 +79,9 @@ struct RuntimeReadiness: Sendable, Equatable {
         self.ffmpegAttemptedPath = ffmpegAttemptedPath
         self.ytDlpAttemptedPath = ytDlpAttemptedPath
         self.nodeAttemptedPath = nodeAttemptedPath
+        self.modelAvailable = modelAvailable
+        self.modelError = modelError
+        self.modelCheckpointPath = modelCheckpointPath
     }
 
     // Local file separation requires worker + FFmpeg (canonicalization)
@@ -139,11 +149,47 @@ struct RuntimeReadinessChecker: Sendable {
     var resolveWorker: @Sendable () throws -> WorkerLaunchConfiguration
     var runVersion: @Sendable (String) -> String?
     var resolver: ExternalToolResolver
+    var fileExists: @Sendable (String) -> Bool
+    var fileSize: @Sendable (String) -> Int64?
+    var fileSHA256: @Sendable (String) -> String?
+    var modelsRoot: URL?
+
+    static func defaultFileExists(_ path: String) -> Bool {
+        FileManager.default.fileExists(atPath: path)
+    }
+
+    static func defaultFileSize(_ path: String) -> Int64? {
+        guard let size = try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber else {
+            return nil
+        }
+        return size.int64Value
+    }
+
+    /// Streaming SHA-256 default: chunked FileHandle reads, no spawn/download.
+    static func defaultFileSHA256(_ path: String) -> String? {
+        do {
+            let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: path))
+            defer { try? handle.close() }
+            var hasher = SHA256()
+            while true {
+                guard let chunk = try handle.read(upToCount: 1 << 20) else { break }
+                if chunk.isEmpty { break }
+                hasher.update(data: chunk)
+            }
+            return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        } catch {
+            return nil
+        }
+    }
 
     init(
         isExecutable: @Sendable @escaping (String) -> Bool,
         resolveWorker: @Sendable @escaping () throws -> WorkerLaunchConfiguration,
-        runVersion: (@Sendable (String) -> String?)? = nil
+        runVersion: (@Sendable (String) -> String?)? = nil,
+        fileExists: (@Sendable (String) -> Bool)? = nil,
+        fileSize: (@Sendable (String) -> Int64?)? = nil,
+        fileSHA256: (@Sendable (String) -> String?)? = nil,
+        modelsRoot: URL? = nil
     ) {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
         let rv: @Sendable (String) -> String?
@@ -165,16 +211,66 @@ struct RuntimeReadinessChecker: Sendable {
             isExecutable: isExecutable,
             runVersion: rv
         )
+        self.fileExists = fileExists ?? Self.defaultFileExists
+        self.fileSize = fileSize ?? Self.defaultFileSize
+        self.fileSHA256 = fileSHA256 ?? Self.defaultFileSHA256
+        self.modelsRoot = modelsRoot
     }
 
     init(
         resolver: ExternalToolResolver,
-        resolveWorker: @Sendable @escaping () throws -> WorkerLaunchConfiguration
+        resolveWorker: @Sendable @escaping () throws -> WorkerLaunchConfiguration,
+        fileExists: (@Sendable (String) -> Bool)? = nil,
+        fileSize: (@Sendable (String) -> Int64?)? = nil,
+        fileSHA256: (@Sendable (String) -> String?)? = nil,
+        modelsRoot: URL? = nil
     ) {
         self.resolver = resolver
         self.isExecutable = resolver.isExecutable
         self.runVersion = resolver.runVersion
         self.resolveWorker = resolveWorker
+        self.fileExists = fileExists ?? Self.defaultFileExists
+        self.fileSize = fileSize ?? Self.defaultFileSize
+        self.fileSHA256 = fileSHA256 ?? Self.defaultFileSHA256
+        self.modelsRoot = modelsRoot
+    }
+
+    /// Model integrity check: existence + byte-size early reject, then SHA-256
+    /// verification against trusted constants. No download or spawn.
+    func checkModel() -> (available: Bool, error: String?, checkpointPath: String?) {
+        let checkpointPath = TrustedInferenceIdentity.checkpointURL(modelsRoot: modelsRoot).path
+        let configPath = TrustedInferenceIdentity.configURL(modelsRoot: modelsRoot).path
+        if !fileExists(checkpointPath) {
+            return (false, "missing checkpoint at \(checkpointPath)", checkpointPath)
+        }
+        if !fileExists(configPath) {
+            return (false, "missing config at \(configPath)", checkpointPath)
+        }
+        guard let checkpointSize = fileSize(checkpointPath) else {
+            return (false, "unreadable checkpoint at \(checkpointPath) (expected \(TrustedInferenceIdentity.checkpointBytes) bytes)", checkpointPath)
+        }
+        if checkpointSize != TrustedInferenceIdentity.checkpointBytes {
+            return (false, "checkpoint size mismatch at \(checkpointPath) (found \(checkpointSize), expected \(TrustedInferenceIdentity.checkpointBytes))", checkpointPath)
+        }
+        guard let configSize = fileSize(configPath) else {
+            return (false, "unreadable config at \(configPath) (expected \(TrustedInferenceIdentity.configBytes) bytes)", checkpointPath)
+        }
+        if configSize != TrustedInferenceIdentity.configBytes {
+            return (false, "config size mismatch at \(configPath) (found \(configSize), expected \(TrustedInferenceIdentity.configBytes))", checkpointPath)
+        }
+        guard let checkpointHash = fileSHA256(checkpointPath) else {
+            return (false, "unreadable checkpoint hash at \(checkpointPath)", checkpointPath)
+        }
+        if checkpointHash.lowercased() != TrustedInferenceIdentity.checkpointSHA256.lowercased() {
+            return (false, "checkpoint hash mismatch at \(checkpointPath) (expected \(TrustedInferenceIdentity.checkpointSHA256), got \(checkpointHash))", checkpointPath)
+        }
+        guard let configHash = fileSHA256(configPath) else {
+            return (false, "unreadable config hash at \(configPath)", checkpointPath)
+        }
+        if configHash.lowercased() != TrustedInferenceIdentity.configSHA256.lowercased() {
+            return (false, "config hash mismatch at \(configPath) (expected \(TrustedInferenceIdentity.configSHA256), got \(configHash))", checkpointPath)
+        }
+        return (true, nil, checkpointPath)
     }
 
     static var live: RuntimeReadinessChecker {
@@ -390,6 +486,9 @@ struct RuntimeReadinessChecker: Sendable {
         let ytDlpInstalled: String? = yt.isAvailable ? yt.version : yt.installedVersion
         let nodeInstalled: String? = node.isAvailable ? node.version : node.installedVersion
 
+        // Model readiness is independent of worker/tool state.
+        let model = checkModel()
+
         do {
             let config = try resolveWorker()
             let pythonPath = config.pythonExecutable.path
@@ -416,7 +515,10 @@ struct RuntimeReadinessChecker: Sendable {
                     nodeManagedURL: node.managedURL,
                     ffmpegAttemptedPath: ff.attemptedPath,
                     ytDlpAttemptedPath: yt.attemptedPath,
-                    nodeAttemptedPath: node.attemptedPath
+                    nodeAttemptedPath: node.attemptedPath,
+                    modelAvailable: model.available,
+                    modelError: model.error,
+                    modelCheckpointPath: model.checkpointPath
                 )
             } else {
                 return RuntimeReadiness(
@@ -440,7 +542,10 @@ struct RuntimeReadinessChecker: Sendable {
                     nodeManagedURL: node.managedURL,
                     ffmpegAttemptedPath: ff.attemptedPath,
                     ytDlpAttemptedPath: yt.attemptedPath,
-                    nodeAttemptedPath: node.attemptedPath
+                    nodeAttemptedPath: node.attemptedPath,
+                    modelAvailable: model.available,
+                    modelError: model.error,
+                    modelCheckpointPath: model.checkpointPath
                 )
             }
         } catch {
@@ -466,7 +571,10 @@ struct RuntimeReadinessChecker: Sendable {
                 nodeManagedURL: node.managedURL,
                 ffmpegAttemptedPath: ff.attemptedPath,
                 ytDlpAttemptedPath: yt.attemptedPath,
-                nodeAttemptedPath: node.attemptedPath
+                nodeAttemptedPath: node.attemptedPath,
+                modelAvailable: model.available,
+                modelError: model.error,
+                modelCheckpointPath: model.checkpointPath
             )
         }
     }

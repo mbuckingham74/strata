@@ -83,6 +83,7 @@
 		A10000000000000000000051 /* YtDlpAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000051 /* YtDlpAvailabilityTests.swift */; };
 		A10000000000000000000052 /* NodeAvailability.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000052 /* NodeAvailability.swift */; };
 		A10000000000000000000053 /* NodeAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000053 /* NodeAvailabilityTests.swift */; };
+		A10000000000000000000054 /* RuntimeReadinessModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000054 /* RuntimeReadinessModelTests.swift */; };
 		A1000000000000000000004A /* InferenceSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004A /* InferenceSetup.swift */; };
 		A1000000000000000000004B /* InferenceSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004B /* InferenceSetupView.swift */; };
 		A1000000000000000000004C /* InferenceSetupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004C /* InferenceSetupTests.swift */; };
@@ -183,6 +184,7 @@
 		B10000000000000000000051 /* YtDlpAvailabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YtDlpAvailabilityTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000052 /* NodeAvailability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeAvailability.swift; sourceTree = "<group>"; };
 		B10000000000000000000053 /* NodeAvailabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeAvailabilityTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000054 /* RuntimeReadinessModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeReadinessModelTests.swift; sourceTree = "<group>"; };
 		B1000000000000000000004A /* InferenceSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSetup.swift; sourceTree = "<group>"; };
 		B1000000000000000000004B /* InferenceSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSetupView.swift; sourceTree = "<group>"; };
 		B1000000000000000000004C /* InferenceSetupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSetupTests.swift; sourceTree = "<group>"; };
@@ -306,6 +308,7 @@
 				B1000000000000000000004F /* FFmpegAvailabilityTests.swift */,
 				B10000000000000000000051 /* YtDlpAvailabilityTests.swift */,
 				B10000000000000000000053 /* NodeAvailabilityTests.swift */,
+				B10000000000000000000054 /* RuntimeReadinessModelTests.swift */,
 				B1000000000000000000004C /* InferenceSetupTests.swift */,
 				52BB6F95A001A67E69DB3822 /* ExternalToolResolverTests.swift */,
 			);
@@ -660,6 +663,7 @@
 				A1000000000000000000004F /* FFmpegAvailabilityTests.swift in Sources */,
 				A10000000000000000000051 /* YtDlpAvailabilityTests.swift in Sources */,
 				A10000000000000000000053 /* NodeAvailabilityTests.swift in Sources */,
+				A10000000000000000000054 /* RuntimeReadinessModelTests.swift in Sources */,
 				A1000000000000000000004C /* InferenceSetupTests.swift in Sources */,
 				37CFDD388993CD7D884327A4 /* ExternalToolResolverTests.swift in Sources */,
 			);
