@@ -202,6 +202,179 @@ final class StrataProjectPersistence: @unchecked Sendable {
         return project
     }
 
+    // MARK: - Enumeration
+
+    func enumerateProjects() -> [StrataProject] {
+        let root = projectsRootURL()
+        guard fileManager.fileExists(atPath: root.path) else { return [] }
+        var isDir: ObjCBool = false
+        guard fileManager.fileExists(atPath: root.path, isDirectory: &isDir), isDir.boolValue else { return [] }
+        guard let contents = try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey], options: .skipsHiddenFiles) else {
+            return []
+        }
+        var projects: [StrataProject] = []
+        for url in contents {
+            var isDirectory: ObjCBool = false
+            // Use fileExists to handle symlinks correctly; also check resource value
+            if fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue {
+                let projectID = url.lastPathComponent
+                if let loaded = try? load(projectID: projectID) {
+                    projects.append(loaded)
+                }
+            } else {
+                // Try resource key fallback for directory detection
+                if let values = try? url.resourceValues(forKeys: [.isDirectoryKey]), values.isDirectory == true {
+                    let projectID = url.lastPathComponent
+                    if let loaded = try? load(projectID: projectID) {
+                        projects.append(loaded)
+                    }
+                }
+            }
+        }
+        projects.sort { $0.lastOpenedAt > $1.lastOpenedAt }
+        return projects
+    }
+
+    // MARK: - Persist completed separation
+
+    func persistCompletedSeparation(project: StrataProject, result: SeparationResult, artworkSourceURL: URL?) throws {
+        var stemURLs: [StemName: URL] = [:]
+        for (name, artifact) in result.stems {
+            stemURLs[name] = artifact.url
+        }
+        try persistAssets(for: project, mixtureSourceURL: result.inputURL, manifestSourceURL: result.manifestURL, stemSourceURLs: stemURLs, artworkSourceURL: artworkSourceURL)
+    }
+
+    func persistAssets(for project: StrataProject, mixtureSourceURL: URL, manifestSourceURL: URL, stemSourceURLs: [StemName: URL], artworkSourceURL: URL?) throws {
+        try project.validate()
+        let dir = projectDirectory(for: project.id)
+        try project.validateContainment(projectDirectory: dir, fileManager: fileManager)
+
+        // Validate source URLs exist and stem dict completeness
+        guard fileManager.fileExists(atPath: mixtureSourceURL.path) else {
+            throw StrataProjectPersistenceError.fileNotFound(mixtureSourceURL.path)
+        }
+        var isDir: ObjCBool = false
+        _ = fileManager.fileExists(atPath: mixtureSourceURL.path, isDirectory: &isDir)
+        if isDir.boolValue {
+            throw StrataProjectPersistenceError.readFailed("mixture source is directory: \(mixtureSourceURL.path)")
+        }
+        guard fileManager.fileExists(atPath: manifestSourceURL.path) else {
+            throw StrataProjectPersistenceError.fileNotFound(manifestSourceURL.path)
+        }
+        isDir = false
+        _ = fileManager.fileExists(atPath: manifestSourceURL.path, isDirectory: &isDir)
+        if isDir.boolValue {
+            throw StrataProjectPersistenceError.readFailed("manifest source is directory: \(manifestSourceURL.path)")
+        }
+        guard stemSourceURLs.count == 6, Set(stemSourceURLs.keys) == StemName.requiredSet else {
+            throw StrataProjectPersistenceError.writeFailed("stemSourceURLs must contain exactly 6 required stems")
+        }
+        for stem in StemName.allCases {
+            guard let url = stemSourceURLs[stem] else {
+                throw StrataProjectPersistenceError.fileNotFound("missing stem \(stem.rawValue)")
+            }
+            guard fileManager.fileExists(atPath: url.path) else {
+                throw StrataProjectPersistenceError.fileNotFound(url.path)
+            }
+            var isD: ObjCBool = false
+            _ = fileManager.fileExists(atPath: url.path, isDirectory: &isD)
+            if isD.boolValue {
+                throw StrataProjectPersistenceError.readFailed("stem source is directory: \(url.path)")
+            }
+        }
+        if let artURL = artworkSourceURL {
+            guard fileManager.fileExists(atPath: artURL.path) else {
+                throw StrataProjectPersistenceError.fileNotFound(artURL.path)
+            }
+            var isD: ObjCBool = false
+            _ = fileManager.fileExists(atPath: artURL.path, isDirectory: &isD)
+            if isD.boolValue {
+                throw StrataProjectPersistenceError.readFailed("artwork source is directory: \(artURL.path)")
+            }
+            let ext = artURL.pathExtension
+            guard !ext.isEmpty, !ext.contains("/"), !ext.contains("\\") else {
+                throw StrataProjectPersistenceError.writeFailed("artwork source missing extension: \(artURL.path)")
+            }
+        }
+
+        // Create directories
+        let sourceDir = dir.appendingPathComponent("source", isDirectory: true)
+        let separationDir = dir.appendingPathComponent("separation", isDirectory: true)
+        try fileManager.createDirectory(at: sourceDir, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: separationDir, withIntermediateDirectories: true)
+
+        // Helper to copy after removing existing dest
+        func copyAsset(from src: URL, to dst: URL) throws {
+            if fileManager.fileExists(atPath: dst.path) {
+                try fileManager.removeItem(at: dst)
+            }
+            do {
+                try fileManager.copyItem(at: src, to: dst)
+            } catch {
+                throw StrataProjectPersistenceError.writeFailed("copy \(src.lastPathComponent) -> \(dst.path): \(error.localizedDescription)")
+            }
+        }
+
+        // Copy mixture
+        let mixtureDest = dir.appendingPathComponent(project.canonicalInputPath, isDirectory: false)
+        try copyAsset(from: mixtureSourceURL, to: mixtureDest)
+
+        // Copy stems
+        for stem in StemName.allCases {
+            guard let src = stemSourceURLs[stem] else { continue }
+            let dest = dir.appendingPathComponent(StrataProject.stemRelativePath(for: stem), isDirectory: false)
+            try copyAsset(from: src, to: dest)
+        }
+
+        // Copy manifest
+        let manifestDest = dir.appendingPathComponent(project.inferenceManifestPath, isDirectory: false)
+        try copyAsset(from: manifestSourceURL, to: manifestDest)
+
+        // Copy artwork if provided
+        var mutableProject = project
+        if let artURL = artworkSourceURL {
+            let ext = artURL.pathExtension
+            // Remove any existing artwork.* files with different ext to avoid stale files (optional, keep minimal: just copy new)
+            let newArtworkPath = "source/artwork.\(ext)"
+            let artworkDest = dir.appendingPathComponent(newArtworkPath, isDirectory: false)
+            // If artworkPath previously had different ext, remove old file if different destination
+            if let existing = mutableProject.artworkPath, existing != newArtworkPath {
+                let oldDest = dir.appendingPathComponent(existing, isDirectory: false)
+                if fileManager.fileExists(atPath: oldDest.path) {
+                    try? fileManager.removeItem(at: oldDest)
+                }
+            }
+            try copyAsset(from: artURL, to: artworkDest)
+            mutableProject.artworkPath = newArtworkPath
+        } else {
+            // If project has artworkPath, ensure file exists after persist (validates self-containment)
+            if let artPath = mutableProject.artworkPath {
+                let artDest = dir.appendingPathComponent(artPath, isDirectory: false)
+                guard fileManager.fileExists(atPath: artDest.path) else {
+                    throw StrataProjectPersistenceError.fileNotFound("artwork missing at \(artPath)")
+                }
+            }
+        }
+
+        // Only after all assets succeeded, write project.json
+        try save(mutableProject)
+    }
+
+    // MARK: - Load separation result (project layout)
+
+    func loadSeparationResult(for projectID: String) throws -> SeparationResult {
+        let project = try load(projectID: projectID)
+        return try loadSeparationResult(for: project)
+    }
+
+    func loadSeparationResult(for project: StrataProject) throws -> SeparationResult {
+        try project.validate()
+        let dir = projectDirectory(for: project.id)
+        try project.validateContainment(projectDirectory: dir, fileManager: fileManager)
+        return try SeparationValidator.validatedResult(forProjectDirectory: dir, project: project)
+    }
+
     // MARK: - Test seam (validated)
 
     /// Test seam — validates canonical location. Only canonical `projectsRoot/<projectID>/project.json` is accepted.

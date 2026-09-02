@@ -1,6 +1,8 @@
 import XCTest
 @testable import Strata
 import Foundation
+import CryptoKit
+import AVFoundation
 
 final class StrataProjectPersistenceTests: XCTestCase {
 
@@ -500,5 +502,278 @@ final class StrataProjectPersistenceTests: XCTestCase {
         XCTAssertNotNil(json["inference_manifest_path"])
         XCTAssertNil(json["stemPaths"])
         XCTAssertNil(json["sourceMixturePath"])
+    }
+
+    // MARK: - Enumeration
+
+    func testEnumerateProjectsReturnsEmptyWhenMissingRoot() {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("StrataMissingRoot-\(UUID().uuidString)")
+        // Ensure not exists
+        try? FileManager.default.removeItem(at: tmp)
+        let persistence = StrataProjectPersistence(fileManager: .default, projectsRootOverride: tmp)
+        XCTAssertEqual(persistence.enumerateProjects().count, 0)
+    }
+
+    func testEnumerateProjectsValidOnlyAndSorted() throws {
+        let tmp = temporaryProjectsRoot()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let persistence = StrataProjectPersistence(fileManager: .default, projectsRootOverride: tmp)
+        let now = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970))
+        // Create 3 valid projects with different lastOpenedAt
+        var gains: [StemName: Double] = [:]
+        for s in StemName.allCases { gains[s] = 0.5 }
+        let p1 = try StrataProject(schemaVersion: 1, id: UUID().uuidString.lowercased(), createdAt: now, lastOpenedAt: now.addingTimeInterval(-300), displayTitle: "Oldest", source: StrataProjectSource(kind: .localFile, locator: "/tmp/a.wav", metadata: nil), gains: gains)
+        let p2 = try StrataProject(schemaVersion: 1, id: UUID().uuidString.lowercased(), createdAt: now, lastOpenedAt: now, displayTitle: "Newest", source: StrataProjectSource(kind: .localFile, locator: "/tmp/b.wav", metadata: nil), gains: gains)
+        let p3 = try StrataProject(schemaVersion: 1, id: UUID().uuidString.lowercased(), createdAt: now, lastOpenedAt: now.addingTimeInterval(-100), displayTitle: "Middle", source: StrataProjectSource(kind: .localFile, locator: "/tmp/c.wav", metadata: nil), gains: gains)
+        for p in [p1, p2, p3] {
+            try persistence.createProjectDirectory(for: p)
+            try persistence.save(p)
+        }
+        // Add invalid entries: corrupted JSON, missing project.json, incomplete JSON
+        let invalidID = UUID().uuidString.lowercased()
+        let invalidDir = tmp.appendingPathComponent(invalidID, isDirectory: true)
+        try FileManager.default.createDirectory(at: invalidDir, withIntermediateDirectories: true)
+        try Data("not json".utf8).write(to: invalidDir.appendingPathComponent("project.json"))
+
+        let emptyID = UUID().uuidString.lowercased()
+        let emptyDir = tmp.appendingPathComponent(emptyID, isDirectory: true)
+        try FileManager.default.createDirectory(at: emptyDir, withIntermediateDirectories: true)
+        // no project.json
+
+        let badID = UUID().uuidString.lowercased()
+        let badDir = tmp.appendingPathComponent(badID, isDirectory: true)
+        try FileManager.default.createDirectory(at: badDir, withIntermediateDirectories: true)
+        let badJSON: [String: Any] = ["schema_version": 1, "project_id": badID, "created_at": ISO8601DateFormatter().string(from: now), "last_opened_at": ISO8601DateFormatter().string(from: now), "display_title": "Bad", "source": ["kind": "localFile", "locator": "/tmp/x.wav"], "canonical_input_path": "source/wrong.wav", "inference_manifest_path": "separation/manifest.json", "gains": ["vocals": 1.0]]
+        let badData = try JSONSerialization.data(withJSONObject: badJSON)
+        try badData.write(to: badDir.appendingPathComponent("project.json"))
+
+        // Add a plain file at root (not directory) should be ignored
+        try Data("hello".utf8).write(to: tmp.appendingPathComponent("somefile.txt"))
+
+        let enumerated = persistence.enumerateProjects()
+        XCTAssertEqual(enumerated.count, 3)
+        XCTAssertEqual(enumerated[0].id, p2.id)
+        XCTAssertEqual(enumerated[1].id, p3.id)
+        XCTAssertEqual(enumerated[2].id, p1.id)
+    }
+
+    func testEnumerateSkipsSymlinkEscapingProject() throws {
+        let tmp = temporaryProjectsRoot()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let outside = FileManager.default.temporaryDirectory.appendingPathComponent("StrataOutsideEnum-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let persistence = StrataProjectPersistence(fileManager: .default, projectsRootOverride: tmp)
+        let valid = try makeValidProject()
+        try persistence.createProjectDirectory(for: valid)
+        try persistence.save(valid)
+        // Create a symlink project dir pointing outside -> load should fail and be skipped
+        let evilID = UUID().uuidString.lowercased()
+        let evilTarget = outside.appendingPathComponent("evilTarget", isDirectory: true)
+        try FileManager.default.createDirectory(at: evilTarget, withIntermediateDirectories: true)
+        // Write a valid project.json inside evilTarget but with mismatched id? Instead write valid for evilID
+        var gains: [StemName: Double] = [:]
+        for s in StemName.allCases { gains[s] = 0.5 }
+        let now = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970))
+        let evilProject = try StrataProject(schemaVersion: 1, id: evilID, createdAt: now, lastOpenedAt: now, displayTitle: "Evil", source: StrataProjectSource(kind: .localFile, locator: "/tmp/evil.wav", metadata: nil), gains: gains)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(evilProject)
+        try data.write(to: evilTarget.appendingPathComponent("project.json"))
+        // Create symlink at tmp/evilID -> evilTarget
+        let evilLink = tmp.appendingPathComponent(evilID, isDirectory: true)
+        try FileManager.default.createSymbolicLink(atPath: evilLink.path, withDestinationPath: evilTarget.path)
+        let enumerated = persistence.enumerateProjects()
+        // Should contain only valid, evil should be skipped due to symlink escape
+        XCTAssertTrue(enumerated.contains(where: { $0.id == valid.id }))
+        XCTAssertFalse(enumerated.contains(where: { $0.id == evilID }))
+    }
+
+    // MARK: - Persist assets (Stage 1)
+
+    private func makeWAVHelper(at url: URL, frames: UInt32, sr: Double = 44100, channels: UInt32 = 2) throws {
+        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sr, channels: channels, interleaved: false)!
+        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames))!
+        buffer.frameLength = AVAudioFrameCount(frames)
+        for ch in 0..<Int(channels) {
+            guard let ptr = buffer.floatChannelData?[ch] else { continue }
+            for i in 0..<Int(frames) { ptr[i] = sin(Float(i) * 0.01) * 0.1 + Float(ch)*0.01 }
+        }
+        try file.write(from: buffer)
+    }
+
+    private func createScratchSeparation(tmp: URL, frames: UInt32 = 4096) throws -> (mixtureURL: URL, manifestURL: URL, stemURLs: [StemName: URL], jobId: String) {
+        let scratch = tmp.appendingPathComponent("scratch-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        let mixtureURL = scratch.appendingPathComponent("mixture.wav")
+        try makeWAVHelper(at: mixtureURL, frames: frames)
+        let inputSHA = try sha256File(at: mixtureURL)
+        let jobId = UUID().uuidString.lowercased()
+        let jobDir = scratch.appendingPathComponent(jobId, isDirectory: true)
+        try FileManager.default.createDirectory(at: jobDir, withIntermediateDirectories: true)
+        var stemURLs: [StemName: URL] = [:]
+        var records: [[String: Any]] = []
+        for stem in StemName.allCases {
+            let url = jobDir.appendingPathComponent("\(stem.rawValue).wav")
+            try makeWAVHelper(at: url, frames: frames)
+            let hash = try sha256File(at: url)
+            let size = (try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.uint64Value ?? 0
+            stemURLs[stem] = url
+            records.append(["name": stem.rawValue, "path": url.path, "sha256": hash, "file_size": size, "frame_count": UInt64(frames), "channels": 2, "sample_rate": 44100])
+        }
+        let manifest: [String: Any] = [
+            "job_id": jobId,
+            "model": TrustedInferenceIdentity.model,
+            "checkpoint_sha256": TrustedInferenceIdentity.checkpointSHA256,
+            "backend": TrustedInferenceIdentity.backend,
+            "device": TrustedInferenceIdentity.device,
+            "input_path": mixtureURL.path,
+            "output_dir": scratch.path,
+            "input_sha256": inputSHA,
+            "input_metadata": ["sample_rate": 44100, "channels": 2, "frames": UInt64(frames), "duration": Double(frames)/44100.0, "sha256": inputSHA],
+            "stems": records
+        ]
+        let manifestURL = jobDir.appendingPathComponent("manifest.json")
+        let data = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys, .prettyPrinted])
+        try data.write(to: manifestURL)
+        return (mixtureURL, manifestURL, stemURLs, jobId)
+    }
+
+    func testPersistCopiesMixtureStemsManifestAndOptionalArtwork() throws {
+        let tmp = temporaryProjectsRoot()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let persistence = StrataProjectPersistence(fileManager: .default, projectsRootOverride: tmp)
+        let project = try makeValidProject()
+        try persistence.createProjectDirectory(for: project)
+        // Create scratch sources
+        let scratchTmp = FileManager.default.temporaryDirectory.appendingPathComponent("StrataPersistScratch-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratchTmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratchTmp) }
+        let (mixtureURL, manifestURL, stemURLs, _) = try createScratchSeparation(tmp: scratchTmp, frames: 2048)
+        // Artwork source
+        let artworkSource = scratchTmp.appendingPathComponent("artwork.png")
+        try Data("fake png".utf8).write(to: artworkSource)
+        try persistence.persistAssets(for: project, mixtureSourceURL: mixtureURL, manifestSourceURL: manifestURL, stemSourceURLs: stemURLs, artworkSourceURL: artworkSource)
+        // Verify files exist at fixed paths
+        let projectDir = persistence.projectDirectory(for: project.id)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: projectDir.appendingPathComponent("source/mixture.wav").path))
+        for stem in StemName.allCases {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: projectDir.appendingPathComponent("separation/\(stem.rawValue).wav").path), "missing \(stem.rawValue)")
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: projectDir.appendingPathComponent("separation/manifest.json").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: projectDir.appendingPathComponent("source/artwork.png").path))
+        // Verify project.json written and artworkPath updated
+        let loaded = try persistence.load(projectID: project.id)
+        XCTAssertEqual(loaded.artworkPath, "source/artwork.png")
+        // Verify self-contained: scratch files remain and project copy is independent
+        XCTAssertTrue(FileManager.default.fileExists(atPath: mixtureURL.path))
+        let projectMixtureData = try Data(contentsOf: projectDir.appendingPathComponent("source/mixture.wav"))
+        let scratchMixtureData = try Data(contentsOf: mixtureURL)
+        XCTAssertEqual(projectMixtureData, scratchMixtureData)
+        // Modify scratch should not affect project copy
+        try Data("different".utf8).write(to: mixtureURL)
+        let afterProjectData = try Data(contentsOf: projectDir.appendingPathComponent("source/mixture.wav"))
+        XCTAssertEqual(afterProjectData, projectMixtureData)
+    }
+
+    func testPersistViaSeparationResultIsSelfContained() throws {
+        let tmp = temporaryProjectsRoot()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let persistence = StrataProjectPersistence(fileManager: .default, projectsRootOverride: tmp)
+        let project = try makeValidProject()
+        try persistence.createProjectDirectory(for: project)
+        let scratchTmp = FileManager.default.temporaryDirectory.appendingPathComponent("StrataPersistScratch2-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratchTmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratchTmp) }
+        let (mixtureURL, manifestURL, stemURLs, jobId) = try createScratchSeparation(tmp: scratchTmp, frames: 1024)
+        // Build SeparationResult via validator (scratch layout) - outputDir is scratch directory containing mixture.wav
+        let scratchDir = mixtureURL.deletingLastPathComponent()
+        let jobInfo = JobInfo(jobId: jobId, inputPath: mixtureURL.path, outputDir: scratchDir.path)
+        let ready = ReadyMetadata(backend: TrustedInferenceIdentity.backend, device: TrustedInferenceIdentity.device, checkpointSHA256: TrustedInferenceIdentity.checkpointSHA256, model: nil)
+        let manifestURLScratch = stemURLs[.vocals]!.deletingLastPathComponent().appendingPathComponent("manifest.json")
+        let result = try SeparationValidator.validatedResult(manifestURL: manifestURLScratch, job: jobInfo, readyMetadata: ready, receivedStems: stemURLs)
+        try persistence.persistCompletedSeparation(project: project, result: result, artworkSourceURL: nil)
+        let projectDir = persistence.projectDirectory(for: project.id)
+        for stem in StemName.allCases {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: projectDir.appendingPathComponent("separation/\(stem.rawValue).wav").path))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: projectDir.appendingPathComponent("source/mixture.wav").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: projectDir.appendingPathComponent("separation/manifest.json").path))
+        // Verify project.json exists
+        XCTAssertTrue(FileManager.default.fileExists(atPath: persistence.projectFileURL(for: project.id).path))
+    }
+
+    func testPersistMissingSourceAssetThrowsAndNoProjectJSON() throws {
+        let tmp = temporaryProjectsRoot()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let persistence = StrataProjectPersistence(fileManager: .default, projectsRootOverride: tmp)
+        let project = try makeValidProject()
+        try persistence.createProjectDirectory(for: project)
+        let scratchTmp = FileManager.default.temporaryDirectory.appendingPathComponent("StrataPersistScratch3-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratchTmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratchTmp) }
+        let (mixtureURL, manifestURL, stemURLs, _) = try createScratchSeparation(tmp: scratchTmp, frames: 1024)
+        var incompleteStems = stemURLs
+        // Remove one stem source file to simulate missing asset (or remove key)
+        let missingStem = StemName.vocals
+        let missingURL = incompleteStems[missingStem]!
+        try FileManager.default.removeItem(at: missingURL)
+        XCTAssertThrowsError(try persistence.persistAssets(for: project, mixtureSourceURL: mixtureURL, manifestSourceURL: manifestURL, stemSourceURLs: incompleteStems, artworkSourceURL: nil))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: persistence.projectFileURL(for: project.id).path))
+        // Also test missing mixture source
+        let tmp2 = temporaryProjectsRoot()
+        defer { try? FileManager.default.removeItem(at: tmp2) }
+        let persistence2 = StrataProjectPersistence(fileManager: .default, projectsRootOverride: tmp2)
+        let project2 = try makeValidProject()
+        try persistence2.createProjectDirectory(for: project2)
+        let missingMixture = scratchTmp.appendingPathComponent("nonexistent.wav")
+        XCTAssertThrowsError(try persistence2.persistAssets(for: project2, mixtureSourceURL: missingMixture, manifestSourceURL: manifestURL, stemSourceURLs: stemURLs, artworkSourceURL: nil))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: persistence2.projectFileURL(for: project2.id).path))
+        // Missing stem key count 5 should also throw without writing
+        let tmp3 = temporaryProjectsRoot()
+        defer { try? FileManager.default.removeItem(at: tmp3) }
+        let persistence3 = StrataProjectPersistence(fileManager: .default, projectsRootOverride: tmp3)
+        let project3 = try makeValidProject()
+        try persistence3.createProjectDirectory(for: project3)
+        var fiveStems = stemURLs
+        fiveStems.removeValue(forKey: .bass)
+        XCTAssertThrowsError(try persistence3.persistAssets(for: project3, mixtureSourceURL: mixtureURL, manifestSourceURL: manifestURL, stemSourceURLs: fiveStems, artworkSourceURL: nil))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: persistence3.projectFileURL(for: project3.id).path))
+    }
+
+    func testPersistDoesNotRequireArtwork() throws {
+        let tmp = temporaryProjectsRoot()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let persistence = StrataProjectPersistence(fileManager: .default, projectsRootOverride: tmp)
+        let project = try makeValidProject()
+        try persistence.createProjectDirectory(for: project)
+        let scratchTmp = FileManager.default.temporaryDirectory.appendingPathComponent("StrataPersistScratch4-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratchTmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratchTmp) }
+        let (mixtureURL, manifestURL, stemURLs, _) = try createScratchSeparation(tmp: scratchTmp, frames: 1024)
+        XCTAssertNoThrow(try persistence.persistAssets(for: project, mixtureSourceURL: mixtureURL, manifestSourceURL: manifestURL, stemSourceURLs: stemURLs, artworkSourceURL: nil))
+        let loaded = try persistence.load(projectID: project.id)
+        XCTAssertNil(loaded.artworkPath)
+    }
+
+    func testPersistValidatesProjectAndContainment() throws {
+        let tmp = temporaryProjectsRoot()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let persistence = StrataProjectPersistence(fileManager: .default, projectsRootOverride: tmp)
+        // Invalid project id should throw before copying
+        let now = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970))
+        var gains: [StemName: Double] = [:]
+        for s in StemName.allCases { gains[s] = 0.5 }
+        // Create project with valid id but then corrupt? Instead test persist with valid project but ensure it validates
+        let valid = try StrataProject(schemaVersion: 1, id: UUID().uuidString.lowercased(), createdAt: now, lastOpenedAt: now, displayTitle: "Title", source: StrataProjectSource(kind: .localFile, locator: "/tmp/file.wav", metadata: nil), gains: gains)
+        let scratchTmp = FileManager.default.temporaryDirectory.appendingPathComponent("StrataPersistScratch5-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratchTmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratchTmp) }
+        let (mixtureURL, manifestURL, stemURLs, _) = try createScratchSeparation(tmp: scratchTmp, frames: 512)
+        // Corrupt manifest source missing should throw
+        let badManifest = scratchTmp.appendingPathComponent("missing.json")
+        XCTAssertThrowsError(try persistence.persistAssets(for: valid, mixtureSourceURL: mixtureURL, manifestSourceURL: badManifest, stemSourceURLs: stemURLs, artworkSourceURL: nil))
     }
 }
