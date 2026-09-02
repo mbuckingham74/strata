@@ -413,6 +413,60 @@ final class InferenceController {
         errorMessage = nil
     }
 
+    func resetForNewSession() {
+        operationGeneration &+= 1
+        latestGeneration = operationGeneration
+        currentTask?.cancel()
+        currentTask = nil
+        result = nil
+        state = .idle
+        statusMessage = "Ready to create strata"
+        creationPhase = nil
+        isYouTubeFlow = false
+        errorMessage = nil
+        exportBaseName = nil
+        youTubeExportMetadata = nil
+        youTubeExportArtworkURL = nil
+        preparedYouTubeMP3Export = nil
+        loadedYouTubeSource = nil
+        loadedYouTubePreview = nil
+        loadedYouTubeURL = nil
+        clearEditableMetadata()
+    }
+
+    func adoptCompleted(project: StrataProject, result: SeparationResult, artworkURL: URL?) {
+        operationGeneration &+= 1
+        latestGeneration = operationGeneration
+        currentTask?.cancel()
+        currentTask = nil
+        self.result = result
+        state = .completed
+        statusMessage = "Complete — 6 strata"
+        creationPhase = .complete
+        isYouTubeFlow = (project.source.kind == .youTube)
+        errorMessage = nil
+        youTubeExportMetadata = project.source.metadata
+        exportBaseName = project.source.metadata?.exportBaseName ?? project.displayTitle
+        if let metadata = project.source.metadata {
+            populateEditableMetadata(from: metadata)
+        } else {
+            clearEditableMetadata()
+            editableTitle = project.displayTitle
+        }
+        youTubeExportArtworkURL = artworkURL
+        if project.source.kind == .youTube, let url = URL(string: project.source.locator) {
+            loadedYouTubeURL = url
+            loadedYouTubeSource = YouTubeIngestResult(audioURL: result.inputURL, metadata: project.source.metadata, artworkURL: artworkURL)
+            loadedYouTubePreview = nil
+            preparedYouTubeMP3Export = nil
+        } else {
+            loadedYouTubeURL = nil
+            loadedYouTubeSource = nil
+            loadedYouTubePreview = nil
+            preparedYouTubeMP3Export = nil
+        }
+    }
+
     /// Start separation via local file URL → canonicalize → inference.
     /// Single source: caller provides original file; we canonicalize to 44.1k stereo Float32 WAV.
     func startSeparation(localFileURL: URL) {

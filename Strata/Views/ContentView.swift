@@ -303,6 +303,19 @@ struct InferenceCard: View {
     @State private var isYouTubeDragging = false
     @State private var exportingFileName: String?
     @State private var savedFileName: String?
+    @Environment(SessionStore.self) private var sessionStore: SessionStore?
+    private var youTubeURLBinding: Binding<String> {
+        Binding(
+            get: { sessionStore?.draftYouTubeURLString ?? youTubeURLString },
+            set: { newValue in
+                if let store = sessionStore {
+                    store.draftYouTubeURLString = newValue
+                } else {
+                    youTubeURLString = newValue
+                }
+            }
+        )
+    }
     private var isExporting: Bool { exportingFileName != nil }
 
     private var completedResult: SeparationResult? {
@@ -410,14 +423,14 @@ struct InferenceCard: View {
 
                 // YouTube source-first workflow
                 VStack(alignment: .leading, spacing: 8) {
-                    TextField("Paste YouTube URL", text: $youTubeURLString)
+                    TextField("Paste YouTube URL", text: youTubeURLBinding)
                         .textFieldStyle(.roundedBorder)
                         .disabled(inferenceController.isSeparating)
                         .accessibilityLabel("YouTube URL")
                         .accessibilityIdentifier("YouTubeURLField")
                     HStack(spacing: 10) {
                         Button {
-                            let trimmed = youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let trimmed = youTubeURLBinding.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return }
                             inferenceController.loadYouTubeSource(youTubeURL: url)
                         } label: {
@@ -425,7 +438,7 @@ struct InferenceCard: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(Color(red: 0.56, green: 0.46, blue: 0.95))
-                        .disabled(youTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating || !inferenceController.isYouTubePreviewReady)
+                        .disabled(youTubeURLBinding.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating || !inferenceController.isYouTubePreviewReady)
                         .accessibilityIdentifier("LoadYouTubeSourceButton")
                     }
                     if let r = inferenceController.runtimeReadiness, !r.isYouTubePreviewReady {
@@ -620,6 +633,9 @@ struct InferenceCard: View {
             .onChange(of: inferenceController.result) { _, result in
                 guard let result else { return }
                 loadCompletedResult(result)
+                if let store = sessionStore {
+                    store.handleCompletedSeparation(result: result, playbackController: playbackController, inferenceController: inferenceController, stemPlaybackController: stemPlaybackController)
+                }
             }
             .onChange(of: inferenceController.preparedYouTubeMP3Export) { _, preparation in
                 guard let preparation else { return }

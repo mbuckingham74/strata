@@ -215,6 +215,28 @@ final class StemPlaybackController {
         setGain(uiPercentToGain(percent), for: stem)
     }
 
+    func resetForNewSession() {
+        transport.stop()
+        stopTimer()
+        result = nil
+        title = nil
+        duration = 0
+        currentTime = 0
+        isPlaying = false
+        mutedStems.removeAll()
+        soloedStems.removeAll()
+        stemGains.removeAll()
+        errorMessage = nil
+    }
+
+    func applyProjectGains(_ gains: [StemName: Double]) {
+        for (stem, value) in gains {
+            let clamped = Float(min(max(value, 0), 1))
+            stemGains[stem] = clamped
+            transport.setGain(clamped, for: stem)
+        }
+    }
+
     // UI 0...100% -> gain 0...1 linear (small localized conversion)
     private func uiPercentToGain(_ percent: Double) -> Float {
         Float(min(max(percent, 0), 100) / 100.0)

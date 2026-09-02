@@ -145,6 +145,7 @@ struct StrataApp: App {
     @State private var playbackController: PlaybackController
     @State private var inferenceController: InferenceController
     @State private var stemPlaybackController: StemPlaybackController
+    @State private var sessionStore: SessionStore
 
     init() {
         let transport = AVAudioEngineTransport()
@@ -153,6 +154,9 @@ struct StrataApp: App {
         let ic = InferenceController()
         _inferenceController = State(initialValue: ic)
         _stemPlaybackController = State(initialValue: StemPlaybackController())
+        // Stage 2: load persisted projects at launch
+        let store = SessionStore()
+        _sessionStore = State(initialValue: store)
         Task { @MainActor in SettingsWindowCentering.shared.start() }
     }
 
@@ -166,6 +170,7 @@ struct StrataApp: App {
                 .background(WindowIDAccessor(identifier: StrataWindowID.main))
                 .frame(minWidth: 1000, minHeight: 650)
                 .preferredColorScheme(appearance.colorScheme)
+                .environment(sessionStore)
                 .onAppear {
                     appDelegate.inferenceController = inferenceController
                 }

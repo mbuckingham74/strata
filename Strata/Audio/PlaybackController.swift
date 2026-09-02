@@ -109,6 +109,17 @@ final class PlaybackController {
         stopTimer()
     }
 
+    func resetForNewSession() {
+        transport.stop()
+        stopTimer()
+        title = nil
+        duration = 0
+        currentTime = 0
+        isPlaying = false
+        sourceURL = nil
+        errorMessage = nil
+    }
+
     // MARK: - Completion
 
     func handleCompletion() {
