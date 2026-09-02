@@ -68,7 +68,7 @@ final class RuntimeReadinessTests: XCTestCase {
         XCTAssertFalse(r.isMp3ExportReady, "MP3 requires FFmpeg")
         XCTAssertTrue(r.isWavExportReady, "WAV stem/mix copy does not require FFmpeg")
         XCTAssertFalse(r.isExportReady)
-        XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.ffmpegPath))
+        XCTAssertTrue(r.sidebarStatus.contains("FFmpeg"))
         XCTAssertTrue(r.sidebarStatus.contains("FFmpeg"))
     }
 
@@ -79,7 +79,7 @@ final class RuntimeReadinessTests: XCTestCase {
         XCTAssertFalse(r.isYouTubeAcquisitionReady)
         XCTAssertFalse(r.isMp3ExportReady)
         XCTAssertTrue(r.isWavExportReady)
-        XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.ffmpegPath))
+        XCTAssertTrue(r.sidebarStatus.contains("FFmpeg"))
         // FFmpeg takes priority over yt-dlp in status
         XCTAssertFalse(r.sidebarStatus.contains("yt-dlp"))
     }
@@ -92,7 +92,7 @@ final class RuntimeReadinessTests: XCTestCase {
         XCTAssertFalse(r.isYouTubeAcquisitionReady)
         XCTAssertTrue(r.isMp3ExportReady, "MP3 export needs only FFmpeg")
         XCTAssertTrue(r.isWavExportReady)
-        XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.ytDlpPath))
+        XCTAssertTrue(r.sidebarStatus.contains("yt-dlp"))
         XCTAssertTrue(r.sidebarStatus.contains("YouTube disabled"))
     }
 
@@ -118,7 +118,7 @@ final class RuntimeReadinessTests: XCTestCase {
         XCTAssertFalse(r.isYouTubeAcquisitionReady)
         XCTAssertFalse(r.isMp3ExportReady)
         XCTAssertTrue(r.isWavExportReady, "WAV still available even when both worker and FFmpeg missing")
-        XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.ffmpegPath))
+        XCTAssertTrue(r.sidebarStatus.contains("FFmpeg"))
     }
 
     func testMissingWorkerPythonPathIncluded() {
@@ -278,7 +278,7 @@ final class RuntimeReadinessTests: XCTestCase {
         XCTAssertTrue(r.isLoadedSeparationReady)
         XCTAssertTrue(r.isMp3ExportReady)
         XCTAssertTrue(r.isWavExportReady)
-        XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.nodePath))
+        XCTAssertTrue(r.sidebarStatus.contains("Node"))
         XCTAssertTrue(r.sidebarStatus.contains("Node"))
         XCTAssertTrue(r.sidebarStatus.contains("YouTube disabled"))
     }
@@ -299,26 +299,26 @@ final class RuntimeReadinessTests: XCTestCase {
     func testSidebarStatusPriority_ffmpegOverWorkerOverYtDlpOverNode() {
         // ffmpeg missing takes priority over node
         let r1 = checker(ffmpeg: false, ytDlp: true, node: false, workerAvailable: true).check()
-        XCTAssertTrue(r1.sidebarStatus.contains(RuntimeReadiness.ffmpegPath))
-        XCTAssertFalse(r1.sidebarStatus.contains(RuntimeReadiness.nodePath))
+        XCTAssertTrue(r1.sidebarStatus.contains("FFmpeg"))
+        XCTAssertFalse(r1.sidebarStatus.contains("Node"))
         // worker missing takes priority over yt-dlp and node
         let r2 = checker(ffmpeg: true, ytDlp: false, node: false, workerAvailable: false).check()
         XCTAssertTrue(r2.sidebarStatus.contains("worker Python"))
         XCTAssertFalse(r2.sidebarStatus.contains("yt-dlp"))
-        XCTAssertFalse(r2.sidebarStatus.contains(RuntimeReadiness.nodePath))
+        XCTAssertFalse(r2.sidebarStatus.contains("Node"))
         // yt-dlp missing takes priority over node
         let r3 = checker(ffmpeg: true, ytDlp: false, node: false, workerAvailable: true).check()
-        XCTAssertTrue(r3.sidebarStatus.contains(RuntimeReadiness.ytDlpPath))
-        XCTAssertFalse(r3.sidebarStatus.contains(RuntimeReadiness.nodePath))
+        XCTAssertTrue(r3.sidebarStatus.contains("yt-dlp"))
+        XCTAssertFalse(r3.sidebarStatus.contains("Node"))
         // node missing only when ffmpeg, worker, yt-dlp present
         let r4 = checker(ffmpeg: true, ytDlp: true, node: false, workerAvailable: true).check()
-        XCTAssertTrue(r4.sidebarStatus.contains(RuntimeReadiness.nodePath))
+        XCTAssertTrue(r4.sidebarStatus.contains("Node"))
     }
 
     func testMissingFFmpeg_disablesYouTubeEvenWhenNodeMissing() {
         let r = checker(ffmpeg: false, ytDlp: false, node: false, workerAvailable: true).check()
         XCTAssertFalse(r.isYouTubeAcquisitionReady)
-        XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.ffmpegPath))
+        XCTAssertTrue(r.sidebarStatus.contains("FFmpeg"))
     }
 
     func testNodeAvailableFlag() {

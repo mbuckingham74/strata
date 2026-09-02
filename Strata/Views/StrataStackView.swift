@@ -573,6 +573,7 @@ struct StrataStackView: View {
         guard !isExporting else { return }
         let metadata = format == .mp3 ? inferenceController.effectiveYouTubeMetadata : nil
         let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
+        let ffmpegURL = inferenceController.runtimeReadiness?.ffmpegExecutableURL
         let capturedQuality = mp3Quality
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
@@ -584,11 +585,11 @@ struct StrataStackView: View {
                 guard response == .OK, let dest = panel.url else { return }
                 exportingFileName = dest.lastPathComponent
                 savedFileName = nil
-                Task { [defaultDirectoryAccess, capturedQuality] in
+                Task { [defaultDirectoryAccess, capturedQuality, ffmpegURL] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
-                            try StemExporter.export(artifact, to: dest, format: format, metadata: metadata, artworkURL: artworkURL, mp3Quality: capturedQuality)
+                            try StemExporter.export(artifact, to: dest, format: format, metadata: metadata, artworkURL: artworkURL, mp3Quality: capturedQuality, ffmpegURL: ffmpegURL)
                         }.value
                         await MainActor.run {
                             exportingFileName = nil
@@ -610,6 +611,7 @@ struct StrataStackView: View {
         guard !isExporting else { return }
         let metadata = format == .mp3 ? inferenceController.effectiveYouTubeMetadata : nil
         let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
+        let ffmpegURL = inferenceController.runtimeReadiness?.ffmpegExecutableURL
         let gains = stemPlaybackController.stemGains
         let capturedQuality = mp3Quality
         let panel = NSSavePanel()
@@ -622,11 +624,11 @@ struct StrataStackView: View {
                 guard response == .OK, let dest = panel.url else { return }
                 exportingFileName = dest.lastPathComponent
                 savedFileName = nil
-                Task { [defaultDirectoryAccess, capturedQuality] in
+                Task { [defaultDirectoryAccess, capturedQuality, ffmpegURL] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
-                            try StemExporter.exportMix(artifacts, to: dest, gains: gains, format: format, metadata: metadata, artworkURL: artworkURL, mp3Quality: capturedQuality)
+                            try StemExporter.exportMix(artifacts, to: dest, gains: gains, format: format, metadata: metadata, artworkURL: artworkURL, mp3Quality: capturedQuality, ffmpegURL: ffmpegURL)
                         }.value
                         await MainActor.run {
                             exportingFileName = nil

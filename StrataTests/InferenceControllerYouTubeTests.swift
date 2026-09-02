@@ -1142,17 +1142,24 @@ final class InferenceControllerYouTubeTests: XCTestCase {
         await controller.shutdownWorker()
     }
 
-    // Default executable resolution must use Apple Silicon Homebrew paths (/opt/homebrew/bin)
+    // Default executable resolution must use Apple Silicon Homebrew paths (/opt/homebrew/bin) via readiness
     func testDefaultYouTubeIngestUsesHomebrewPaths() async throws {
-        let ingest = InferenceController.makeDefaultYouTubeIngest()
+        let readiness = RuntimeReadiness(
+            workerAvailable: true, workerError: nil, workerPythonPath: "/tmp/worker/.venv/bin/python3",
+            ffmpegAvailable: true, ytDlpAvailable: true, nodeAvailable: true,
+            ffmpegExecutableURL: URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg"),
+            ytDlpExecutableURL: URL(fileURLWithPath: "/opt/homebrew/bin/yt-dlp"),
+            nodeExecutableURL: URL(fileURLWithPath: "/opt/homebrew/bin/node")
+        )
+        let ingest = InferenceController.makeDefaultYouTubeIngest(readiness: readiness)
         guard let client = ingest as? YouTubeIngestClient else {
             XCTFail("Default ingest should be YouTubeIngestClient, got \(type(of: ingest))")
             return
         }
         let ytDlpURL = await client.ytDlpURL
         let ffmpegURL = await client.ffmpegURL
-        XCTAssertEqual(ytDlpURL.path, "/opt/homebrew/bin/yt-dlp", "yt-dlp must resolve to Apple Silicon Homebrew path")
-        XCTAssertEqual(ffmpegURL.path, "/opt/homebrew/bin/ffmpeg", "ffmpeg must resolve to Apple Silicon Homebrew path")
+        XCTAssertEqual(ytDlpURL.path, "/opt/homebrew/bin/yt-dlp", "yt-dlp must resolve to Apple Silicon Homebrew path via readiness")
+        XCTAssertEqual(ffmpegURL.path, "/opt/homebrew/bin/ffmpeg", "ffmpeg must resolve to Apple Silicon Homebrew path via readiness")
         XCTAssertTrue(ytDlpURL.isFileURL, "yt-dlp URL must be absolute file URL")
         XCTAssertTrue(ffmpegURL.isFileURL, "ffmpeg URL must be absolute file URL")
         XCTAssertEqual(ytDlpURL.scheme, "file")

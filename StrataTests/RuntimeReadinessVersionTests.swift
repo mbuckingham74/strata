@@ -116,9 +116,9 @@ final class RuntimeReadinessVersionTests: XCTestCase {
         XCTAssertTrue(r.sidebarStatus.contains("mismatch"))
         XCTAssertTrue(r.sidebarStatus.contains("9.0.0"))
         XCTAssertTrue(r.sidebarStatus.contains(ExternalToolCompatibility.ffmpegSupportedVersion))
-        XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.ffmpegPath))
+        XCTAssertTrue(r.sidebarStatus.contains("FFmpeg"))
         // priority: ffmpeg mismatch over worker
-        XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.ffmpegPath))
+        XCTAssertTrue(r.sidebarStatus.contains("FFmpeg"))
     }
 
     func testFFmpegUnreadable_notReady() {
@@ -130,7 +130,7 @@ final class RuntimeReadinessVersionTests: XCTestCase {
         XCTAssertTrue(r.isWavExportReady)
         XCTAssertTrue(r.sidebarStatus.contains("FFmpeg"))
         XCTAssertTrue(r.sidebarStatus.contains(ExternalToolCompatibility.ffmpegSupportedVersion))
-        XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.ffmpegPath))
+        XCTAssertTrue(r.sidebarStatus.contains("FFmpeg"))
     }
 
     func testYtDlpMismatch_keepsLocalSeparation() {
@@ -162,16 +162,16 @@ final class RuntimeReadinessVersionTests: XCTestCase {
     }
 
     func testNodeMismatch_keepsLocalSeparation() {
-        let r = checker(nodeVersion: "26.8.0").check()
+        let r = checker(nodeVersion: "21.0.0").check()
         XCTAssertFalse(r.nodeAvailable)
-        XCTAssertEqual(r.nodeInstalledVersion, "26.8.0")
+        XCTAssertEqual(r.nodeInstalledVersion, "21.0.0")
         XCTAssertTrue(r.isLocalSeparationReady)
         XCTAssertTrue(r.isLoadedSeparationReady)
         XCTAssertFalse(r.isYouTubePreviewReady)
         XCTAssertFalse(r.isYouTubeAcquisitionReady)
         XCTAssertTrue(r.isMp3ExportReady)
         XCTAssertTrue(r.sidebarStatus.contains("Node"))
-        XCTAssertTrue(r.sidebarStatus.contains("26.8.0"))
+        XCTAssertTrue(r.sidebarStatus.contains("21.0.0"))
         XCTAssertTrue(r.sidebarStatus.contains(ExternalToolCompatibility.nodeSupportedVersion))
         XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.nodePath))
     }
@@ -189,7 +189,7 @@ final class RuntimeReadinessVersionTests: XCTestCase {
     func testFFmpegMismatch_priorityOverWorker() {
         let r = checker(ffmpegVersion: "9.0.0", workerAvailable: false).check()
         // Both not ready, but sidebar should prioritize ffmpeg
-        XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.ffmpegPath))
+        XCTAssertTrue(r.sidebarStatus.contains("FFmpeg"))
         XCTAssertFalse(r.sidebarStatus.contains("worker Python"))
     }
 
@@ -200,13 +200,13 @@ final class RuntimeReadinessVersionTests: XCTestCase {
     }
 
     func testYtDlpMismatch_priorityOverNode() {
-        let r = checker(ytDlpVersion: "2026.08.18", nodeVersion: "26.8.0").check()
+        let r = checker(ytDlpVersion: "2026.08.18", nodeVersion: "21.0.0").check()
         XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.ytDlpPath))
         XCTAssertFalse(r.sidebarStatus.contains(RuntimeReadiness.nodePath))
     }
 
     func testNodeMismatch_onlyWhenOthersReady() {
-        let r = checker(nodeVersion: "26.8.0").check()
+        let r = checker(nodeVersion: "21.0.0").check()
         XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.nodePath))
         XCTAssertTrue(r.sidebarStatus.contains("Node"))
     }
@@ -249,7 +249,7 @@ final class RuntimeReadinessVersionTests: XCTestCase {
         XCTAssertFalse(r.ffmpegAvailable)
         XCTAssertNil(r.ffmpegInstalledVersion)
         XCTAssertTrue(r.sidebarStatus.contains("missing FFmpeg"))
-        XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.ffmpegPath))
+        XCTAssertTrue(r.sidebarStatus.contains("FFmpeg"))
         XCTAssertFalse(r.sidebarStatus.contains("mismatch"))
     }
 

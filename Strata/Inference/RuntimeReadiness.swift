@@ -11,6 +11,18 @@ struct RuntimeReadiness: Sendable, Equatable {
     let ffmpegInstalledVersion: String?
     let ytDlpInstalledVersion: String?
     let nodeInstalledVersion: String?
+    let ffmpegExecutableURL: URL?
+    let ytDlpExecutableURL: URL?
+    let nodeExecutableURL: URL?
+    let ffmpegOrigin: ToolOrigin?
+    let ytDlpOrigin: ToolOrigin?
+    let nodeOrigin: ToolOrigin?
+    let ffmpegManagedURL: URL?
+    let ytDlpManagedURL: URL?
+    let nodeManagedURL: URL?
+    let ffmpegAttemptedPath: String?
+    let ytDlpAttemptedPath: String?
+    let nodeAttemptedPath: String?
 
     static let ffmpegPath = "/opt/homebrew/bin/ffmpeg"
     static let ytDlpPath = "/opt/homebrew/bin/yt-dlp"
@@ -25,7 +37,19 @@ struct RuntimeReadiness: Sendable, Equatable {
         nodeAvailable: Bool,
         ffmpegInstalledVersion: String? = nil,
         ytDlpInstalledVersion: String? = nil,
-        nodeInstalledVersion: String? = nil
+        nodeInstalledVersion: String? = nil,
+        ffmpegExecutableURL: URL? = nil,
+        ytDlpExecutableURL: URL? = nil,
+        nodeExecutableURL: URL? = nil,
+        ffmpegOrigin: ToolOrigin? = nil,
+        ytDlpOrigin: ToolOrigin? = nil,
+        nodeOrigin: ToolOrigin? = nil,
+        ffmpegManagedURL: URL? = nil,
+        ytDlpManagedURL: URL? = nil,
+        nodeManagedURL: URL? = nil,
+        ffmpegAttemptedPath: String? = nil,
+        ytDlpAttemptedPath: String? = nil,
+        nodeAttemptedPath: String? = nil
     ) {
         self.workerAvailable = workerAvailable
         self.workerError = workerError
@@ -36,6 +60,18 @@ struct RuntimeReadiness: Sendable, Equatable {
         self.ffmpegInstalledVersion = ffmpegInstalledVersion
         self.ytDlpInstalledVersion = ytDlpInstalledVersion
         self.nodeInstalledVersion = nodeInstalledVersion
+        self.ffmpegExecutableURL = ffmpegExecutableURL
+        self.ytDlpExecutableURL = ytDlpExecutableURL
+        self.nodeExecutableURL = nodeExecutableURL
+        self.ffmpegOrigin = ffmpegOrigin
+        self.ytDlpOrigin = ytDlpOrigin
+        self.nodeOrigin = nodeOrigin
+        self.ffmpegManagedURL = ffmpegManagedURL
+        self.ytDlpManagedURL = ytDlpManagedURL
+        self.nodeManagedURL = nodeManagedURL
+        self.ffmpegAttemptedPath = ffmpegAttemptedPath
+        self.ytDlpAttemptedPath = ytDlpAttemptedPath
+        self.nodeAttemptedPath = nodeAttemptedPath
     }
 
     // Local file separation requires worker + FFmpeg (canonicalization)
@@ -60,9 +96,11 @@ struct RuntimeReadiness: Sendable, Equatable {
     var sidebarStatus: String {
         if !ffmpegAvailable {
             if let installed = ffmpegInstalledVersion {
-                return "Setup needed · FFmpeg version mismatch at \(Self.ffmpegPath) (installed \(installed), supported \(ExternalToolCompatibility.ffmpegSupportedVersion))"
+                let path = ffmpegAttemptedPath ?? ffmpegExecutableURL?.path ?? ffmpegManagedURL?.path ?? Self.ffmpegPath
+                return "Setup needed · FFmpeg version mismatch at \(path) (installed \(installed), supported \(ExternalToolCompatibility.ffmpegSupportedVersion))"
             }
-            return "Setup needed · missing FFmpeg at \(Self.ffmpegPath)"
+            let path = ffmpegAttemptedPath ?? ffmpegManagedURL?.path ?? Self.ffmpegPath
+            return "Setup needed · missing FFmpeg at \(path)"
         }
         if !workerAvailable {
             if let path = workerPythonPath, !path.isEmpty {
@@ -78,15 +116,19 @@ struct RuntimeReadiness: Sendable, Equatable {
         }
         if !ytDlpAvailable {
             if let installed = ytDlpInstalledVersion {
-                return "YouTube disabled · yt-dlp version mismatch at \(Self.ytDlpPath) (installed \(installed), supported \(ExternalToolCompatibility.ytDlpSupportedVersion))"
+                let path = ytDlpAttemptedPath ?? ytDlpExecutableURL?.path ?? ytDlpManagedURL?.path ?? Self.ytDlpPath
+                return "YouTube disabled · yt-dlp version mismatch at \(path) (installed \(installed), supported \(ExternalToolCompatibility.ytDlpSupportedVersion))"
             }
-            return "YouTube disabled · missing yt-dlp at \(Self.ytDlpPath)"
+            let path = ytDlpAttemptedPath ?? ytDlpManagedURL?.path ?? Self.ytDlpPath
+            return "YouTube disabled · missing yt-dlp at \(path)"
         }
         if !nodeAvailable {
             if let installed = nodeInstalledVersion {
-                return "YouTube disabled · Node version mismatch at \(Self.nodePath) (installed \(installed), supported \(ExternalToolCompatibility.nodeSupportedVersion))"
+                let path = nodeAttemptedPath ?? nodeExecutableURL?.path ?? nodeManagedURL?.path ?? Self.nodePath
+                return "YouTube disabled · Node version mismatch at \(path) (installed \(installed), supported \(ExternalToolCompatibility.nodeSupportedVersion))"
             }
-            return "YouTube disabled · missing Node at \(Self.nodePath)"
+            let path = nodeAttemptedPath ?? nodeManagedURL?.path ?? Self.nodePath
+            return "YouTube disabled · missing Node at \(path)"
         }
         return "Separation ready · runs on this Mac"
     }
@@ -96,32 +138,49 @@ struct RuntimeReadinessChecker: Sendable {
     var isExecutable: @Sendable (String) -> Bool
     var resolveWorker: @Sendable () throws -> WorkerLaunchConfiguration
     var runVersion: @Sendable (String) -> String?
+    var resolver: ExternalToolResolver
 
     init(
         isExecutable: @Sendable @escaping (String) -> Bool,
         resolveWorker: @Sendable @escaping () throws -> WorkerLaunchConfiguration,
         runVersion: (@Sendable (String) -> String?)? = nil
     ) {
-        self.isExecutable = isExecutable
-        self.resolveWorker = resolveWorker
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let rv: @Sendable (String) -> String?
         if let runVersion {
-            self.runVersion = runVersion
+            rv = runVersion
         } else {
-            // Default for backward compatibility (tests that only mock isExecutable): assume supported versions.
-            self.runVersion = { path in
+            rv = { path in
                 if path == RuntimeReadiness.ffmpegPath { return ExternalToolCompatibility.ffmpegSupportedVersion }
                 if path == RuntimeReadiness.ytDlpPath { return ExternalToolCompatibility.ytDlpSupportedVersion }
                 if path == RuntimeReadiness.nodePath { return ExternalToolCompatibility.nodeSupportedVersion }
                 return nil
             }
         }
+        self.isExecutable = isExecutable
+        self.resolveWorker = resolveWorker
+        self.runVersion = rv
+        self.resolver = ExternalToolResolver(
+            applicationSupportURL: appSupport,
+            isExecutable: isExecutable,
+            runVersion: rv
+        )
+    }
+
+    init(
+        resolver: ExternalToolResolver,
+        resolveWorker: @Sendable @escaping () throws -> WorkerLaunchConfiguration
+    ) {
+        self.resolver = resolver
+        self.isExecutable = resolver.isExecutable
+        self.runVersion = resolver.runVersion
+        self.resolveWorker = resolveWorker
     }
 
     static var live: RuntimeReadinessChecker {
         RuntimeReadinessChecker(
-            isExecutable: { FileManager.default.isExecutableFile(atPath: $0) },
-            resolveWorker: { try WorkerLaunchConfiguration.resolved() },
-            runVersion: { path in liveVersion(for: path) }
+            resolver: .live,
+            resolveWorker: { try WorkerLaunchConfiguration.resolved() }
         )
     }
 
@@ -138,11 +197,34 @@ struct RuntimeReadinessChecker: Sendable {
         } else if path == RuntimeReadiness.nodePath {
             args = ["--version"]
         } else {
-            return nil
+            // Support managed paths via resolver logic: infer tool from suffix
+            let lower = path.lowercased()
+            if lower.contains("ffmpeg") {
+                args = ["-version"]
+            } else if lower.contains("yt-dlp") {
+                args = ["--version"]
+            } else if lower.contains("node") {
+                args = ["--version"]
+            } else {
+                return nil
+            }
         }
         guard let raw = captureVersionOutput(executablePath: path, arguments: args, timeout: versionTimeout) else {
             return nil
         }
+        if path == RuntimeReadiness.ffmpegPath || path.lowercased().contains("ffmpeg") {
+            // Try ffmpeg parse first, fallback to generic
+            if let v = ExternalToolCompatibility.parseFFmpegVersion(from: raw) { return v }
+            // If not ffmpeg path but contains ffmpeg, still try that
+            if path.lowercased().contains("ffmpeg") { return ExternalToolCompatibility.parseFFmpegVersion(from: raw) }
+        }
+        if path == RuntimeReadiness.ytDlpPath || path.lowercased().contains("yt-dlp") {
+            return ExternalToolCompatibility.parseYtDlpVersion(from: raw)
+        }
+        if path == RuntimeReadiness.nodePath || path.lowercased().contains("node") {
+            return ExternalToolCompatibility.parseNodeVersion(from: raw)
+        }
+        // Fallback exact match handling
         if path == RuntimeReadiness.ffmpegPath {
             return ExternalToolCompatibility.parseFFmpegVersion(from: raw)
         } else if path == RuntimeReadiness.ytDlpPath {
@@ -296,48 +378,17 @@ struct RuntimeReadinessChecker: Sendable {
     }
 
     func check() -> RuntimeReadiness {
-        // Resolve versions only if executable
-        let ffmpegExecutable = isExecutable(RuntimeReadiness.ffmpegPath)
-        var ffmpegInstalled: String? = nil
-        var ffmpegAvailable = false
-        if ffmpegExecutable {
-            if let v = runVersion(RuntimeReadiness.ffmpegPath) {
-                ffmpegInstalled = v
-                ffmpegAvailable = (v == ExternalToolCompatibility.ffmpegSupportedVersion)
-                if !ffmpegAvailable {
-                    // keep installed for mismatch status
-                }
-            } else {
-                ffmpegInstalled = "unknown"
-                ffmpegAvailable = false
-            }
-        }
+        let ff = resolver.resolveFFmpeg()
+        let yt = resolver.resolveYtDlp()
+        let node = resolver.resolveNode()
 
-        let ytDlpExecutable = isExecutable(RuntimeReadiness.ytDlpPath)
-        var ytDlpInstalled: String? = nil
-        var ytDlpAvailable = false
-        if ytDlpExecutable {
-            if let v = runVersion(RuntimeReadiness.ytDlpPath) {
-                ytDlpInstalled = v
-                ytDlpAvailable = (v == ExternalToolCompatibility.ytDlpSupportedVersion)
-            } else {
-                ytDlpInstalled = "unknown"
-                ytDlpAvailable = false
-            }
-        }
+        let ffmpegAvailable = ff.isAvailable
+        let ytDlpAvailable = yt.isAvailable
+        let nodeAvailable = node.isAvailable
 
-        let nodeExecutable = isExecutable(RuntimeReadiness.nodePath)
-        var nodeInstalled: String? = nil
-        var nodeAvailable = false
-        if nodeExecutable {
-            if let v = runVersion(RuntimeReadiness.nodePath) {
-                nodeInstalled = v
-                nodeAvailable = (v == ExternalToolCompatibility.nodeSupportedVersion)
-            } else {
-                nodeInstalled = "unknown"
-                nodeAvailable = false
-            }
-        }
+        let ffmpegInstalled: String? = ff.isAvailable ? ff.version : ff.installedVersion
+        let ytDlpInstalled: String? = yt.isAvailable ? yt.version : yt.installedVersion
+        let nodeInstalled: String? = node.isAvailable ? node.version : node.installedVersion
 
         do {
             let config = try resolveWorker()
@@ -353,7 +404,19 @@ struct RuntimeReadinessChecker: Sendable {
                     nodeAvailable: nodeAvailable,
                     ffmpegInstalledVersion: ffmpegInstalled,
                     ytDlpInstalledVersion: ytDlpInstalled,
-                    nodeInstalledVersion: nodeInstalled
+                    nodeInstalledVersion: nodeInstalled,
+                    ffmpegExecutableURL: ff.executableURL,
+                    ytDlpExecutableURL: yt.executableURL,
+                    nodeExecutableURL: node.executableURL,
+                    ffmpegOrigin: ff.origin,
+                    ytDlpOrigin: yt.origin,
+                    nodeOrigin: node.origin,
+                    ffmpegManagedURL: ff.managedURL,
+                    ytDlpManagedURL: yt.managedURL,
+                    nodeManagedURL: node.managedURL,
+                    ffmpegAttemptedPath: ff.attemptedPath,
+                    ytDlpAttemptedPath: yt.attemptedPath,
+                    nodeAttemptedPath: node.attemptedPath
                 )
             } else {
                 return RuntimeReadiness(
@@ -365,7 +428,19 @@ struct RuntimeReadinessChecker: Sendable {
                     nodeAvailable: nodeAvailable,
                     ffmpegInstalledVersion: ffmpegInstalled,
                     ytDlpInstalledVersion: ytDlpInstalled,
-                    nodeInstalledVersion: nodeInstalled
+                    nodeInstalledVersion: nodeInstalled,
+                    ffmpegExecutableURL: ff.executableURL,
+                    ytDlpExecutableURL: yt.executableURL,
+                    nodeExecutableURL: node.executableURL,
+                    ffmpegOrigin: ff.origin,
+                    ytDlpOrigin: yt.origin,
+                    nodeOrigin: node.origin,
+                    ffmpegManagedURL: ff.managedURL,
+                    ytDlpManagedURL: yt.managedURL,
+                    nodeManagedURL: node.managedURL,
+                    ffmpegAttemptedPath: ff.attemptedPath,
+                    ytDlpAttemptedPath: yt.attemptedPath,
+                    nodeAttemptedPath: node.attemptedPath
                 )
             }
         } catch {
@@ -379,7 +454,19 @@ struct RuntimeReadinessChecker: Sendable {
                 nodeAvailable: nodeAvailable,
                 ffmpegInstalledVersion: ffmpegInstalled,
                 ytDlpInstalledVersion: ytDlpInstalled,
-                nodeInstalledVersion: nodeInstalled
+                nodeInstalledVersion: nodeInstalled,
+                ffmpegExecutableURL: ff.executableURL,
+                ytDlpExecutableURL: yt.executableURL,
+                nodeExecutableURL: node.executableURL,
+                ffmpegOrigin: ff.origin,
+                ytDlpOrigin: yt.origin,
+                nodeOrigin: node.origin,
+                ffmpegManagedURL: ff.managedURL,
+                ytDlpManagedURL: yt.managedURL,
+                nodeManagedURL: node.managedURL,
+                ffmpegAttemptedPath: ff.attemptedPath,
+                ytDlpAttemptedPath: yt.attemptedPath,
+                nodeAttemptedPath: node.attemptedPath
             )
         }
     }

@@ -356,7 +356,12 @@ final class InferenceControllerLocalTests: XCTestCase {
     }
 
     func testDefaultLocalIngestUsesHomebrewPath() async throws {
-        let ingest = InferenceController.makeDefaultLocalIngest()
+        let readiness = RuntimeReadiness(
+            workerAvailable: true, workerError: nil, workerPythonPath: "/tmp/worker/.venv/bin/python3",
+            ffmpegAvailable: true, ytDlpAvailable: false, nodeAvailable: false,
+            ffmpegExecutableURL: URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+        )
+        let ingest = InferenceController.makeDefaultLocalIngest(readiness: readiness)
         guard let client = ingest as? LocalAudioIngestClient else {
             XCTFail("Default should be LocalAudioIngestClient")
             return

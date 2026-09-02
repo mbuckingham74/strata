@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		37CFDD388993CD7D884327A4 /* ExternalToolResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52BB6F95A001A67E69DB3822 /* ExternalToolResolverTests.swift */; };
 		A10000000000000000000001 /* StrataApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* StrataApp.swift */; };
 		A10000000000000000000002 /* AudioTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* AudioTransport.swift */; };
 		A10000000000000000000003 /* PlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* PlaybackController.swift */; };
@@ -79,17 +80,34 @@
 		A1000000000000000000004A /* InferenceSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004A /* InferenceSetup.swift */; };
 		A1000000000000000000004B /* InferenceSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004B /* InferenceSetupView.swift */; };
 		A1000000000000000000004C /* InferenceSetupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004C /* InferenceSetupTests.swift */; };
+		A1000000000000000000004D /* ExternalToolResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004D /* ExternalToolResolver.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		H00000000000000000000002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F00000000000000000000001;
+			remoteInfo = Strata;
+		};
+		H00000000000000000000004 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F00000000000000000000001;
+			remoteInfo = Strata;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		52BB6F95A001A67E69DB3822 /* ExternalToolResolverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExternalToolResolverTests.swift; path = ExternalToolResolverTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000001 /* StrataApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrataApp.swift; sourceTree = "<group>"; };
 		B10000000000000000000002 /* AudioTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTransport.swift; sourceTree = "<group>"; };
 		B10000000000000000000003 /* PlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackController.swift; sourceTree = "<group>"; };
 		B10000000000000000000004 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		B10000000000000000000005 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10000000000000000000006 /* PlaybackControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackControllerTests.swift; sourceTree = "<group>"; };
-		C00000000000000000000001 /* Strata.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Strata.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		C00000000000000000000002 /* StrataTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10000000000000000000007 /* AppLifecycleDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLifecycleDelegate.swift; sourceTree = "<group>"; };
 		B10000000000000000000008 /* InferenceProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceProtocol.swift; sourceTree = "<group>"; };
 		B10000000000000000000009 /* InferenceWorkerStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceWorkerStateMachine.swift; sourceTree = "<group>"; };
@@ -153,10 +171,13 @@
 		B10000000000000000000047 /* WorkerProvisionerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerProvisionerTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000048 /* UvAvailability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UvAvailability.swift; sourceTree = "<group>"; };
 		B10000000000000000000049 /* UvAvailabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UvAvailabilityTests.swift; sourceTree = "<group>"; };
-		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1000000000000000000004A /* InferenceSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSetup.swift; sourceTree = "<group>"; };
 		B1000000000000000000004B /* InferenceSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSetupView.swift; sourceTree = "<group>"; };
 		B1000000000000000000004C /* InferenceSetupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSetupTests.swift; sourceTree = "<group>"; };
+		B1000000000000000000004D /* ExternalToolResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalToolResolver.swift; sourceTree = "<group>"; };
+		C00000000000000000000001 /* Strata.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Strata.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C00000000000000000000002 /* StrataTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -221,14 +242,6 @@
 			path = Audio;
 			sourceTree = "<group>";
 		};
-		E0000000000000000000000C /* About */ = {
-			isa = PBXGroup;
-			children = (
-				B1000000000000000000003C /* AboutView.swift */,
-			);
-			path = About;
-			sourceTree = "<group>";
-		};
 		E00000000000000000000004 /* Views */ = {
 			isa = PBXGroup;
 			children = (
@@ -237,50 +250,6 @@
 				B1000000000000000000004B /* InferenceSetupView.swift */,
 			);
 			path = Views;
-			sourceTree = "<group>";
-		};
-		E00000000000000000000008 /* Application */ = {
-			isa = PBXGroup;
-			children = (
-				B10000000000000000000007 /* AppLifecycleDelegate.swift */,
-				B10000000000000000000013 /* AppTerminationCoordinator.swift */,
-				B10000000000000000000022 /* StemExporter.swift */,
-				B10000000000000000000024 /* ExportFolderPreference.swift */,
-				B1000000000000000000003A /* StorageLocationPreferences.swift */,
-				B1000000000000000000002D /* StrataProject.swift */,
-				B1000000000000000000002E /* StrataProjectPersistence.swift */,
-				B10000000000000000000042 /* SessionStore.swift */,
-			);
-			path = Application;
-			sourceTree = "<group>";
-		};
-		E00000000000000000000009 /* Inference */ = {
-			isa = PBXGroup;
-			children = (
-				B10000000000000000000008 /* InferenceProtocol.swift */,
-				B10000000000000000000009 /* InferenceWorkerStateMachine.swift */,
-				B1000000000000000000000A /* SeparationResult.swift */,
-				B1000000000000000000000B /* WorkerLaunchConfiguration.swift */,
-				B1000000000000000000000C /* InferenceWorkerClient.swift */,
-				B1000000000000000000000D /* InferenceController.swift */,
-				B10000000000000000000015 /* TrustedInferenceIdentity.swift */,
-				B10000000000000000000037 /* RuntimeReadiness.swift */,
-				B10000000000000000000040 /* ExternalToolCompatibility.swift */,
-				B10000000000000000000046 /* WorkerProvisioner.swift */,
-				B10000000000000000000048 /* UvAvailability.swift */,
-				B1000000000000000000004A /* InferenceSetup.swift */,
-			);
-			path = Inference;
-			sourceTree = "<group>";
-		};
-		E0000000000000000000000A /* Ingest */ = {
-			isa = PBXGroup;
-			children = (
-				B10000000000000000000036 /* AudioIngestSupport.swift */,
-				B10000000000000000000019 /* YouTubeIngestClient.swift */,
-				B10000000000000000000033 /* LocalAudioIngestClient.swift */,
-			);
-			path = Ingest;
 			sourceTree = "<group>";
 		};
 		E00000000000000000000006 /* StrataTests */ = {
@@ -323,16 +292,9 @@
 				B10000000000000000000047 /* WorkerProvisionerTests.swift */,
 				B10000000000000000000049 /* UvAvailabilityTests.swift */,
 				B1000000000000000000004C /* InferenceSetupTests.swift */,
+				52BB6F95A001A67E69DB3822 /* ExternalToolResolverTests.swift */,
 			);
 			path = StrataTests;
-			sourceTree = "<group>";
-		};
-		E0000000000000000000000B /* StrataUITests */ = {
-			isa = PBXGroup;
-			children = (
-				B1000000000000000000001D /* InferenceCardYouTubeUITest.swift */,
-			);
-			path = StrataUITests;
 			sourceTree = "<group>";
 		};
 		E00000000000000000000007 /* Products */ = {
@@ -343,6 +305,67 @@
 				C00000000000000000000003 /* StrataUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		E00000000000000000000008 /* Application */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000007 /* AppLifecycleDelegate.swift */,
+				B10000000000000000000013 /* AppTerminationCoordinator.swift */,
+				B10000000000000000000022 /* StemExporter.swift */,
+				B10000000000000000000024 /* ExportFolderPreference.swift */,
+				B1000000000000000000003A /* StorageLocationPreferences.swift */,
+				B1000000000000000000002D /* StrataProject.swift */,
+				B1000000000000000000002E /* StrataProjectPersistence.swift */,
+				B10000000000000000000042 /* SessionStore.swift */,
+			);
+			path = Application;
+			sourceTree = "<group>";
+		};
+		E00000000000000000000009 /* Inference */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000008 /* InferenceProtocol.swift */,
+				B10000000000000000000009 /* InferenceWorkerStateMachine.swift */,
+				B1000000000000000000000A /* SeparationResult.swift */,
+				B1000000000000000000000B /* WorkerLaunchConfiguration.swift */,
+				B1000000000000000000000C /* InferenceWorkerClient.swift */,
+				B1000000000000000000000D /* InferenceController.swift */,
+				B10000000000000000000015 /* TrustedInferenceIdentity.swift */,
+				B1000000000000000000004D /* ExternalToolResolver.swift */,
+				B10000000000000000000037 /* RuntimeReadiness.swift */,
+				B10000000000000000000040 /* ExternalToolCompatibility.swift */,
+				B10000000000000000000046 /* WorkerProvisioner.swift */,
+				B10000000000000000000048 /* UvAvailability.swift */,
+				B1000000000000000000004A /* InferenceSetup.swift */,
+			);
+			path = Inference;
+			sourceTree = "<group>";
+		};
+		E0000000000000000000000A /* Ingest */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000036 /* AudioIngestSupport.swift */,
+				B10000000000000000000019 /* YouTubeIngestClient.swift */,
+				B10000000000000000000033 /* LocalAudioIngestClient.swift */,
+			);
+			path = Ingest;
+			sourceTree = "<group>";
+		};
+		E0000000000000000000000B /* StrataUITests */ = {
+			isa = PBXGroup;
+			children = (
+				B1000000000000000000001D /* InferenceCardYouTubeUITest.swift */,
+			);
+			path = StrataUITests;
+			sourceTree = "<group>";
+		};
+		E0000000000000000000000C /* About */ = {
+			isa = PBXGroup;
+			children = (
+				B1000000000000000000003C /* AboutView.swift */,
+			);
+			path = About;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -483,13 +506,13 @@
 				"$(SRCROOT)/InferenceWorker/.python-version",
 				"$(SRCROOT)/scripts/generate-about-metadata.py",
 			);
+			name = "Generate AboutMetadata.json";
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AboutMetadata.json",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "set -euo pipefail\nOUTPUT=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/AboutMetadata.json\"\nmkdir -p \"${OUTPUT%/*}\"\npython3 \"${SRCROOT}/scripts/generate-about-metadata.py\" --pyproject \"${SRCROOT}/InferenceWorker/pyproject.toml\" --lock \"${SRCROOT}/InferenceWorker/uv.lock\" --python-version \"${SRCROOT}/InferenceWorker/.python-version\" --output \"$OUTPUT\"\necho \"Generated AboutMetadata.json at $OUTPUT\"\n";
-			name = "Generate AboutMetadata.json";
 		};
 		J00000000000000000000002 /* Bundle InferenceWorker Project */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -510,6 +533,7 @@
 				"$(SRCROOT)/InferenceWorker/src/demux_worker/protocol.py",
 				"$(SRCROOT)/InferenceWorker/src/demux_worker/worker.py",
 			);
+			name = "Bundle InferenceWorker Project";
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/InferenceWorker/pyproject.toml",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/InferenceWorker/uv.lock",
@@ -527,7 +551,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "set -euo pipefail\nSRC_INFERENCEWORKER=\"${SRCROOT}/InferenceWorker\"\nDEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/InferenceWorker\"\nmkdir -p \"$DEST\"\nmkdir -p \"$DEST/src/demux_worker\"\ncp -p -X \"$SRC_INFERENCEWORKER/pyproject.toml\" \"$DEST/\"\ncp -p -X \"$SRC_INFERENCEWORKER/uv.lock\" \"$DEST/\"\ncp -p -X \"$SRC_INFERENCEWORKER/.python-version\" \"$DEST/\"\ncp -p -X \"$SRC_INFERENCEWORKER/README.md\" \"$DEST/\"\nfor f in \"$SRC_INFERENCEWORKER/src/demux_worker\"/*.py; do cp -p -X \"$f\" \"$DEST/src/demux_worker/\"; done\n";
-			name = "Bundle InferenceWorker Project";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -553,6 +576,7 @@
 				A1000000000000000000000C /* InferenceWorkerClient.swift in Sources */,
 				A1000000000000000000000D /* InferenceController.swift in Sources */,
 				A10000000000000000000015 /* TrustedInferenceIdentity.swift in Sources */,
+				A1000000000000000000004D /* ExternalToolResolver.swift in Sources */,
 				A10000000000000000000036 /* AudioIngestSupport.swift in Sources */,
 				A10000000000000000000019 /* YouTubeIngestClient.swift in Sources */,
 				A10000000000000000000033 /* LocalAudioIngestClient.swift in Sources */,
@@ -613,6 +637,7 @@
 				A10000000000000000000047 /* WorkerProvisionerTests.swift in Sources */,
 				A10000000000000000000049 /* UvAvailabilityTests.swift in Sources */,
 				A1000000000000000000004C /* InferenceSetupTests.swift in Sources */,
+				37CFDD388993CD7D884327A4 /* ExternalToolResolverTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -638,23 +663,6 @@
 			targetProxy = H00000000000000000000004 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
-
-/* Begin PBXContainerItemProxy section */
-		H00000000000000000000002 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 100000000000000000000000 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = F00000000000000000000001;
-			remoteInfo = Strata;
-		};
-		H00000000000000000000004 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 100000000000000000000000 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = F00000000000000000000001;
-			remoteInfo = Strata;
-		};
-/* End PBXContainerItemProxy section */
 
 /* Begin XCBuildConfiguration section */
 		I00000000000000000000001 /* Debug */ = {
@@ -916,20 +924,20 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		100000000000000000000004 /* Build configuration list for PBXNativeTarget "StrataUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				I00000000000000000000007 /* Debug */,
-				I00000000000000000000008 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		100000000000000000000003 /* Build configuration list for PBXProject "Strata" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				I00000000000000000000001 /* Debug */,
 				I00000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		100000000000000000000004 /* Build configuration list for PBXNativeTarget "StrataUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				I00000000000000000000007 /* Debug */,
+				I00000000000000000000008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

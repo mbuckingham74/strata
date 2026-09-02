@@ -941,6 +941,7 @@ struct InferenceCard: View {
         guard !isExporting else { return }
         let metadata = format == .mp3 ? inferenceController.effectiveYouTubeMetadata : nil
         let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
+        let ffmpegURL = inferenceController.runtimeReadiness?.ffmpegExecutableURL
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format == .wav ? .wav : .mp3]
         panel.nameFieldStringValue = StemExporter.defaultFilename(
@@ -958,7 +959,7 @@ struct InferenceCard: View {
                 let dest = destinationURL
                 exportingFileName = dest.lastPathComponent
                 savedFileName = nil
-                Task { [defaultDirectoryAccess, capturedQuality] in
+                Task { [defaultDirectoryAccess, capturedQuality, ffmpegURL] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
@@ -968,7 +969,8 @@ struct InferenceCard: View {
                                 format: format,
                                 metadata: metadata,
                                 artworkURL: artworkURL,
-                                mp3Quality: capturedQuality
+                                mp3Quality: capturedQuality,
+                                ffmpegURL: ffmpegURL
                             )
                         }.value
                         await MainActor.run {
@@ -994,6 +996,7 @@ struct InferenceCard: View {
         guard artifacts.count >= 2 else { return }
         let metadata = format == .mp3 ? inferenceController.effectiveYouTubeMetadata : nil
         let artworkURL = format == .mp3 ? inferenceController.effectiveArtworkURL : nil
+        let ffmpegURL = inferenceController.runtimeReadiness?.ffmpegExecutableURL
         let gains = stemPlaybackController.stemGains
         let capturedQuality = mp3Quality
         let panel = NSSavePanel()
@@ -1012,7 +1015,7 @@ struct InferenceCard: View {
                 let dest = destinationURL
                 exportingFileName = dest.lastPathComponent
                 savedFileName = nil
-                Task { [defaultDirectoryAccess, capturedQuality] in
+                Task { [defaultDirectoryAccess, capturedQuality, ffmpegURL] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
@@ -1023,7 +1026,8 @@ struct InferenceCard: View {
                                 format: format,
                                 metadata: metadata,
                                 artworkURL: artworkURL,
-                                mp3Quality: capturedQuality
+                                mp3Quality: capturedQuality,
+                                ffmpegURL: ffmpegURL
                             )
                         }.value
                         await MainActor.run {
@@ -1053,6 +1057,7 @@ struct InferenceCard: View {
         panel.canCreateDirectories = true
         let defaultDirectoryAccess = storagePreferences.applyExportDefaultDirectory(to: panel)
         let capturedQuality = mp3Quality
+        let ffmpegURL = inferenceController.runtimeReadiness?.ffmpegExecutableURL
 
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
@@ -1063,7 +1068,7 @@ struct InferenceCard: View {
                 let capturedPreparationAudioURL = preparation.audioURL
                 exportingFileName = dest.lastPathComponent
                 savedFileName = nil
-                Task { [defaultDirectoryAccess, capturedQuality] in
+                Task { [defaultDirectoryAccess, capturedQuality, ffmpegURL] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
@@ -1072,7 +1077,8 @@ struct InferenceCard: View {
                                 to: dest,
                                 metadata: capturedMetadata,
                                 artworkURL: effectiveArtwork,
-                                mp3Quality: capturedQuality
+                                mp3Quality: capturedQuality,
+                                ffmpegURL: ffmpegURL
                             )
                         }.value
                         await MainActor.run {
@@ -1104,6 +1110,7 @@ struct InferenceCard: View {
         panel.canCreateDirectories = true
         let defaultDirectoryAccess = storagePreferences.applyExportDefaultDirectory(to: panel)
         let capturedQuality = mp3Quality
+        let ffmpegURL = inferenceController.runtimeReadiness?.ffmpegExecutableURL
 
         panel.begin { response in
             withExtendedLifetime(defaultDirectoryAccess) {
@@ -1114,7 +1121,7 @@ struct InferenceCard: View {
                 let capturedSourceURL = sourceURL
                 exportingFileName = dest.lastPathComponent
                 savedFileName = nil
-                Task { [defaultDirectoryAccess, capturedQuality] in
+                Task { [defaultDirectoryAccess, capturedQuality, ffmpegURL] in
                     defer { withExtendedLifetime(defaultDirectoryAccess) {} }
                     do {
                         try await Task.detached(priority: .userInitiated) {
@@ -1123,7 +1130,8 @@ struct InferenceCard: View {
                                 to: dest,
                                 metadata: capturedMetadata,
                                 artworkURL: effectiveArtwork,
-                                mp3Quality: capturedQuality
+                                mp3Quality: capturedQuality,
+                                ffmpegURL: ffmpegURL
                             )
                         }.value
                         await MainActor.run {

@@ -149,7 +149,7 @@ struct StemExporter {
         metadata: YouTubeTrackMetadata? = nil,
         artworkURL: URL? = nil,
         mp3Quality: MP3Quality = .highVBR,
-        ffmpegURL: URL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg"),
+        ffmpegURL: URL? = nil,
         fileManager: FileManager = .default
     ) throws {
         let sourceURL = artifact.url.standardizedFileURL.resolvingSymlinksInPath()
@@ -166,6 +166,9 @@ struct StemExporter {
             }
             try fileManager.copyItem(at: artifact.url, to: destinationURL)
         case .mp3:
+            guard let ffmpegURL else {
+                throw StemExportError.ffmpegLaunchFailed("FFmpeg not available — missing validated FFmpeg from RuntimeReadiness")
+            }
             try encodeMP3(
                 from: artifact.url,
                 to: destinationURL,
@@ -183,8 +186,11 @@ struct StemExporter {
         metadata: YouTubeTrackMetadata? = nil,
         artworkURL: URL? = nil,
         mp3Quality: MP3Quality = .highVBR,
-        ffmpegURL: URL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+        ffmpegURL: URL? = nil
     ) throws {
+        guard let ffmpegURL else {
+            throw StemExportError.ffmpegLaunchFailed("FFmpeg not available — missing validated FFmpeg from RuntimeReadiness")
+        }
         let resolvedSourceURL = sourceURL.standardizedFileURL.resolvingSymlinksInPath()
         let resolvedDestinationURL = destinationURL.standardizedFileURL.resolvingSymlinksInPath()
         guard resolvedSourceURL != resolvedDestinationURL else {
@@ -208,7 +214,7 @@ struct StemExporter {
         metadata: YouTubeTrackMetadata? = nil,
         artworkURL: URL? = nil,
         mp3Quality: MP3Quality = .highVBR,
-        ffmpegURL: URL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg"),
+        ffmpegURL: URL? = nil,
         fileManager: FileManager = .default
     ) throws {
         guard artifacts.count >= 2 else {
@@ -230,6 +236,9 @@ struct StemExporter {
         case .wav:
             try writeAlignedMix(artifacts, gains: gains, to: destinationURL, fileManager: fileManager)
         case .mp3:
+            guard let ffmpegURL else {
+                throw StemExportError.ffmpegLaunchFailed("FFmpeg not available — missing validated FFmpeg from RuntimeReadiness")
+            }
             let temporaryDirectoryURL = fileManager.temporaryDirectory
                 .appendingPathComponent("Strata-Mix-\(UUID().uuidString)", isDirectory: true)
             try fileManager.createDirectory(at: temporaryDirectoryURL, withIntermediateDirectories: true)

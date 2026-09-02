@@ -220,6 +220,12 @@ final class InferenceController {
     ) async {
         let readiness = await Task.detached(priority: .utility) { checker.check() }.value
         self.runtimeReadiness = readiness
+        if isDefaultYouTubeIngest {
+            self.youTubeIngest = Self.makeDefaultYouTubeIngest(readiness: readiness)
+        }
+        if isDefaultLocalIngest {
+            self.localIngest = Self.makeDefaultLocalIngest(readiness: readiness)
+        }
     }
 
     func refreshRuntimeReadiness(
@@ -308,8 +314,10 @@ final class InferenceController {
     // MARK: - Ownership
 
     private let client: InferenceWorkerClient
-    private let youTubeIngest: any YouTubeIngesting
-    private let localIngest: any LocalAudioIngesting
+    private var youTubeIngest: any YouTubeIngesting
+    private var localIngest: any LocalAudioIngesting
+    private var isDefaultYouTubeIngest: Bool = true
+    private var isDefaultLocalIngest: Bool = true
     private var currentTask: Task<Void, Never>?
     private var cleanupChainTail: Task<Void, Never>?
     private var cleanupChainId: UInt64 = 0
@@ -336,33 +344,56 @@ final class InferenceController {
         return StorageLocationPreferences().separationOutputBaseURL()
     }
 
-    static func makeDefaultYouTubeIngest() -> any YouTubeIngesting {
+    static func makeDefaultYouTubeIngest(readiness: RuntimeReadiness) -> any YouTubeIngesting {
+        // RuntimeReadiness-validated URLs are the exact URLs supplied to consumers. Use only its executableURLs.
+        // Fall back to managed URLs from readiness (or Homebrew sentinel) only for construction when tool unavailable;
+        // gating (isYouTubeAcquisitionReady etc.) prevents actual use when nil executable, but a file URL is still required.
         YouTubeIngestClient(
-            ytDlpURL: URL(fileURLWithPath: "/opt/homebrew/bin/yt-dlp"),
-            ffmpegURL: URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg"),
-            nodeURL: URL(fileURLWithPath: "/opt/homebrew/bin/node")
+            ytDlpURL: readiness.ytDlpExecutableURL ?? readiness.ytDlpManagedURL ?? URL(fileURLWithPath: "/opt/homebrew/bin/yt-dlp"),
+            ffmpegURL: readiness.ffmpegExecutableURL ?? readiness.ffmpegManagedURL ?? URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg"),
+            nodeURL: readiness.nodeExecutableURL ?? readiness.nodeManagedURL ?? URL(fileURLWithPath: "/opt/homebrew/bin/node")
         )
     }
 
-    static func makeDefaultLocalIngest() -> any LocalAudioIngesting {
+    static func makeDefaultLocalIngest(readiness: RuntimeReadiness) -> any LocalAudioIngesting {
         LocalAudioIngestClient(
-            ffmpegURL: URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+            ffmpegURL: readiness.ffmpegExecutableURL ?? readiness.ffmpegManagedURL ?? URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+        )
+    }
+
+    private static func placeholderReadiness() -> RuntimeReadiness {
+        RuntimeReadiness(
+            workerAvailable: false,
+            workerError: nil,
+            workerPythonPath: nil,
+            ffmpegAvailable: false,
+            ytDlpAvailable: false,
+            nodeAvailable: false,
+            ffmpegExecutableURL: URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg"),
+            ytDlpExecutableURL: URL(fileURLWithPath: "/opt/homebrew/bin/yt-dlp"),
+            nodeExecutableURL: URL(fileURLWithPath: "/opt/homebrew/bin/node")
         )
     }
 
     init(client: InferenceWorkerClient = InferenceWorkerClient(), youTubeIngest: (any YouTubeIngesting)? = nil, localIngest: (any LocalAudioIngesting)? = nil) {
         self.client = client
         self.outputBaseOverride = nil
-        self.youTubeIngest = youTubeIngest ?? Self.makeDefaultYouTubeIngest()
-        self.localIngest = localIngest ?? Self.makeDefaultLocalIngest()
+        self.isDefaultYouTubeIngest = youTubeIngest == nil
+        self.isDefaultLocalIngest = localIngest == nil
+        let placeholder = Self.placeholderReadiness()
+        self.youTubeIngest = youTubeIngest ?? Self.makeDefaultYouTubeIngest(readiness: placeholder)
+        self.localIngest = localIngest ?? Self.makeDefaultLocalIngest(readiness: placeholder)
     }
 
     // Convenience for testing injection — stores override for deterministic temp output in tests
     init(client: InferenceWorkerClient, outputBase: URL, youTubeIngest: (any YouTubeIngesting)? = nil, localIngest: (any LocalAudioIngesting)? = nil) {
         self.client = client
         self.outputBaseOverride = outputBase
-        self.youTubeIngest = youTubeIngest ?? Self.makeDefaultYouTubeIngest()
-        self.localIngest = localIngest ?? Self.makeDefaultLocalIngest()
+        self.isDefaultYouTubeIngest = youTubeIngest == nil
+        self.isDefaultLocalIngest = localIngest == nil
+        let placeholder = Self.placeholderReadiness()
+        self.youTubeIngest = youTubeIngest ?? Self.makeDefaultYouTubeIngest(readiness: placeholder)
+        self.localIngest = localIngest ?? Self.makeDefaultLocalIngest(readiness: placeholder)
     }
 
     deinit {
