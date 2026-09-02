@@ -20,7 +20,7 @@
                ReferencedContainer = "container:Strata.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
-          <BuildActionEntry
+         <BuildActionEntry
             buildForTesting = "YES"
             buildForRunning = "NO"
             buildForProfiling = "NO"
@@ -34,7 +34,7 @@
                ReferencedContainer = "container:Strata.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
-          <BuildActionEntry
+         <BuildActionEntry
             buildForTesting = "YES"
             buildForRunning = "NO"
             buildForProfiling = "NO"

@@ -41,4 +41,19 @@ enum ExternalToolCompatibility {
         }
         return trimmed
     }
+
+    /// Parse uv version from `uv --version` output.
+    /// Example: "uv 0.12.8 (abc...)" or "uv 0.12.8"
+    static func parseUvVersion(from output: String) -> String? {
+        let firstLine = output.components(separatedBy: .newlines).first ?? output
+        guard let regex = try? NSRegularExpression(pattern: #"uv ([0-9.]+)"#) else { return nil }
+        let range = NSRange(firstLine.startIndex..<firstLine.endIndex, in: firstLine)
+        guard let match = regex.firstMatch(in: firstLine, range: range),
+              match.numberOfRanges >= 2,
+              let verRange = Range(match.range(at: 1), in: firstLine) else {
+            return nil
+        }
+        let ver = String(firstLine[verRange])
+        return ver.isEmpty ? nil : ver
+    }
 }

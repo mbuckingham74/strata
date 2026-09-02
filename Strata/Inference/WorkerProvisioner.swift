@@ -36,6 +36,7 @@ struct WorkerProvisioner: Sendable {
 
     let resourceURL: URL?
     let applicationSupportURL: URL?
+    let uvExecutableURL: URL
     let fileExists: @Sendable (String) -> Bool
     let isExecutable: @Sendable (String) -> Bool
     let createDirectory: @Sendable (URL) throws -> Void
@@ -82,6 +83,7 @@ struct WorkerProvisioner: Sendable {
     init(
         resourceURL: URL? = WorkerProvisioner.resolveResourceURL(),
         applicationSupportURL: URL? = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first,
+        uvExecutableURL: URL? = nil,
         fileExists: @Sendable @escaping (String) -> Bool = { FileManager.default.fileExists(atPath: $0) },
         isExecutable: @Sendable @escaping (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) },
         createDirectory: @Sendable @escaping (URL) throws -> Void = { url in
@@ -93,6 +95,7 @@ struct WorkerProvisioner: Sendable {
     ) {
         self.resourceURL = resourceURL
         self.applicationSupportURL = applicationSupportURL
+        self.uvExecutableURL = uvExecutableURL ?? URL(fileURLWithPath: Self.uvExecutablePath)
         self.fileExists = fileExists
         self.isExecutable = isExecutable
         self.createDirectory = createDirectory
@@ -127,9 +130,9 @@ struct WorkerProvisioner: Sendable {
             return .failure(.missingBundledProject("missing \(src)"))
         }
 
-        // 2. Validate uv
-        if !isExecutable(Self.uvExecutablePath) {
-            return .failure(.missingUV("uv not found or not executable at \(Self.uvExecutablePath)"))
+        // 2. Validate uv (resolved, injectable)
+        if !isExecutable(uvExecutableURL.path) {
+            return .failure(.missingUV("uv not found or not executable at \(uvExecutableURL.path)"))
         }
 
         // 3. Resolve destination (only manage .venv, never delete parent Strata or Projects)
@@ -144,7 +147,7 @@ struct WorkerProvisioner: Sendable {
         }
 
         // 4. Run uv sync
-        let uvURL = URL(fileURLWithPath: Self.uvExecutablePath)
+        let uvURL = uvExecutableURL
         let syncArgs = [
             "sync",
             "--project", projectURL.path,

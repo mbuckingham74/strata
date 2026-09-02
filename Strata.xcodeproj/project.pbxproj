@@ -74,6 +74,8 @@
 		A10000000000000000000045 /* WorkerLaunchConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000045 /* WorkerLaunchConfigurationTests.swift */; };
 		A10000000000000000000046 /* WorkerProvisioner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000046 /* WorkerProvisioner.swift */; };
 		A10000000000000000000047 /* WorkerProvisionerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000047 /* WorkerProvisionerTests.swift */; };
+		A10000000000000000000048 /* UvAvailability.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000048 /* UvAvailability.swift */; };
+		A10000000000000000000049 /* UvAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000049 /* UvAvailabilityTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -146,6 +148,8 @@
 		B10000000000000000000045 /* WorkerLaunchConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerLaunchConfigurationTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000046 /* WorkerProvisioner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerProvisioner.swift; sourceTree = "<group>"; };
 		B10000000000000000000047 /* WorkerProvisionerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkerProvisionerTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000048 /* UvAvailability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UvAvailability.swift; sourceTree = "<group>"; };
+		B10000000000000000000049 /* UvAvailabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UvAvailabilityTests.swift; sourceTree = "<group>"; };
 		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -256,6 +260,7 @@
 				B10000000000000000000037 /* RuntimeReadiness.swift */,
 				B10000000000000000000040 /* ExternalToolCompatibility.swift */,
 				B10000000000000000000046 /* WorkerProvisioner.swift */,
+				B10000000000000000000048 /* UvAvailability.swift */,
 			);
 			path = Inference;
 			sourceTree = "<group>";
@@ -308,6 +313,7 @@
 				B10000000000000000000044 /* SessionLibraryNavigationTests.swift */,
 				B10000000000000000000045 /* WorkerLaunchConfigurationTests.swift */,
 				B10000000000000000000047 /* WorkerProvisionerTests.swift */,
+				B10000000000000000000049 /* UvAvailabilityTests.swift */,
 			);
 			path = StrataTests;
 			sourceTree = "<group>";
@@ -551,6 +557,7 @@
 				A1000000000000000000002E /* StrataProjectPersistence.swift in Sources */,
 				A10000000000000000000042 /* SessionStore.swift in Sources */,
 				A10000000000000000000046 /* WorkerProvisioner.swift in Sources */,
+				A10000000000000000000048 /* UvAvailability.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -593,6 +600,7 @@
 				A10000000000000000000044 /* SessionLibraryNavigationTests.swift in Sources */,
 				A10000000000000000000045 /* WorkerLaunchConfigurationTests.swift in Sources */,
 				A10000000000000000000047 /* WorkerProvisionerTests.swift in Sources */,
+				A10000000000000000000049 /* UvAvailabilityTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
