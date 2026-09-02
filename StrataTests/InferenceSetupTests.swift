@@ -66,6 +66,18 @@ private func makeChecker(workerAvailable: Bool, ffmpegAvailable: Bool = true, yt
     )
 }
 
+// FFmpeg is resolved by these tests so runSetup skips live provisioning (hermetic).
+private func ffmpegAlreadyResolved() -> ResolvedExternalTool {
+    ResolvedExternalTool(
+        executableURL: URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg"),
+        version: ExternalToolCompatibility.ffmpegSupportedVersion,
+        origin: .system,
+        managedURL: URL(fileURLWithPath: "/tmp/fakeSupport/Strata/Tools/ffmpeg/ffmpeg"),
+        installedVersion: nil,
+        attemptedPath: nil
+    )
+}
+
 @MainActor
 final class InferenceSetupTests: XCTestCase {
 
@@ -118,6 +130,7 @@ final class InferenceSetupTests: XCTestCase {
                 ensureCount.increment()
                 return .success(uvURL)
             },
+            resolveFFmpeg: { ffmpegAlreadyResolved() },
             provisionWorker: { url in
                 provisionCount.increment()
                 provisionURL.set(url)
@@ -160,6 +173,7 @@ final class InferenceSetupTests: XCTestCase {
                 ensureCount.increment()
                 return .failure(.installFailed(exitCode: 1, message: "network down"))
             },
+            resolveFFmpeg: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in
                 provisionCount.increment()
                 return .success
@@ -182,6 +196,7 @@ final class InferenceSetupTests: XCTestCase {
         // Try Again (second call) succeeds
         await controller.runSetup(
             ensureUvAvailable: { .success(uvURL) },
+            resolveFFmpeg: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .success },
             refreshReadiness: {
                 await ctrl.refreshRuntimeReadiness(checker: readyChecker)
@@ -205,6 +220,7 @@ final class InferenceSetupTests: XCTestCase {
 
         await controller.runSetup(
             ensureUvAvailable: { .success(uvURL) },
+            resolveFFmpeg: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .failure(.syncFailed(exitCode: 1, message: longMsg)) },
             refreshReadiness: {
                 refreshCount.increment()
@@ -225,6 +241,7 @@ final class InferenceSetupTests: XCTestCase {
         // Try Again succeeds
         await controller.runSetup(
             ensureUvAvailable: { .success(uvURL) },
+            resolveFFmpeg: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .success },
             refreshReadiness: { await ctrl.refreshRuntimeReadiness(checker: readyChecker) }
         )
@@ -243,6 +260,7 @@ final class InferenceSetupTests: XCTestCase {
 
         await controller.runSetup(
             ensureUvAvailable: { .success(uvURL) },
+            resolveFFmpeg: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .failure(.prepareModelFailed(exitCode: 2, message: longMsg)) },
             refreshReadiness: {
                 refreshCount.increment()
@@ -260,6 +278,7 @@ final class InferenceSetupTests: XCTestCase {
         // Try Again works
         await controller.runSetup(
             ensureUvAvailable: { .success(uvURL) },
+            resolveFFmpeg: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .success },
             refreshReadiness: { await ctrl.refreshRuntimeReadiness(checker: readyChecker) }
         )
@@ -280,6 +299,7 @@ final class InferenceSetupTests: XCTestCase {
 
         await controller.runSetup(
             ensureUvAvailable: { .success(uvURL) },
+            resolveFFmpeg: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .success },
             refreshReadiness: {
                 await ctrl.refreshRuntimeReadiness(checker: stillNotReady)
@@ -321,6 +341,7 @@ final class InferenceSetupTests: XCTestCase {
                     usleep(UInt32(ensureDelay / 1_000))
                     return .success(uvURL)
                 },
+                resolveFFmpeg: { ffmpegAlreadyResolved() },
                 provisionWorker: { url in
                     usleep(UInt32(provisionDelay / 1_000))
                     // Verify uv correct
@@ -388,7 +409,8 @@ final class InferenceSetupTests: XCTestCase {
                     usleep(150_000)
                     return .success(uvURL)
                 },
-                provisionWorker: { _ in
+                resolveFFmpeg: { ffmpegAlreadyResolved() },
+            provisionWorker: { _ in
                     usleep(150_000)
                     return .success
                 },
@@ -411,6 +433,7 @@ final class InferenceSetupTests: XCTestCase {
                 ensureCount.increment()
                 return .success(uvURL)
             },
+            resolveFFmpeg: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .success },
             refreshReadiness: { await ctrl.refreshRuntimeReadiness(checker: readyChecker) }
         )
@@ -473,6 +496,7 @@ final class InferenceSetupTests: XCTestCase {
         // Also after failed setup, session still untouched
         await controller.runSetup(
             ensureUvAvailable: { .failure(.installFailed(exitCode: 1, message: "fail")) },
+            resolveFFmpeg: { ffmpegAlreadyResolved() },
             provisionWorker: { _ in .success },
             refreshReadiness: { await controller.refreshRuntimeReadiness(checker: makeChecker(workerAvailable: false)) }
         )

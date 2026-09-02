@@ -255,6 +255,8 @@ final class InferenceController {
     /// All heavy work is dispatched off MainActor so UI remains responsive and tests can inject fakes.
     func runSetup(
         ensureUvAvailable: @escaping @Sendable () -> UvAvailabilityResult = { UvAvailability().ensureAvailable() },
+        resolveFFmpeg: @escaping @Sendable () -> ResolvedExternalTool = { ExternalToolResolver.live.resolveFFmpeg() },
+        ensureFfmpegAvailable: @escaping @Sendable () -> FFmpegAvailabilityResult = { FFmpegAvailability().ensureAvailable() },
         provisionWorker: @escaping @Sendable (URL) -> WorkerProvisioningResult = { url in WorkerProvisioner(uvExecutableURL: url).provision() },
         refreshReadiness: (@Sendable () async -> Void)? = nil
     ) async {
@@ -272,6 +274,20 @@ final class InferenceController {
             let msg = err.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
             setupStage = .failed(msg.isEmpty ? "Failed to prepare tools." : String(msg.prefix(500)))
             return
+        }
+
+        // Managed FFmpeg: reuse a compatible resolved copy; provision only when unresolved.
+        let ffmpegResolved: Bool = await Task.detached(priority: .userInitiated) { resolveFFmpeg().isAvailable }.value
+        if !ffmpegResolved {
+            let ffmpegResult: FFmpegAvailabilityResult = await Task.detached(priority: .userInitiated) { ensureFfmpegAvailable() }.value
+            switch ffmpegResult {
+            case .success:
+                break
+            case .failure(let err):
+                let msg = err.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                setupStage = .failed(msg.isEmpty ? "FFmpeg installation failed." : String(msg.prefix(500)))
+                return
+            }
         }
 
         setupStage = .provisioning
