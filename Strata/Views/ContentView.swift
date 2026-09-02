@@ -417,7 +417,7 @@ struct InferenceCard: View {
                     ProgressView().scaleEffect(0.7).tint(.secondary)
                 }
             }
-            if !isCompletedState {
+            if !isCompletedState, inferenceController.runtimeReadiness?.isWorkerReady == true {
                 Text("Separation runs locally on this Mac.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
 
@@ -448,6 +448,13 @@ struct InferenceCard: View {
                     EditableMetadataEditor(inferenceController: inferenceController, isCollapsible: true, isInitiallyExpanded: false)
                 }
 
+            } else if let readiness = inferenceController.runtimeReadiness, !readiness.isWorkerReady {
+                InferenceSetupView(controller: inferenceController)
+            } else if inferenceController.runtimeReadiness == nil {
+                HStack(spacing: 8) {
+                    ProgressView().scaleEffect(0.8).tint(.secondary)
+                    Text("Checking setup…").font(.caption).foregroundStyle(.secondary)
+                }.padding(.vertical, 8).accessibilityIdentifier("CheckingSetupIndicator")
             } else {
                 // Pre-completion workflow — preserve exactly as before
 

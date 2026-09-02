@@ -76,6 +76,9 @@
 		A10000000000000000000047 /* WorkerProvisionerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000047 /* WorkerProvisionerTests.swift */; };
 		A10000000000000000000048 /* UvAvailability.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000048 /* UvAvailability.swift */; };
 		A10000000000000000000049 /* UvAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000049 /* UvAvailabilityTests.swift */; };
+		A1000000000000000000004A /* InferenceSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004A /* InferenceSetup.swift */; };
+		A1000000000000000000004B /* InferenceSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004B /* InferenceSetupView.swift */; };
+		A1000000000000000000004C /* InferenceSetupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004C /* InferenceSetupTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -151,6 +154,9 @@
 		B10000000000000000000048 /* UvAvailability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UvAvailability.swift; sourceTree = "<group>"; };
 		B10000000000000000000049 /* UvAvailabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UvAvailabilityTests.swift; sourceTree = "<group>"; };
 		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1000000000000000000004A /* InferenceSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSetup.swift; sourceTree = "<group>"; };
+		B1000000000000000000004B /* InferenceSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSetupView.swift; sourceTree = "<group>"; };
+		B1000000000000000000004C /* InferenceSetupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSetupTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -228,6 +234,7 @@
 			children = (
 				B10000000000000000000004 /* ContentView.swift */,
 				B10000000000000000000028 /* StrataStackView.swift */,
+				B1000000000000000000004B /* InferenceSetupView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -261,6 +268,7 @@
 				B10000000000000000000040 /* ExternalToolCompatibility.swift */,
 				B10000000000000000000046 /* WorkerProvisioner.swift */,
 				B10000000000000000000048 /* UvAvailability.swift */,
+				B1000000000000000000004A /* InferenceSetup.swift */,
 			);
 			path = Inference;
 			sourceTree = "<group>";
@@ -314,6 +322,7 @@
 				B10000000000000000000045 /* WorkerLaunchConfigurationTests.swift */,
 				B10000000000000000000047 /* WorkerProvisionerTests.swift */,
 				B10000000000000000000049 /* UvAvailabilityTests.swift */,
+				B1000000000000000000004C /* InferenceSetupTests.swift */,
 			);
 			path = StrataTests;
 			sourceTree = "<group>";
@@ -558,6 +567,8 @@
 				A10000000000000000000042 /* SessionStore.swift in Sources */,
 				A10000000000000000000046 /* WorkerProvisioner.swift in Sources */,
 				A10000000000000000000048 /* UvAvailability.swift in Sources */,
+				A1000000000000000000004A /* InferenceSetup.swift in Sources */,
+				A1000000000000000000004B /* InferenceSetupView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -601,6 +612,7 @@
 				A10000000000000000000045 /* WorkerLaunchConfigurationTests.swift in Sources */,
 				A10000000000000000000047 /* WorkerProvisionerTests.swift in Sources */,
 				A10000000000000000000049 /* UvAvailabilityTests.swift in Sources */,
+				A1000000000000000000004C /* InferenceSetupTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

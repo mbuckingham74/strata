@@ -229,6 +229,82 @@ final class InferenceController {
         await refreshRuntimeReadiness(checker: RuntimeReadinessChecker(isExecutable: isExecutable, resolveWorker: resolveWorker))
     }
 
+    // MARK: - Inference Setup (Stage 2 native first-launch)
+
+    private(set) var setupStage: InferenceSetupStage = .idle
+    private(set) var isSetupInProgress: Bool = false
+
+    /// True when worker not ready and setup should be offered. Nil readiness (checking) returns false.
+    var needsSetup: Bool {
+        guard let r = runtimeReadiness else { return false }
+        return !r.isWorkerReady
+    }
+
+    var setupErrorMessage: String? {
+        if case .failed(let msg) = setupStage { return msg }
+        return nil
+    }
+
+    /// Orchestrates: ensure uv -> provision worker (sync + prepare-model) -> refresh readiness.
+    /// All heavy work is dispatched off MainActor so UI remains responsive and tests can inject fakes.
+    func runSetup(
+        ensureUvAvailable: @escaping @Sendable () -> UvAvailabilityResult = { UvAvailability().ensureAvailable() },
+        provisionWorker: @escaping @Sendable (URL) -> WorkerProvisioningResult = { url in WorkerProvisioner(uvExecutableURL: url).provision() },
+        refreshReadiness: (@Sendable () async -> Void)? = nil
+    ) async {
+        guard !isSetupInProgress else { return }
+        isSetupInProgress = true
+        defer { isSetupInProgress = false }
+
+        setupStage = .checkingTools
+        let uvResult: UvAvailabilityResult = await Task.detached(priority: .userInitiated) { ensureUvAvailable() }.value
+        let uvURL: URL
+        switch uvResult {
+        case .success(let url):
+            uvURL = url
+        case .failure(let err):
+            let msg = err.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+            setupStage = .failed(msg.isEmpty ? "Failed to prepare tools." : String(msg.prefix(500)))
+            return
+        }
+
+        setupStage = .provisioning
+        let provisionResult: WorkerProvisioningResult = await Task.detached(priority: .userInitiated) { provisionWorker(uvURL) }.value
+        switch provisionResult {
+        case .failure(let err):
+            let msg = err.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+            setupStage = .failed(msg.isEmpty ? "Worker installation failed." : String(msg.prefix(500)))
+            return
+        case .success:
+            break
+        }
+
+        setupStage = .finalizing
+        if let refresh = refreshReadiness {
+            await refresh()
+        } else {
+            await refreshRuntimeReadiness()
+        }
+
+        if isWorkerReady {
+            setupStage = .idle
+        } else {
+            let hint = runtimeReadiness?.sidebarStatus ?? "Worker still not ready."
+            setupStage = .failed(String(hint.prefix(500)))
+        }
+    }
+
+    /// Refresh-only helper. Auto-provision on launch is user-initiated via Try Again.
+    func refreshAndEnsureSetupIfNeeded(
+        ensureUvAvailable: @escaping @Sendable () -> UvAvailabilityResult = { UvAvailability().ensureAvailable() },
+        provisionWorker: @escaping @Sendable (URL) -> WorkerProvisioningResult = { url in WorkerProvisioner(uvExecutableURL: url).provision() },
+        checker: RuntimeReadinessChecker = .live
+    ) async {
+        _ = ensureUvAvailable
+        _ = provisionWorker
+        await refreshRuntimeReadiness(checker: checker)
+    }
+
     // MARK: - Ownership
 
     private let client: InferenceWorkerClient
