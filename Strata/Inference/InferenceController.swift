@@ -259,6 +259,8 @@ final class InferenceController {
         ensureFfmpegAvailable: @escaping @Sendable () -> FFmpegAvailabilityResult = { FFmpegAvailability().ensureAvailable() },
         resolveYtDlp: @escaping @Sendable () -> ResolvedExternalTool = { ExternalToolResolver.live.resolveYtDlp() },
         ensureYtDlpAvailable: @escaping @Sendable () -> YtDlpAvailabilityResult = { YtDlpAvailability().ensureAvailable() },
+        resolveNode: @escaping @Sendable () -> ResolvedExternalTool = { ExternalToolResolver.live.resolveNode() },
+        ensureNodeAvailable: @escaping @Sendable () -> NodeAvailabilityResult = { NodeAvailability().ensureAvailable() },
         provisionWorker: @escaping @Sendable (URL) -> WorkerProvisioningResult = { url in WorkerProvisioner(uvExecutableURL: url).provision() },
         refreshReadiness: (@Sendable () async -> Void)? = nil
     ) async {
@@ -302,6 +304,20 @@ final class InferenceController {
             case .failure(let err):
                 let msg = err.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
                 setupStage = .failed(msg.isEmpty ? "yt-dlp installation failed." : String(msg.prefix(500)))
+                return
+            }
+        }
+
+        // Managed Node: reuse a compatible resolved copy (>=22); provision pinned 26.8.1 only when unresolved.
+        let nodeResolved: Bool = await Task.detached(priority: .userInitiated) { resolveNode().isAvailable }.value
+        if !nodeResolved {
+            let nodeResult: NodeAvailabilityResult = await Task.detached(priority: .userInitiated) { ensureNodeAvailable() }.value
+            switch nodeResult {
+            case .success:
+                break
+            case .failure(let err):
+                let msg = err.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                setupStage = .failed(msg.isEmpty ? "Node installation failed." : String(msg.prefix(500)))
                 return
             }
         }
