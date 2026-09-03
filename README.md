@@ -2,267 +2,136 @@
 
 ![Strata app icon](Strata/Assets.xcassets/AppIcon.appiconset/AppIcon-256.png)
 
-Native macOS app for separating audio into six synchronized stems and mixing them.
+Turn a song into six synced strata you can mute, reshape, and export.
 
-Load a YouTube source or a local audio file, play the original, optionally separate it into stems, then mix and export. Audio separation runs locally on this Mac; you do not need to separate a source just to play it or export its original audio as MP3.
+Native macOS app · Apple Silicon · Separation runs locally on-device (fetching a YouTube Source needs network).
 
-```mermaid
-flowchart LR
-    yt["YouTube URL"] --> ytdlp["yt-dlp<br/>download source"]
-    local["Local audio file"] --> ffmpeg["FFmpeg<br/>canonical audio"]
-    ytdlp --> ffmpeg
-    ffmpeg --> source["Loaded local source"]
-    source --> original["Original mix<br/>playback / Save MP3"]
-    source --> worker["Local ML separation<br/>MLX on Apple Silicon"]
-    worker --> strata["Six Stratas<br/>Vocals • Drums • Bass • Guitar • Piano • Other"]
-    strata --> controls["Synchronized playback<br/>Mute / Solo / Gain"]
-    controls --> exports["WAV / MP3 exports"]
-```
+<!-- Screenshot 1 — expected file: docs/readme/strata-mixer.png — completed mixer hero with Library visible: six-stratum mixer, Original mix summary, and Library sidebar with saved sessions. -->
 
-## What it does
+## Features
 
-- Load and play an original mix from YouTube or a local audio file.
-- Optionally separate the source into **Vocals, Drums, Bass, Guitar, Piano, and Other**.
-- Play the six stems together on one shared timeline.
-- Mix with per-stem mute, solo, and 0–100% gain controls.
-- Export the original source as MP3, or export individual stems and selected mixes as WAV or MP3.
-- Edit MP3 tags and artwork before exporting.
+- Start from a YouTube link or local audio file.
+- Play local audio immediately as the Original mix; separation is optional.
+- Create Strata to split a Source into six synced strata: Vocals, Drums, Bass, Guitar, Piano, Other.
+- Mix with per-stratum mute, solo, and gain on one shared timeline.
+- Export the original as MP3, or export stems and selected mixes as WAV or MP3.
+- Reopen any Library session later without separating again.
 
-## Get audio
+## How it works
 
-### YouTube
+1. **Pick a Source** — add local audio or preview a YouTube link.
+2. **Create Strata** — run local separation when you want stems.
+3. **Mix** — mute, solo, and balance the six strata together.
+4. **Export or reopen** — Save MP3, Export stems and mixes, or reopen the saved Library session later.
 
-1. Paste an `https://` YouTube URL (`youtube.com` or `youtu.be`) into **Paste YouTube URL**.
-2. Click **Load source**.
+## Sources
 
-Strata uses `yt-dlp` to download the source and its available metadata/artwork, then uses FFmpeg to create and validate local audio for the app. Loading a source does not start separation. The loaded card provides original-source playback and, when available, title, artist, channel, and artwork.
+### Local audio
 
-After loading, you can use the same local source to:
+Use **Choose Local Audio…** and pick a file macOS can decode (such as MP3, WAV, AIFF, or M4A). It loads immediately as the **Original mix** with title, duration, and play, pause, and seek controls.
 
-- **Separate** it into six stems. This reuses the loaded audio and needs the local worker, but not another YouTube download.
-- **Save MP3** without separating. This reuses the loaded audio and needs FFmpeg.
+From there you can **Save MP3** directly or **Create Strata** to separate it. Only one Source is active at a time; picking a new Source clears the previous separation result and status.
 
-Loading a new YouTube URL downloads that source. **Load source** requires both FFmpeg and `yt-dlp`.
+### YouTube, metadata first
 
-### Local file
+Paste an `https://` YouTube URL (`youtube.com` or `youtu.be`) and choose **Add YouTube Source**.
 
-Click **Add Audio** and choose an audio file. The picker accepts common audio types including MP3, WAV, AIFF, and M4A. The selected file is loaded immediately as the **Original mix** with its filename, duration, and play/pause/seek controls when macOS can decode it.
+That first step is a lightweight preview only: title, artist, channel, artwork, and duration. The preview is **not playable** — playback controls stay disabled and show **Preview only**. **Save MP3** does not make it playable; only **Create Strata** acquires the canonical Original mix.
 
-With a local file loaded, you can:
+From the preview card you can:
 
-- **Separate** it. Strata uses FFmpeg to convert it to the canonical audio format needed by the local separation worker, then runs separation locally.
-- **Save MP3** without separating. FFmpeg encodes the selected local file directly.
+- **Create Strata** — downloads the audio once, then runs local separation.
+- **Save MP3** — downloads the audio once as an export intermediate, then encodes an MP3 without separating and without loading a playable source.
 
-Only one source is active at a time. Choosing a different source clears the previous source's separation result and status.
+Loading a new URL replaces the previous preview. The preview step needs only yt-dlp + Node; FFmpeg is needed later for acquisition/export/separation paths that use it.
 
-## Playback and seeking
+<!-- Screenshot 2 — expected file: docs/readme/youtube-workflow.png — three-stage Add YouTube Source → preview (metadata/artwork/duration, Preview only) → Create Strata progress sequence. -->
 
-- The original mix has play/pause, a seek slider, and a time display. Seeking while playing resumes from the new position. After natural completion, Play starts again from the beginning.
-- Separated stems stay synchronized on one shared timeline. The compact stems controls, stacked strata view, shared ruler, and any stem waveform can be used to play, pause, or seek all six stems together.
-- Times are shown as `m:ss`, or `h:mm:ss` for longer audio.
+## Mixing and playback
 
-## Optional six-stratum separation
+The **Original mix** has play/pause, a seek slider, and a time readout (`m:ss`, or `h:mm:ss` for long audio). Seeking while playing resumes from the new position; after natural completion, Play restarts from the beginning.
 
-Separation produces six validated, synchronized stems in this order:
+After separation, the six strata share one timeline:
 
-**Vocals → Drums → Bass → Guitar → Piano → Other**
+- Waveforms, shared ruler, and shared playhead stay in sync; click or drag any of them to seek all strata together.
+- Each stratum row has **Mute**, **Solo**, and a live **Gain** slider (`0%`–`100%`).
+- When any stratum is soloed, only soloed strata play and count toward the selected mix. Otherwise, muted strata are excluded.
+- Gain affects both live playback and the Exported selected mix.
+- A selected mix needs at least two strata.
 
-The strata view shows a real waveform for each stem, a shared ruler, and a shared playhead. Click or drag any waveform or the ruler to seek all stems together. The separation status moves through states such as `Ready`, `Downloading…` for YouTube sources, `Loading model…`, `Separating…`, `Complete`, `Failed`, and `Cancelled`. **Cancel** stops the current operation.
+Loading a new Source resets the mixer controls. Only the saved gains travel with a Library session (see Library); mute, solo, and playhead position are not persisted.
 
-## Mixing
+## Library
 
-Each stem row has:
+A successful **Create Strata** saves a **Library session** (also called a saved session). **Save MP3** alone does not create one.
 
-- **Mute** and **Solo** controls.
-- A live **Gain** slider from `0%` to `100%`.
+The **Library** sidebar lists saved sessions by most-recently opened, with title, a YouTube/Local label, and artwork when available. Selecting a session reopens it **without downloading, ingesting, or separating again**, restoring source playback, the completed separation, persisted project metadata/artwork where present, and saved gains. Later MP3 tag edits are not generally persisted.
 
-When one or more stems are soloed, only those stems are used for playback and selected-mix export. Otherwise, muted stems are excluded and the remaining stems are used. Gain affects live stem playback and the selected mix export. A selected mix requires at least two stems, and loading a new source resets the stem controls.
+- **New Session** (`+`) clears the active Source, separation state, stems, and draft URL.
+- **Delete** (right-click a session) asks for confirmation and permanently removes that session and its audio files.
+- Re-running **Create Strata** for the same YouTube video updates that video’s existing Library row instead of adding a duplicate. Local files create a new row per completed separation.
+
+<!-- Screenshot 3 — expected file: docs/readme/library-reopen.png — Library session switching/reopen sequence: sidebar with multiple saved sessions, selecting an older session, mixer restored without re-separating. -->
 
 ## Export
 
-Exports open a save panel. **Export Folder…** sets the default folder shown by future export panels.
+Exports open a save panel. **Export Folder…** sets the default folder shown by future export panels; you can still pick any destination each time.
 
-### Original source → MP3
+- **Original → Save MP3** — on the Source card. Needs no separation.
+- **Single stratum → WAV or MP3** — from the download menu on a stratum row.
+- **Selected mix → Export Selected MP3 / Export Selected WAV** — exports the strata currently selected by Mute/Solo (Solo wins), with current gains, kept in sync. Needs at least two strata.
 
-- **YouTube source:** use **Save MP3** on the loaded source card. It reuses the downloaded local audio and does not run another `yt-dlp` download.
-- **Local file:** use **Save MP3** beside **Separate**. It encodes the selected local file directly.
+Individual stem WAV export copies the validated stem, while selected-mix WAV export is rendered from the chosen stems with current gains; neither needs FFmpeg. MP3 exports are encoded with FFmpeg. WAV files do not carry MP3 tags.
 
-Original-source MP3 export does not require separation, but all MP3 exports require FFmpeg.
+### MP3 tags and quality
 
-### Individual stem → WAV or MP3
+The **MP3 Tags** editor is available for the current Source, including local audio and previews without metadata. It covers Title, Artist, Album, Album Artist, Year, Track #, Genre, and artwork (**Keep** / **Remove** / **Replace…**). Edits apply to MP3 exports for that Source; blank values are omitted.
 
-Use the download menu on a stem row to choose WAV or MP3.
+**Settings → MP3 Quality** applies to all MP3 exports (default **High (VBR)**; optional 192 / 256 / 320 kbps). WAV is always lossless.
 
-- WAV exports copy the validated stem and do not require FFmpeg.
-- MP3 exports encode the stem with FFmpeg and can include the current MP3 tags and artwork.
+A metadata-derived source prefix (`Artist - Title`) is used only when both Artist and Title are available (for example, `Artist - Title - Vocals + Guitar.mp3`); otherwise local stem/mix exports may fall back to names such as `Vocals.mp3` or `Vocals + Guitar.mp3`. The save panel lets you rename before exporting.
 
-### Selected mix → WAV or MP3
+## First run
 
-Use **Export Selected MP3** or the menu beside it for **Export Selected WAV**. The selected stems come from the current Mute/Solo state, with Solo taking precedence, and at least two stems must be selected. MP3 mix export requires FFmpeg; WAV mix export does not. Mix export uses the current per-stem gains and keeps the stems aligned.
+On first launch Strata shows **Set Up Strata**. It prepares what the app needs on your Mac — FFmpeg, yt-dlp, Node, the separation engine, the model, and a final check. This can take a few minutes and may need network access to download tools, worker dependencies, and model assets; there is nothing else to install by hand.
 
-WAV exports do not contain MP3 tags.
+The checklist shows each step as Pending, Preparing, Ready, or Couldn’t finish, with **Try Again** on failure and **Strata is ready** on success. Setup status also appears in the sidebar. Missing pieces gate gracefully: without yt-dlp/Node there is no YouTube preview or loading; without FFmpeg there is no acquisition, local separation, or MP3 export; without the worker/model there is no separation.
 
-## MP3 tags and filenames
+## Settings
 
-The **MP3 Tags** editor is available for local files and for YouTube sources when metadata is available. It includes **Title, Artist, Album, Album Artist, Year, Track #, Genre**, and artwork controls: **Keep**, **Remove**, or **Replace…**.
+- **Appearance** — Theme.
+- **MP3 Quality** — High (VBR), 192, 256, or 320 kbps for all MP3 exports.
+- **Locations** — Library, Scratch, and Export folders with Choose…/Reset. Save panels open in the Export folder. Scratch applies to new separations and ingests only; existing data is not moved. The Settings → Library location preference currently neither moves existing sessions nor retargets project persistence; saved projects remain under `~/Library/Application Support/Strata/Projects`.
 
-Edits are used by MP3 exports for the current source. WAV exports do not carry tags. Blank, `na`, and `n/a` values are omitted; Year accepts four digits, and Track # accepts `n` or `n/m` with positive integers. **Keep** uses available source artwork, **Remove** exports without artwork, and **Replace…** uses the selected image.
+## Privacy and technical notes
 
-Default save names are based on the available metadata and source:
+- Inference is local/on-device (Apple Silicon, MLX/MPS); there is no cloud separation step.
+- YouTube preview and download need network access. Everything after that is local.
+- Saved Library sessions live under the app’s Application Support folder; temporary ingest/separation work lives under Caches; default exports live under Music.
 
-- Original-source MP3: `Artist - Title.mp3` when a metadata-based name is available; otherwise `YouTube Audio.mp3` for YouTube or the local source name, falling back to `Audio.mp3`.
-- Individual stem: `Artist - Title - Vocals.mp3` or `.wav` when a source name is available; otherwise `vocals.mp3` or `vocals.wav`.
-- Selected mix: the source name followed by the selected stem names, such as `Artist - Title - Vocals + Guitar.mp3`; without a source name, a name such as `Vocals + Guitar.mp3` is used.
+<details>
+<summary>For developers: builds, tools, and storage</summary>
 
-The save panel lets you change any default filename before exporting.
+- Build and run with the `Strata` scheme in `Strata.xcodeproj` on an Apple Silicon Mac.
+- In-app setup provisions and validates the FFmpeg / yt-dlp / Node tools, the Python separation worker environment, and the model assets. Supported tool versions are checked in-app; no manual installs are required for normal use.
+- Storage defaults: Library sessions under `~/Library/Application Support/Strata/Projects`, temporary ingest and separation work under `~/Library/Caches/Strata`, default exports under `~/Music/Strata/Exports`.
+- Model: BS-RoFormer-SW; backend MLX on MPS. See Strata → About for the pinned model identity shown by the app.
 
-## Prerequisites
+</details>
 
-**Supported platform:** Apple Silicon Mac (arm64) running macOS 26 (Tahoe) or later. Intel Macs are not supported — the ML worker asserts `arm64` and uses MLX/Metal on MPS. The Xcode project deployment target is `26.0` (Swift 6).
+## Current limits
 
-**Required tools:**
+- YouTube previews show metadata/artwork/duration only and cannot play; only **Create Strata** acquires the canonical Original mix (**Save MP3** does not make the preview playable).
+- Separation is optional but required before any stem or selected-mix Export.
+- Only one Source is active at a time.
+- Selected-mix Export needs at least two selected strata.
+- MP3 Export needs FFmpeg ready; YouTube preview needs yt-dlp + Node ready; acquisition/separation paths need their respective tools plus the worker and model.
+- Only saved gains persist with a Library session; mute, solo, and playhead position do not.
+- The Settings → Library location preference neither moves existing sessions nor retargets project persistence; saved projects remain under `~/Library/Application Support/Strata/Projects`.
+- Apple Silicon only; Intel Macs are not supported.
 
-- **Xcode** — from the Mac App Store (includes Command Line Tools). Strata builds with the `Strata` scheme in `Strata.xcodeproj` and uses the macOS 26 SDK.
-- **Homebrew** — from <https://brew.sh> (Apple Silicon path `/opt/homebrew/bin`).
+## Acknowledgments
 
-If Homebrew was just installed and this terminal does not yet find `brew`, initialize the Apple Silicon Homebrew environment before continuing:
-
-```bash
-eval "$(/opt/homebrew/bin/brew shellenv)"
-```
-
-**Supported external versions** (pinned in `Strata/Inference/ExternalToolCompatibility.swift`):
-
-| Tool | Supported version | Path / role |
-|------|-------------------|-------------|
-| FFmpeg | `9.0.1` | `/opt/homebrew/bin/ffmpeg` — externally installed runtime dependency |
-| yt-dlp | `2026.08.19` | `/opt/homebrew/bin/yt-dlp` — externally installed runtime dependency |
-| Node.js | `26.8.1` | `/opt/homebrew/bin/node` — externally installed runtime dependency |
-| uv | `0.12.8` | `uv` — setup/update only; creates the worker `.venv` (installed: `~/Library/Application Support/Strata/InferenceWorker/.venv` via `scripts/install-inference-worker.sh`; dev: `InferenceWorker/.venv`); not called at runtime |
-
-FFmpeg, yt-dlp, and Node are externally installed runtime dependencies Strata executes at `/opt/homebrew/bin/*`. `uv` is only used to prepare the Python worker environment (from `InferenceWorker/pyproject.toml` / `uv.lock` / `.python-version` into either the installed `~/Library/Application Support/Strata/InferenceWorker/.venv` or the dev `InferenceWorker/.venv`). **Model files and third-party executables are not bundled in the repository or in `Strata.app`.**
-
-Install the external tools in one command:
-
-```bash
-brew install ffmpeg yt-dlp node uv
-```
-
-Homebrew installs its current formula versions; this command does not itself pin Strata’s supported versions. Strata validates the supported FFmpeg, yt-dlp, and Node runtime versions at their fixed `/opt/homebrew/bin` paths and rejects an unsupported version rather than silently running an unvalidated one. `uv` is a setup prerequisite and is not called by the app at runtime.
-
-Before continuing, confirm that the exact executables Strata uses report the supported versions:
-
-```bash
-brew --prefix                         # expect: /opt/homebrew
-command -v uv                         # expect: /opt/homebrew/bin/uv
-/opt/homebrew/bin/ffmpeg -version | head -n 1  # expect: ffmpeg version 9.0.1
-/opt/homebrew/bin/yt-dlp --version             # expect: 2026.08.19
-/opt/homebrew/bin/node --version               # expect: v26.8.1
-uv --version                                  # expect: uv 0.12.8
-```
-
-If any expected version differs, stop here and resolve it as described in [Troubleshooting](#troubleshooting) before cloning or running the app.
-
-## Build from source
-
-Run the shell commands below in one continuous terminal session. Start in any directory where you want the checkout; the commands themselves establish the later working directories. If a command fails, stop and fix it before continuing.
-
-### Clone
-
-```bash
-git clone https://github.com/mbuckingham74/strata.git
-cd strata                 # now: the cloned repository root
-```
-
-SSH alternative: `git@github.com:mbuckingham74/strata.git`.
-
-### Prepare the Python worker
-
-The pinned Python version is in `InferenceWorker/.python-version` (`3.12.12`), with dependencies pinned in `InferenceWorker/pyproject.toml` and `InferenceWorker/uv.lock`.
-
-#### Installed (V1 canonical) location
-
-The V1 installed worker lives at `$HOME/Library/Application Support/Strata/InferenceWorker` (canonical — `~/Library/Application Support/Strata/InferenceWorker`). At runtime Strata launches `<worker-root>/.venv/bin/python3 -m demux_worker` — `uv` is not called at runtime.
-
-For an installed or once-per-machine setup, run from the repository root:
-
-```bash
-scripts/install-inference-worker.sh
-```
-
-The script derives the repository root relative to its own location (run it from the repo root as shown), invokes `/opt/homebrew/bin/uv` explicitly, and syncs with `UV_PROJECT_ENVIRONMENT="$worker_root/.venv" --locked --no-dev --no-editable --managed-python --reinstall-package demux-worker`. This installs `demux-worker` non-editably so the installed app has no runtime dependency on the repository checkout. After syncing, the script runs `prepare-model` — it reuses valid cached files and downloads only if missing (see model details below). The script creates or recreates only `$HOME/Library/Application Support/Strata/InferenceWorker/.venv`; it never deletes `$HOME/Library/Application Support/Strata` itself.
-
-#### Model assets
-
-`prepare-model` (also run automatically by the installer after sync) downloads and verifies model assets into `~/Library/Caches/Demux/Models/roformer-model-bs-roformer-sw-by-jarredou/` — **~667 MB checkpoint `BS-Rofo-SW-Fixed.ckpt` (699,412,152 bytes) + ~5 KB config**, ~670 MB total, SHA-256 verified (see `InferenceWorker/src/demux_worker/constants.py`). The worker does **not** download models automatically; this step is required before the first separation. Re-running is idempotent — valid cached files are skipped.
-
-To validate cached assets without downloading, run `uv run prepare-model --check-only` while the current directory is `InferenceWorker`, or for the installed location run `$HOME/Library/Application Support/Strata/InferenceWorker/.venv/bin/python3 -m demux_worker.prepare_model --check-only` (the troubleshooting sequence shows both checks).
-
-#### Development alternative
-
-For Xcode Debug builds, `SRCROOT/InferenceWorker/.venv` still works via the source-tree fallback — this is a dev convenience, not the V1 installed location. From the repository root:
-
-```bash
-cd InferenceWorker        # now: <repository root>/InferenceWorker
-uv sync                   # stays in <repository root>/InferenceWorker
-uv run prepare-model      # stays in <repository root>/InferenceWorker
-cd ..                     # now: <repository root>
-```
-
-- `uv sync` creates `InferenceWorker/.venv` (downloads the pinned Python via `uv` if needed) from `InferenceWorker/pyproject.toml` and `InferenceWorker/uv.lock`.
-- `uv run prepare-model` is the same model step described above.
-
-If the worker lives elsewhere, set `DEMUX_WORKER_DIRECTORY` to its absolute `InferenceWorker` directory in Xcode under **Product ▸ Scheme ▸ Edit Scheme… ▸ Run ▸ Arguments ▸ Environment Variables** (works for both installed and dev locations). A worker is needed for separation; WAV exports remain available without FFmpeg once stems exist.
-
-The app shows setup status in the sidebar and Separation card. Missing or unsupported FFmpeg disables YouTube loading, local separation, and MP3 exports; missing or unsupported yt-dlp/Node disables YouTube; missing the worker disables separation.
-
-### Run in Xcode
-
-The preceding `cd ..` leaves the terminal in the repository root:
-
-```bash
-open Strata.xcodeproj  # run this from the repository root
-```
-
-In Xcode, select scheme **Strata**, destination **My Mac**, then choose **Product ▸ Run** (⌘R). If Xcode asks to accept its license or install platform components, complete those prompts and run again.
-
-No separate metadata-generation step is required — the `AboutMetadata.json` build phase invokes `python3` on `scripts/generate-about-metadata.py` automatically with `${SRCROOT}`-absolute repository paths.
-
-### First run
-
-On first launch, click **Add Audio** for a local file or paste a YouTube URL into **Paste YouTube URL** and click **Load source**. Check the setup status if you plan to separate audio. Separation will show `Loading model…` → `Separating…` once the cached model is present; if `prepare-model` was not run, separation reports the missing cache and will not download it.
-
-> Model files (`~/Library/Caches/Demux/Models/...`) and the Homebrew executables (`/opt/homebrew/bin/ffmpeg`, `/opt/homebrew/bin/yt-dlp`, `/opt/homebrew/bin/node`) are not committed and are not embedded in the app — they must be present as described above.
-
-## Troubleshooting
-
-Run the checks below from the repository root. If you followed the build sequence, the terminal is already there after `cd ..` in worker setup. The dev worker check must run from `InferenceWorker`, where its `pyproject.toml` is located, and the final `cd ..` returns to the repository root. The installed worker check uses the canonical V1 path.
-
-```bash
-# Current directory: repository root
-brew --prefix                         # expect: /opt/homebrew
-command -v ffmpeg yt-dlp node uv       # expect: /opt/homebrew/bin/*
-ls -l /opt/homebrew/bin/ffmpeg /opt/homebrew/bin/yt-dlp /opt/homebrew/bin/node
-/opt/homebrew/bin/ffmpeg -version | head -n 1  # expect: ffmpeg version 9.0.1
-/opt/homebrew/bin/yt-dlp --version             # expect: 2026.08.19
-/opt/homebrew/bin/node --version               # expect: v26.8.1
-uv --version                                  # expect: uv 0.12.8
-
-# Installed worker (V1 canonical)
-ls -l "$HOME/Library/Application Support/Strata/InferenceWorker/.venv/bin/python3"
-"$HOME/Library/Application Support/Strata/InferenceWorker/.venv/bin/python3" -m demux_worker.prepare_model --check-only  # validates cache without downloading
-
-# Dev worker (Xcode Debug fallback)
-cd InferenceWorker                    # now: <repository root>/InferenceWorker
-ls -l .venv/bin/python3
-cat .python-version                    # expect: 3.12.12
-uv run prepare-model --check-only      # validates cache without downloading
-cd ..                                  # now: <repository root>
-```
-
-- `Setup needed · missing FFmpeg at /opt/homebrew/bin/ffmpeg` or `Setup needed · FFmpeg version mismatch …` → install or make the supported FFmpeg `9.0.1` available at that exact path. Intel Homebrew at `/usr/local/bin` is not used.
-- `YouTube disabled · missing yt-dlp at /opt/homebrew/bin/yt-dlp` or `YouTube disabled · yt-dlp version mismatch …` → make yt-dlp `2026.08.19` available at that exact path.
-- `YouTube disabled · missing Node at /opt/homebrew/bin/node` or `YouTube disabled · Node version mismatch …` → make Node `26.8.1` available at that exact path.
-- Homebrew formulae advance independently of this repository. `brew upgrade` does not guarantee one of the supported versions; if the current formula is newer, install a supported versioned formula or another supported package source, then rerun the absolute-path checks. The repository does not include a Homebrew version pin or downgrade installer.
-- `Setup needed · missing worker Python at …/.venv/bin/python3` → for installed apps the expected path is `$HOME/Library/Application Support/Strata/InferenceWorker/.venv/bin/python3` — run `scripts/install-inference-worker.sh` from the repository root to (re)create it (only `.venv` is recreated, not `Application Support/Strata` itself). For dev/Xcode Debug builds using the repo checkout, run `cd InferenceWorker`, then `uv sync`, then `cd ..` instead. `DEMUX_WORKER_DIRECTORY` can override the worker root in either case (Product ▸ Scheme ▸ Edit Scheme… ▸ Run ▸ Arguments ▸ Environment Variables). Do not run `uv sync` from the repository root.
-- A worker error about a missing cached asset → for the installed worker run `"$HOME/Library/Application Support/Strata/InferenceWorker/.venv/bin/python3" -m demux_worker.prepare_model` (or `scripts/install-inference-worker.sh` which re-runs prepare-model after sync); for the dev worker, from `InferenceWorker` run `uv run prepare-model` (without `--check-only`) to download and verify the model files.
+- BS-RoFormer separation model by Jarredou, and the open `bs-roformer-infer` reference.
+- MLX and the Apple Silicon / Metal (MPS) ecosystem.
+- FFmpeg, yt-dlp, and Node.js, which power local audio handling and YouTube access.
