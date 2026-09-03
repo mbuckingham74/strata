@@ -165,12 +165,16 @@ final class StorageLocationPreferences: @unchecked Sendable {
     @MainActor
     func applyExportDefaultDirectory(to panel: NSSavePanel) -> SecurityScopedExportDirectory? {
         let access = resolvedExportDirectoryAccess()
-        if let access {
-            panel.directoryURL = access.url.standardizedFileURL
+        let url = access?.url.standardizedFileURL ?? resolvedExportURL()
+        // NSSavePanel ignores a non-existent directoryURL (falls back to ~/Documents),
+        // so ensure the resolved Export dir exists before assigning it.
+        try? fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+        var isDir: ObjCBool = false
+        guard fileManager.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
             return access
         }
-        panel.directoryURL = resolvedExportURL()
-        return nil
+        panel.directoryURL = url
+        return access
     }
 
     // MARK: - Private helpers

@@ -181,4 +181,71 @@ final class StorageLocationPreferencesTests: XCTestCase {
         XCTAssertEqual(normalized(StorageLocationPreferences(defaults: defaults).resolvedExportURL()), normalized(dir))
         withExtendedLifetime(access) {}
     }
+
+    @MainActor
+    func testApplyCreatesMissingDefaultExportDirectory() throws {
+        let musicBase = try makeTempDir()
+        let fileManager = MusicBaseFileManager(musicBase: musicBase)
+        let pref = StorageLocationPreferences(defaults: defaults, fileManager: fileManager)
+        let expected = musicBase.appendingPathComponent("Strata/Exports", isDirectory: true).standardizedFileURL
+        XCTAssertFalse(fileManager.fileExists(atPath: expected.path))
+        let panel = NSSavePanel()
+        panel.directoryURL = nil
+        let access = pref.applyExportDefaultDirectory(to: panel)
+        XCTAssertNil(access)
+        XCTAssertEqual(normalized(try XCTUnwrap(panel.directoryURL)), normalized(expected))
+        var isDir: ObjCBool = false
+        XCTAssertTrue(fileManager.fileExists(atPath: expected.path, isDirectory: &isDir) && isDir.boolValue)
+        XCTAssertNil(defaults.string(forKey: StorageLocationPreferences.exportPathKey))
+        XCTAssertNil(defaults.data(forKey: StorageLocationPreferences.bookmarkKey))
+    }
+
+    @MainActor
+    func testApplyLeavesPanelUnsetWhenDirectoryCannotBeCreated() {
+        let musicBase = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fileManager = FailingCreateFileManager(musicBase: musicBase)
+        let pref = StorageLocationPreferences(defaults: defaults, fileManager: fileManager)
+        let panel = NSSavePanel()
+        panel.directoryURL = nil
+        let before = panel.directoryURL
+        let access = pref.applyExportDefaultDirectory(to: panel)
+        XCTAssertNil(access)
+        XCTAssertEqual(panel.directoryURL, before)
+    }
+}
+
+private final class MusicBaseFileManager: FileManager {
+    private let musicBase: URL
+
+    init(musicBase: URL) {
+        self.musicBase = musicBase
+        super.init()
+    }
+
+    override func urls(for directory: FileManager.SearchPathDirectory, in domainMask: FileManager.SearchPathDomainMask) -> [URL] {
+        if directory == .musicDirectory {
+            return [musicBase]
+        }
+        return super.urls(for: directory, in: domainMask)
+    }
+}
+
+private final class FailingCreateFileManager: FileManager {
+    private let musicBase: URL
+
+    init(musicBase: URL) {
+        self.musicBase = musicBase
+        super.init()
+    }
+
+    override func urls(for directory: FileManager.SearchPathDirectory, in domainMask: FileManager.SearchPathDomainMask) -> [URL] {
+        if directory == .musicDirectory {
+            return [musicBase]
+        }
+        return super.urls(for: directory, in: domainMask)
+    }
+
+    override func createDirectory(at url: URL, withIntermediateDirectories createIntermediates: Bool, attributes: [FileAttributeKey: Any]? = nil) throws {
+        throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError, userInfo: nil)
+    }
 }
