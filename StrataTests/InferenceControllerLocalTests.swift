@@ -313,6 +313,71 @@ final class InferenceControllerLocalTests: XCTestCase {
         XCTAssertEqual(result, .unsafeToTerminate(reason: .cleanupIncomplete))
     }
 
+    func testLocalStartBlockedSurfacesRecoveryWhenCleanupFailed() async throws {
+        let mixtureDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: mixtureDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: mixtureDir) }
+        let mixtureURL = mixtureDir.appendingPathComponent("mixture.wav")
+        try makeWAV(at: mixtureURL)
+
+        let dir = try makeFakeWorker(script: hangingWorkerScript())
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let hanging = MockLocalHanging(mixtureURL: mixtureURL, shouldThrowCleanupFailedOnCancel: true)
+        let client = InferenceWorkerClient(readinessTimeout: .seconds(3), startedTimeout: .seconds(2), separationTimeout: .seconds(5), workerDirectory: dir)
+        let didStart = AtomicBool()
+        await client.setTestHook { event in if case .started = event { didStart.setTrue() } }
+        let outputBase = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: outputBase, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outputBase) }
+
+        let controller = InferenceController(client: client, outputBase: outputBase, youTubeIngest: nil, localIngest: hanging)
+        controller.startSeparation(localFileURL: URL(fileURLWithPath: "/tmp/song.mp3"))
+        for _ in 0..<50 {
+            if await hanging.ingestStarted { break }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        let localIngestStarted = await hanging.ingestStarted
+        XCTAssertTrue(localIngestStarted)
+        controller.cancel()
+        if let tail = controller.debugCleanupChainTail() { await tail.value }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertTrue(controller.debugLocalCleanupFailed())
+
+        // Later Create Strata via local file must block with recovery message, not silent return.
+        controller.startSeparation(localFileURL: URL(fileURLWithPath: "/tmp/another-song.mp3"))
+        guard case .failed(let msg) = controller.state else {
+            XCTFail("blocked local start must surface failed recovery state, got \(controller.state)"); return
+        }
+        XCTAssertTrue(msg.contains("Cleanup failed"), "blocked message must stay truthful, got \(msg)")
+        XCTAssertTrue(msg.lowercased().contains("restart"), "blocked message must state restart recovery, got \(msg)")
+        XCTAssertEqual(controller.statusMessage, "Cleanup failed")
+        XCTAssertTrue((controller.errorMessage ?? "").lowercased().contains("restart"))
+        XCTAssertTrue(controller.debugLocalCleanupFailed(), "flag must remain latched")
+        XCTAssertNil(controller.debugCurrentTask(), "must not create new currentTask when cleanupFailed")
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertFalse(didStart.value, "inference must not start for blocked local start")
+        XCTAssertNil(controller.result)
+
+        // A local cleanup failure blocks every later separation entry point, including the shared direct-WAV and YouTube paths.
+        controller.startSeparation(inputURL: mixtureURL)
+        guard case .failed(let directMsg) = controller.state else {
+            XCTFail("blocked direct-WAV start must surface failed recovery state, got \(controller.state)"); return
+        }
+        XCTAssertTrue(directMsg.lowercased().contains("restart"))
+        XCTAssertNil(controller.debugCurrentTask())
+
+        controller.startSeparation(youTubeURL: URL(string: "https://www.youtube.com/watch?v=blocked")!)
+        guard case .failed(let youTubeMsg) = controller.state else {
+            XCTFail("blocked YouTube start must surface failed recovery state, got \(controller.state)"); return
+        }
+        XCTAssertTrue(youTubeMsg.lowercased().contains("restart"))
+        XCTAssertNil(controller.debugCurrentTask())
+        XCTAssertTrue(controller.debugLocalCleanupFailed(), "flag must remain latched across all blocked separation paths")
+
+        await controller.shutdownWorker(policy: .testShort())
+    }
+
     func testGenerationStaleProtectionLocalThenDirect() async throws {
         let mixtureDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: mixtureDir, withIntermediateDirectories: true)

@@ -1368,8 +1368,8 @@ final class InferenceControllerYouTubeTests: XCTestCase {
         XCTAssertEqual(result, .safeToTerminate)
     }
 
-    // Requirement 2: when youTubeCleanupFailed is true, both startSeparation entry points must reject synchronously before any UI mutation
-    func testStartSeparationEarlyGuardPreservesStateWhenCleanupFailed() async throws {
+    // Requirement 2: when youTubeCleanupFailed is true, both startSeparation entry points must block new work and surface a truthful recovery message
+    func testStartSeparationEarlyGuardSurfacesRecoveryWhenCleanupFailed() async throws {
         let mixtureDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: mixtureDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: mixtureDir) }
@@ -1423,10 +1423,14 @@ final class InferenceControllerYouTubeTests: XCTestCase {
         try makeWAV(at: directWAV, frames: 1024)
 
         controller.startSeparation(inputURL: directWAV)
-        // Immediate synchronous check: no mutation
-        XCTAssertEqual(controller.state, .failed(prevMsg), "direct-WAV start must not mutate state when cleanupFailed")
-        XCTAssertEqual(controller.statusMessage, prevStatus)
-        XCTAssertEqual(controller.errorMessage, prevError)
+        // Immediate synchronous check: blocked with truthful recovery message
+        guard case .failed(let blockedMsg) = controller.state else {
+            XCTFail("direct-WAV start must surface failed recovery state when cleanupFailed, got \(controller.state)"); return
+        }
+        XCTAssertTrue(blockedMsg.contains("Cleanup failed"), "blocked message must stay truthful, got \(blockedMsg)")
+        XCTAssertTrue(blockedMsg.lowercased().contains("restart"), "blocked message must state restart recovery, got \(blockedMsg)")
+        XCTAssertEqual(controller.statusMessage, "Cleanup failed")
+        XCTAssertTrue((controller.errorMessage ?? "").lowercased().contains("restart"), "errorMessage must state restart recovery")
         XCTAssertTrue(controller.debugYouTubeCleanupFailed(), "flag must remain true")
         XCTAssertNil(controller.debugCurrentTask(), "must not create new currentTask when cleanupFailed")
         let cancelCount = await hanging.cancelCallCount
@@ -1434,15 +1438,22 @@ final class InferenceControllerYouTubeTests: XCTestCase {
         // Give Task a chance to run if it were incorrectly created
         try await Task.sleep(nanoseconds: 200_000_000)
         XCTAssertFalse(didStart.value, "inference must not start for rejected direct-WAV")
-        XCTAssertEqual(controller.state, .failed(prevMsg))
+        guard case .failed(let blockedMsgAfterWait) = controller.state else {
+            XCTFail("blocked state must persist, got \(controller.state)"); return
+        }
+        XCTAssertTrue(blockedMsgAfterWait.lowercased().contains("restart"))
         XCTAssertNil(controller.debugCurrentTask())
 
-        // Attempt YouTube start — must also be rejected synchronously
+        // Attempt YouTube start — must also be blocked with recovery message
         let ytURL2 = URL(string: "https://www.youtube.com/watch?v=aaaa")!
         controller.startSeparation(youTubeURL: ytURL2)
-        XCTAssertEqual(controller.state, .failed(prevMsg), "YouTube start must not mutate state when cleanupFailed")
-        XCTAssertEqual(controller.statusMessage, prevStatus)
-        XCTAssertEqual(controller.errorMessage, prevError)
+        guard case .failed(let blockedYTMsg) = controller.state else {
+            XCTFail("YouTube start must surface failed recovery state when cleanupFailed, got \(controller.state)"); return
+        }
+        XCTAssertTrue(blockedYTMsg.contains("Cleanup failed"))
+        XCTAssertTrue(blockedYTMsg.lowercased().contains("restart"), "YouTube blocked message must state restart recovery, got \(blockedYTMsg)")
+        XCTAssertEqual(controller.statusMessage, "Cleanup failed")
+        XCTAssertTrue((controller.errorMessage ?? "").lowercased().contains("restart"))
         XCTAssertTrue(controller.debugYouTubeCleanupFailed())
         XCTAssertNil(controller.debugCurrentTask(), "must not create new currentTask for rejected YouTube start")
         let ingestedAfterYT = await hanging.ingestedURLs
@@ -1451,6 +1462,68 @@ final class InferenceControllerYouTubeTests: XCTestCase {
         XCTAssertFalse(didStart.value, "inference must not start for rejected YouTube")
         let ingestedFinal = await hanging.ingestedURLs
         XCTAssertEqual(ingestedFinal.count, prevIngestedCount)
+
+        await controller.shutdownWorker(policy: .testShort())
+    }
+
+    func testLoadedSeparationPathsSurfaceRecoveryWhenCleanupFailed() async throws {
+        let mixtureDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: mixtureDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: mixtureDir) }
+        let mixtureURL = mixtureDir.appendingPathComponent("mixture.wav")
+        try makeWAV(at: mixtureURL, frames: 1024)
+
+        let dir = try makeFakeWorker(script: hangingWorkerScript())
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let hanging = MockYouTubeHanging(mixtureURL: mixtureURL, shouldThrowCleanupFailedOnCancel: true)
+        let client = InferenceWorkerClient(readinessTimeout: .seconds(3), startedTimeout: .seconds(2), separationTimeout: .seconds(5), workerDirectory: dir)
+        let didStart = AtomicBool()
+        await client.setTestHook { event in if case .started = event { didStart.setTrue() } }
+        let outputBase = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: outputBase, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outputBase) }
+
+        let controller = InferenceController(client: client, outputBase: outputBase, youTubeIngest: hanging)
+
+        // Latch cleanup failure via cancel during hanging ingest.
+        controller.startSeparation(youTubeURL: URL(string: "https://www.youtube.com/watch?v=dQw4w9WgXcQ")!)
+        for _ in 0..<50 {
+            if await hanging.ingestStarted { break }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        let loadedIngestStarted = await hanging.ingestStarted
+        XCTAssertTrue(loadedIngestStarted)
+        controller.cancel()
+        if let tail = controller.debugCleanupChainTail() { await tail.value }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertTrue(controller.debugYouTubeCleanupFailed())
+
+        // Deferred Create Strata from loaded source must block with recovery message, not silent return.
+        controller.startSeparationFromLoadedYouTubeSource()
+        guard case .failed(let loadedMsg) = controller.state else {
+            XCTFail("loaded-source start must surface failed recovery state, got \(controller.state)"); return
+        }
+        XCTAssertTrue(loadedMsg.contains("Cleanup failed"), "got \(loadedMsg)")
+        XCTAssertTrue(loadedMsg.lowercased().contains("restart"), "loaded-source block must state restart recovery, got \(loadedMsg)")
+        XCTAssertEqual(controller.statusMessage, "Cleanup failed")
+        XCTAssertTrue((controller.errorMessage ?? "").lowercased().contains("restart"))
+        XCTAssertTrue(controller.debugYouTubeCleanupFailed())
+        XCTAssertNil(controller.debugCurrentTask())
+
+        // Deferred Create Strata from loaded preview must block the same way.
+        controller.startSeparationFromLoadedPreview()
+        guard case .failed(let previewMsg) = controller.state else {
+            XCTFail("loaded-preview start must surface failed recovery state, got \(controller.state)"); return
+        }
+        XCTAssertTrue(previewMsg.contains("Cleanup failed"), "got \(previewMsg)")
+        XCTAssertTrue(previewMsg.lowercased().contains("restart"), "loaded-preview block must state restart recovery, got \(previewMsg)")
+        XCTAssertEqual(controller.statusMessage, "Cleanup failed")
+        XCTAssertTrue((controller.errorMessage ?? "").lowercased().contains("restart"))
+        XCTAssertTrue(controller.debugYouTubeCleanupFailed())
+        XCTAssertNil(controller.debugCurrentTask())
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertFalse(didStart.value, "no inference must start from blocked loaded paths")
 
         await controller.shutdownWorker(policy: .testShort())
     }

@@ -401,6 +401,21 @@ final class InferenceController {
     private var youTubeCleanupFailed: Bool = false
     private var localCleanupFailed: Bool = false
 
+    private var hasLatchedCleanupFailure: Bool {
+        youTubeCleanupFailed || localCleanupFailed
+    }
+
+    /// Truthful block for new work after a latched cleanup failure.
+    /// Conservative safety is preserved (no new work starts); the silent
+    /// return is replaced with an explicit restart message so Create Strata
+    /// never appears to do nothing.
+    private func surfaceBlockedNewWorkAfterCleanupFailure() {
+        let m = "Cleanup failed: restart Strata before creating new strata."
+        state = .failed(m)
+        statusMessage = "Cleanup failed"
+        errorMessage = String(m.prefix(500))
+    }
+
 #if DEBUG
     func debugHasPendingCancellationCleanup() -> Bool { cleanupChainTail != nil }
     func debugCurrentTask() -> Task<Void, Never>? { currentTask }
@@ -480,7 +495,7 @@ final class InferenceController {
 
     /// Start separation for a canonical WAV input URL.
     func startSeparation(inputURL: URL) {
-        if youTubeCleanupFailed { return }
+        if hasLatchedCleanupFailure { surfaceBlockedNewWorkAfterCleanupFailure(); return }
         let generation = operationGeneration + 1
         operationGeneration = generation
         latestGeneration = generation
@@ -511,7 +526,7 @@ final class InferenceController {
         currentTask = Task { [previousTask] in
             if let previousTask { await previousTask.value }
             await self.drainCleanupChain()
-            if self.youTubeCleanupFailed { return }
+            if self.hasLatchedCleanupFailure { self.surfaceBlockedNewWorkAfterCleanupFailure(); return }
             let base = await MainActor.run { self.outputBaseURL }
 
             do {
@@ -653,7 +668,7 @@ final class InferenceController {
     /// Start separation via local file URL → canonicalize → inference.
     /// Single source: caller provides original file; we canonicalize to 44.1k stereo Float32 WAV.
     func startSeparation(localFileURL: URL) {
-        if youTubeCleanupFailed || localCleanupFailed { return }
+        if hasLatchedCleanupFailure { surfaceBlockedNewWorkAfterCleanupFailure(); return }
         let generation = operationGeneration + 1
         operationGeneration = generation
         latestGeneration = generation
@@ -686,7 +701,7 @@ final class InferenceController {
         currentTask = Task { [previousTask] in
             if let previousTask { await previousTask.value }
             await self.drainCleanupChain()
-            if self.youTubeCleanupFailed || self.localCleanupFailed { return }
+            if self.hasLatchedCleanupFailure { self.surfaceBlockedNewWorkAfterCleanupFailure(); return }
             let base = await MainActor.run { self.outputBaseURL }
 
             do {
@@ -777,7 +792,7 @@ final class InferenceController {
 
     /// Start separation via YouTube URL → ingest → inference.
     func startSeparation(youTubeURL: URL) {
-        if youTubeCleanupFailed { return }
+        if hasLatchedCleanupFailure { surfaceBlockedNewWorkAfterCleanupFailure(); return }
         let generation = operationGeneration + 1
         operationGeneration = generation
         latestGeneration = generation
@@ -803,7 +818,7 @@ final class InferenceController {
         currentTask = Task { [previousTask] in
             if let previousTask { await previousTask.value }
             await self.drainCleanupChain()
-            if self.youTubeCleanupFailed { return }
+            if self.hasLatchedCleanupFailure { self.surfaceBlockedNewWorkAfterCleanupFailure(); return }
             let base = await MainActor.run { self.outputBaseURL }
 
             do {
@@ -1135,9 +1150,9 @@ final class InferenceController {
 
     /// Reuse already-loaded source to start separation without re-ingest.
     func startSeparationFromLoadedYouTubeSource() {
+        if hasLatchedCleanupFailure { surfaceBlockedNewWorkAfterCleanupFailure(); return }
         guard let loaded = loadedYouTubeSource else { return }
         guard FileManager.default.fileExists(atPath: loaded.audioURL.path) else { return }
-        if youTubeCleanupFailed { return }
         guard loadedYouTubeSourceIsCanonical else {
             startSeparationFromLoadedPreview()
             return
@@ -1160,7 +1175,7 @@ final class InferenceController {
         currentTask = Task { [previousTask] in
             if let previousTask { await previousTask.value }
             await self.drainCleanupChain()
-            if self.youTubeCleanupFailed { return }
+            if self.hasLatchedCleanupFailure { self.surfaceBlockedNewWorkAfterCleanupFailure(); return }
             let base = await MainActor.run { self.outputBaseURL }
 
             do {
@@ -1333,7 +1348,7 @@ final class InferenceController {
 
     /// Deferred Separate from preview: downloads audio-only canonical WAV then starts separation.
     func startSeparationFromLoadedPreview() {
-        if youTubeCleanupFailed { return }
+        if hasLatchedCleanupFailure { surfaceBlockedNewWorkAfterCleanupFailure(); return }
         guard let preview = loadedYouTubePreview, let url = loadedYouTubeURL else {
             if let loaded = loadedYouTubeSource,
                loadedYouTubeSourceIsCanonical,
@@ -1366,7 +1381,7 @@ final class InferenceController {
         currentTask = Task { [previousTask] in
             if let previousTask { await previousTask.value }
             await self.drainCleanupChain()
-            if self.youTubeCleanupFailed { return }
+            if self.hasLatchedCleanupFailure { self.surfaceBlockedNewWorkAfterCleanupFailure(); return }
             let base = await MainActor.run { self.outputBaseURL }
             do {
                 try Task.checkCancellation()
