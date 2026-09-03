@@ -542,32 +542,32 @@ struct InferenceCard: View {
 
                     if inferenceController.isYouTubeSourceLoaded {
                         let hasAudioFile = hasLoadedYouTubeAudioFile
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(spacing: 12) {
-                                youTubeArtworkView()
-                                VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(alignment: .center, spacing: 14) {
+                                youTubeArtworkView(size: 128, cornerRadius: 10, symbolSize: 32)
+                                VStack(alignment: .leading, spacing: 4) {
                                     Text(youTubeDisplayTitle())
-                                        .font(.callout.weight(.semibold))
+                                        .font(.headline.weight(.semibold))
                                         .foregroundStyle(.primary)
-                                        .lineLimit(1)
+                                        .lineLimit(2)
                                     Text(youTubeDisplayArtist())
-                                        .font(.caption)
+                                        .font(.subheadline)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
                                     if let channel = youTubeDisplayChannel(), !channel.isEmpty {
                                         Text(channel)
-                                            .font(.caption2)
+                                            .font(.caption)
                                             .foregroundStyle(.tertiary)
                                             .lineLimit(1)
                                     }
                                     if let durationText = youTubeDisplayDuration() {
                                         Text(durationText)
-                                            .font(.caption2.monospacedDigit())
-                                            .foregroundStyle(.tertiary)
+                                            .font(.caption.monospacedDigit())
+                                            .foregroundStyle(.secondary)
                                             .lineLimit(1)
                                     }
                                 }
-                                Spacer()
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
 
                             // Playback controls: disabled when preview only (no audio file)
@@ -666,7 +666,7 @@ struct InferenceCard: View {
                                 }
                             }
                         }
-                        .padding(12)
+                        .padding(14)
                         .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.08)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(nsColor: .separatorColor), lineWidth: 1)))
                     }
                 }
