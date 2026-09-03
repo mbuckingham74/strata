@@ -409,6 +409,10 @@ struct InferenceCard: View {
         inferenceController.isYouTubeSourceLoaded && (inferenceController.isYouTubeSeparationReady || inferenceController.isSeparating)
     }
 
+    private var hasLoadedValidSource: Bool {
+        inferenceController.isYouTubeSourceLoaded || hasSuitableLocalSource
+    }
+
     // Unified initializer
     init(
         inferenceController: InferenceController,
@@ -483,7 +487,7 @@ struct InferenceCard: View {
             } else {
                 // Pre-completion workflow — preserve exactly as before
 
-                // Unified local source — single Choose Local Audio… CTA (source-first)
+                // Unified local source — hide only the chooser once a suitable local file loads; keep filename/title card.
                 if !inferenceController.isYouTubeSourceLoaded {
                     HStack(spacing: 10) {
                         if playbackController.hasFile, let title = playbackController.title {
@@ -492,9 +496,11 @@ struct InferenceCard: View {
                                 Text(url.lastPathComponent).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                             }
                             Spacer()
-                            Button { showingImporter = true } label: {
-                                Label("Choose Local Audio…", systemImage: "plus").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
-                            }.buttonStyle(.borderedProminent).tint(Color(red: 0, green: 150 / 255, blue: 1)).disabled(inferenceController.isSeparating)
+                            if !hasSuitableLocalSource {
+                                Button { showingImporter = true } label: {
+                                    Label("Choose Local Audio…", systemImage: "plus").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                                }.buttonStyle(.borderedProminent).tint(Color(red: 0, green: 150 / 255, blue: 1)).disabled(inferenceController.isSeparating)
+                            }
                         } else {
                             Text("No local file selected").font(.caption).foregroundStyle(.tertiary)
                             Spacer()
@@ -505,31 +511,33 @@ struct InferenceCard: View {
                     }
                 }
 
-                // YouTube source-first workflow
+                // YouTube source-first workflow (acquisition hidden once a valid source is loaded)
                 VStack(alignment: .leading, spacing: 8) {
-                    TextField("Paste YouTube URL", text: youTubeURLBinding)
-                        .textFieldStyle(.roundedBorder)
-                        .disabled(inferenceController.isSeparating)
-                        .accessibilityLabel("YouTube URL")
-                        .accessibilityIdentifier("YouTubeURLField")
-                    HStack(spacing: 10) {
-                        Button {
-                            let trimmed = youTubeURLBinding.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                            guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return }
-                            inferenceController.loadYouTubeSource(youTubeURL: url)
-                        } label: {
-                            Label("Add YouTube Source", systemImage: "arrow.down.circle").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                    if !hasLoadedValidSource {
+                        TextField("Paste YouTube URL", text: youTubeURLBinding)
+                            .textFieldStyle(.roundedBorder)
+                            .disabled(inferenceController.isSeparating)
+                            .accessibilityLabel("YouTube URL")
+                            .accessibilityIdentifier("YouTubeURLField")
+                        HStack(spacing: 10) {
+                            Button {
+                                let trimmed = youTubeURLBinding.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return }
+                                inferenceController.loadYouTubeSource(youTubeURL: url)
+                            } label: {
+                                Label("Add YouTube Source", systemImage: "arrow.down.circle").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Color(red: 1, green: 0, blue: 0))
+                            .disabled(youTubeURLBinding.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating || !inferenceController.isYouTubePreviewReady)
+                            .accessibilityIdentifier("LoadYouTubeSourceButton")
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Color(red: 1, green: 0, blue: 0))
-                        .disabled(youTubeURLBinding.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating || !inferenceController.isYouTubePreviewReady)
-                        .accessibilityIdentifier("LoadYouTubeSourceButton")
-                    }
-                    if let r = inferenceController.runtimeReadiness, !r.isYouTubePreviewReady {
-                        Text(r.sidebarStatus).font(.caption2).foregroundStyle(.orange.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("YouTubeReadinessHint")
-                    } else if inferenceController.runtimeReadiness == nil {
-                        Text("Checking setup…").font(.caption2).foregroundStyle(.tertiary)
+                        if let r = inferenceController.runtimeReadiness, !r.isYouTubePreviewReady {
+                            Text(r.sidebarStatus).font(.caption2).foregroundStyle(.orange.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("YouTubeReadinessHint")
+                        } else if inferenceController.runtimeReadiness == nil {
+                            Text("Checking setup…").font(.caption2).foregroundStyle(.tertiary)
+                        }
                     }
 
                     if inferenceController.isYouTubeSourceLoaded {
@@ -645,6 +653,7 @@ struct InferenceCard: View {
                                     Label("Save MP3", systemImage: "square.and.arrow.down").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
                                 }
                                 .buttonStyle(.bordered)
+                                .tint(Color(red: 0, green: 150 / 255, blue: 1))
                                 .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating || !inferenceController.isYouTubeMp3Ready || isExporting)
                                 .accessibilityIdentifier("SaveYouTubeMP3Button")
                             }
@@ -682,6 +691,7 @@ struct InferenceCard: View {
                             Label("Save MP3", systemImage: "square.and.arrow.down").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
                         }
                         .buttonStyle(.bordered)
+                        .tint(Color(red: 0, green: 150 / 255, blue: 1))
                         .disabled(!playbackController.hasFile || inferenceController.isSeparating || !inferenceController.isMp3ExportReady || isExporting)
                         .accessibilityIdentifier("SaveLocalMP3Button")
                     }
@@ -819,6 +829,7 @@ struct InferenceCard: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .tint(Color(red: 0, green: 150 / 255, blue: 1))
                     .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating || !inferenceController.isYouTubeMp3Ready || isExporting)
                     .accessibilityIdentifier("SaveYouTubeMP3Button")
                 }
@@ -882,6 +893,7 @@ struct InferenceCard: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .tint(Color(red: 0, green: 150 / 255, blue: 1))
                     .disabled(!playbackController.hasFile || inferenceController.isSeparating || !inferenceController.isMp3ExportReady || isExporting)
                     .accessibilityIdentifier("SaveLocalMP3Button")
                 }
