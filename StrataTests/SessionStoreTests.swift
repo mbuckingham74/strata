@@ -903,4 +903,123 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertTrue(stem.hasStems)
         XCTAssertTrue(playback.hasFile)
     }
+
+    // MARK: - Delete
+
+    func testDeleteProjectRemovesDirectoryAndLibraryEntry() throws {
+        let (tmpRoot, persistence, project, store, _) = try createPersistedProjectViaStore(frames: 1024, withArtwork: true)
+        defer { try? FileManager.default.removeItem(at: tmpRoot) }
+        // Workspace holds unrelated state; the deleted project is not selected.
+        let playback = PlaybackController(transport: SessionFakeTransport())
+        let stem = StemPlaybackController(transport: SessionFakeStemTransport())
+        let inference = InferenceController()
+        playback.load(url: URL(fileURLWithPath: "/tmp/workspace.wav"), displayTitle: "Workspace")
+        var stems: [StemName: StemArtifact] = [:]
+        for name in StemName.allCases {
+            stems[name] = StemArtifact(name: name, url: URL(fileURLWithPath: "/tmp/\(name.rawValue).wav"), sha256: String(repeating: "a", count: 64), fileSize: 1234, frameCount: 44100, channels: 2, sampleRate: 44100)
+        }
+        let dummy = SeparationResult(jobId: "job", inputURL: URL(fileURLWithPath: "/tmp/input.wav"), jobDirectoryURL: URL(fileURLWithPath: "/tmp"), manifestURL: URL(fileURLWithPath: "/tmp/manifest.json"), stems: stems, backend: TrustedInferenceIdentity.backend, device: TrustedInferenceIdentity.device, checkpointSHA256: TrustedInferenceIdentity.checkpointSHA256, model: TrustedInferenceIdentity.model)
+        stem.load(result: dummy, displayName: "Workspace")
+        store.draftYouTubeURLString = "https://www.youtube.com/watch?v=workspace"
+        let dir = persistence.projectDirectory(for: project.id)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path))
+        XCTAssertTrue(store.projects.contains(where: { $0.id == project.id }))
+        XCTAssertNil(store.selectedProjectID)
+        try store.deleteProject(id: project.id, playbackController: playback, inferenceController: inference, stemPlaybackController: stem)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.path))
+        XCTAssertFalse(store.projects.contains(where: { $0.id == project.id }))
+        XCTAssertTrue(store.projects.isEmpty)
+        XCTAssertNil(store.lastError)
+        // Unselected delete leaves workspace untouched.
+        XCTAssertTrue(playback.hasFile)
+        XCTAssertEqual(playback.title, "Workspace")
+        XCTAssertTrue(stem.hasStems)
+        XCTAssertEqual(stem.title, "Workspace")
+        XCTAssertEqual(store.draftYouTubeURLString, "https://www.youtube.com/watch?v=workspace")
+    }
+
+    func testDeleteOneLeavesOthersUntouched() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("StrataStoreDeleteOne-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let persistence = StrataProjectPersistence(fileManager: .default, projectsRootOverride: tmp)
+        let store = SessionStore(persistence: persistence)
+        let now = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970))
+        var gains: [StemName: Double] = [:]
+        for s in StemName.allCases { gains[s] = 0.5 }
+        let keep = try StrataProject(schemaVersion: 1, id: UUID().uuidString.lowercased(), createdAt: now, lastOpenedAt: now, displayTitle: "Keep", source: StrataProjectSource(kind: .localFile, locator: "/tmp/keep.wav", metadata: nil), gains: gains)
+        let remove = try StrataProject(schemaVersion: 1, id: UUID().uuidString.lowercased(), createdAt: now, lastOpenedAt: now.addingTimeInterval(100), displayTitle: "Remove", source: StrataProjectSource(kind: .localFile, locator: "/tmp/remove.wav", metadata: nil), gains: gains)
+        for p in [keep, remove] {
+            try persistence.createProjectDirectory(for: p)
+            try persistence.save(p)
+            try Data("marker".utf8).write(to: persistence.projectDirectory(for: p.id).appendingPathComponent("source/marker.txt"))
+        }
+        store.loadProjects()
+        XCTAssertEqual(store.projects.map(\.id), [remove.id, keep.id])
+        // Workspace shows the kept project; deleting the other must not reset it.
+        let playback = PlaybackController(transport: SessionFakeTransport())
+        let stem = StemPlaybackController(transport: SessionFakeStemTransport())
+        let inference = InferenceController()
+        playback.load(url: URL(fileURLWithPath: "/tmp/keep.wav"), displayTitle: "Keep")
+        store.selectedProjectID = keep.id
+        store.draftYouTubeURLString = "https://www.youtube.com/watch?v=keep"
+        try store.deleteProject(id: remove.id, playbackController: playback, inferenceController: inference, stemPlaybackController: stem)
+        XCTAssertEqual(store.projects.map(\.id), [keep.id])
+        // Untouched project: directory, project.json, and assets still on disk and loadable.
+        let keepDir = persistence.projectDirectory(for: keep.id)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: keepDir.appendingPathComponent("project.json").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: keepDir.appendingPathComponent("source/marker.txt").path))
+        XCTAssertEqual(try persistence.load(projectID: keep.id).id, keep.id)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: persistence.projectDirectory(for: remove.id).path))
+        XCTAssertNil(store.lastError)
+        // Selection and workspace state preserved.
+        XCTAssertEqual(store.selectedProjectID, keep.id)
+        XCTAssertTrue(playback.hasFile)
+        XCTAssertEqual(playback.title, "Keep")
+        XCTAssertEqual(store.draftYouTubeURLString, "https://www.youtube.com/watch?v=keep")
+    }
+
+    func testDeleteSelectedProjectClearsSelectionSafely() throws {
+        // Full persisted project (real assets) plus a lightweight second project in the same root.
+        let (tmpRoot, persistence, project, store, _) = try createPersistedProjectViaStore(frames: 1024)
+        defer { try? FileManager.default.removeItem(at: tmpRoot) }
+        var gains: [StemName: Double] = [:]
+        for s in StemName.allCases { gains[s] = 0.5 }
+        let other = try StrataProject(schemaVersion: 1, id: UUID().uuidString.lowercased(), createdAt: Date(), lastOpenedAt: Date(), displayTitle: "Other", source: StrataProjectSource(kind: .localFile, locator: "/tmp/other.wav", metadata: nil), gains: gains)
+        try persistence.createProjectDirectory(for: other)
+        try persistence.save(other)
+        store.loadProjects()
+        XCTAssertEqual(store.projects.count, 2)
+        let playback = PlaybackController(transport: SessionFakeTransport())
+        let stem = StemPlaybackController(transport: SessionFakeStemTransport())
+        let inference = InferenceController()
+        // Reopen: workspace now references the selected project's persisted assets.
+        try store.reopen(projectID: project.id, playbackController: playback, inferenceController: inference, stemPlaybackController: stem)
+        XCTAssertEqual(store.selectedProjectID, project.id)
+        XCTAssertTrue(playback.hasFile)
+        XCTAssertEqual(inference.state, .completed)
+        XCTAssertTrue(stem.hasStems)
+        // Deleting a non-selected project preserves selection and workspace.
+        try store.deleteProject(id: other.id, playbackController: playback, inferenceController: inference, stemPlaybackController: stem)
+        XCTAssertEqual(store.selectedProjectID, project.id)
+        XCTAssertEqual(store.projects.map(\.id), [project.id])
+        XCTAssertTrue(playback.hasFile)
+        XCTAssertEqual(inference.state, .completed)
+        XCTAssertTrue(stem.hasStems)
+        // Deleting the selected project reaches the same safe empty state as newSession:
+        // no playback, inference, source, stem, or draft state references deleted assets.
+        try store.deleteProject(id: project.id, playbackController: playback, inferenceController: inference, stemPlaybackController: stem)
+        XCTAssertNil(store.selectedProjectID)
+        XCTAssertTrue(store.projects.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: persistence.projectDirectory(for: project.id).path))
+        XCTAssertNil(playback.title)
+        XCTAssertFalse(playback.hasFile)
+        XCTAssertNil(playback.sourceURL)
+        XCTAssertEqual(inference.state, .idle)
+        XCTAssertNil(inference.result)
+        XCTAssertFalse(stem.hasStems)
+        XCTAssertNil(stem.result)
+        XCTAssertNil(stem.title)
+        XCTAssertEqual(store.draftYouTubeURLString, "")
+        XCTAssertNil(store.lastError)
+    }
 }

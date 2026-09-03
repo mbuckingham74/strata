@@ -108,6 +108,7 @@ struct SidebarView: View {
     @Bindable var inferenceController: InferenceController
     @Binding var showingImporter: Bool
     @Environment(SessionStore.self) private var sessionStore: SessionStore?
+    @State private var projectPendingDeletion: StrataProject?
 
     // Primary initializer (YouTube-aware)
     init(
@@ -184,8 +185,38 @@ struct SidebarView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityLabel(project.displayTitle)
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        projectPendingDeletion = project
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
                             }
                         }.padding(.horizontal, 8).padding(.top, 8)
+                    }
+                    .confirmationDialog(
+                        "Delete \"\(projectPendingDeletion?.displayTitle ?? "session")\"?",
+                        isPresented: Binding(
+                            get: { projectPendingDeletion != nil },
+                            set: { if !$0 { projectPendingDeletion = nil } }
+                        ),
+                        titleVisibility: .visible
+                    ) {
+                        Button("Delete", role: .destructive) {
+                            guard let project = projectPendingDeletion else { return }
+                            projectPendingDeletion = nil
+                            do {
+                                try store.deleteProject(id: project.id, playbackController: controller, inferenceController: inferenceController, stemPlaybackController: stemPlaybackController)
+                            } catch {
+                                // SessionStore.lastError is already set (bounded); presented via alert.
+                            }
+                        }
+                        Button("Cancel", role: .cancel) {
+                            projectPendingDeletion = nil
+                        }
+                    } message: {
+                        Text("This permanently removes the session and its audio files. This cannot be undone.")
                     }
                 }
             } else {

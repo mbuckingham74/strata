@@ -41,6 +41,34 @@ import Observation
         loadProjects()
     }
 
+    // MARK: - Delete
+
+    /// Delete a Library project: removes its entire persisted directory via persistence and
+    /// drops it from the Library immediately (ordering preserved via enumerateProjects).
+    /// Deleting an unselected project leaves workspace state untouched; deleting the selected
+    /// project reuses the single coherent `newSession` reset so no playback, inference, source,
+    /// stem, or draft state keeps referencing deleted assets. Failure surfaces via bounded `lastError`.
+    func deleteProject(
+        id: String,
+        playbackController: PlaybackController,
+        inferenceController: InferenceController,
+        stemPlaybackController: StemPlaybackController
+    ) throws {
+        let wasSelected = (selectedProjectID == id)
+        do {
+            try persistence.deleteProject(id: id)
+        } catch {
+            lastError = bounded(error.localizedDescription)
+            throw error
+        }
+        projects = persistence.enumerateProjects()
+        if wasSelected {
+            newSession(playbackController: playbackController, inferenceController: inferenceController, stemPlaybackController: stemPlaybackController)
+        } else {
+            lastError = nil
+        }
+    }
+
     // MARK: - Auto-persist wiring (Stage 2 defect fix)
 
     /// Smallest integration hook: called where `InferenceController.result` is transferred into stem playback.

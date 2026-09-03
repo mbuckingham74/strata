@@ -235,6 +235,22 @@ final class StrataProjectPersistence: @unchecked Sendable {
         return projects
     }
 
+    // MARK: - Delete
+
+    /// Delete a project's entire persisted directory (`<uuid-lowercased>/` under the projects root).
+    /// Validated IDs are single lowercased-UUID path components, so the directory is always an
+    /// immediate child of the projects root. Missing directories are a no-op.
+    func deleteProject(id: String) throws {
+        try StrataProject.validateProjectID(id)
+        let dir = projectDirectory(for: id)
+        guard fileManager.fileExists(atPath: dir.path) else { return }
+        do {
+            try fileManager.removeItem(at: dir)
+        } catch {
+            throw StrataProjectPersistenceError.writeFailed(error.localizedDescription)
+        }
+    }
+
     // MARK: - Persist completed separation
 
     func persistCompletedSeparation(project: StrataProject, result: SeparationResult, artworkSourceURL: URL?) throws {
