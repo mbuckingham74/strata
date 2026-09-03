@@ -460,7 +460,7 @@ struct StrataStackView: View {
             }
             .padding(.top, 10)
             .padding(.bottom, 6)
-            .background(Color.primary.opacity(0.08))
+            .background(Color(nsColor: .textBackgroundColor))
             .onChange(of: stemPlaybackController.currentTime) { _, newValue in
                 if !isStrataDragging {
                     strataSliderValue = newValue
@@ -489,7 +489,7 @@ struct StrataStackView: View {
                     }
                 }
             }
-            .background(Color.primary.opacity(0.06))
+            .background(Color(nsColor: .textBackgroundColor))
 
             // Footer: selected-mix export (kept outside per-row flow) — WAV does not require FFmpeg
             HStack(spacing: 10) {
@@ -526,7 +526,7 @@ struct StrataStackView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(Color.primary.opacity(0.07))
+            .background(Color(nsColor: .textBackgroundColor))
             if let exportingFileName {
                 HStack(spacing: 6) {
                     ProgressView().scaleEffect(0.6).tint(.secondary)
@@ -551,7 +551,7 @@ struct StrataStackView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.primary.opacity(0.12))
+                .fill(Color(nsColor: .controlBackgroundColor))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.13), lineWidth: 1))
         )
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))

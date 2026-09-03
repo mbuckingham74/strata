@@ -667,7 +667,7 @@ struct InferenceCard: View {
                             }
                         }
                         .padding(14)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.08)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(nsColor: .separatorColor), lineWidth: 1)))
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .textBackgroundColor)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(nsColor: .separatorColor), lineWidth: 1)))
                     }
                 }
 
@@ -729,7 +729,7 @@ struct InferenceCard: View {
                 }
 
             }
-        }.padding(isCompletedState ? 10 : 12).background(RoundedRectangle(cornerRadius: 14).fill(Color.primary.opacity(0.12)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.13), lineWidth: 1)))
+        }.padding(isCompletedState ? 10 : 12).background(RoundedRectangle(cornerRadius: 14).fill(Color(nsColor: .controlBackgroundColor)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.13), lineWidth: 1)))
             .onChange(of: inferenceController.result) { _, result in
                 guard let result else { return }
                 loadCompletedResult(result)
@@ -837,7 +837,7 @@ struct InferenceCard: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.09)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor), lineWidth: 1)))
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .textBackgroundColor)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor), lineWidth: 1)))
         } else {
             // Local compact summary
             VStack(alignment: .leading, spacing: 6) {
@@ -901,7 +901,7 @@ struct InferenceCard: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.09)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor), lineWidth: 1)))
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .textBackgroundColor)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor), lineWidth: 1)))
         }
     }
 
@@ -916,7 +916,7 @@ struct InferenceCard: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color.primary.opacity(0.08))
+                .fill(Color(nsColor: .textBackgroundColor))
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
         )
         .accessibilityIdentifier("PhaseListCompact")
@@ -1333,7 +1333,7 @@ struct InferenceCard: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color.primary.opacity(0.08))
+                .fill(Color(nsColor: .textBackgroundColor))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
         )
         .accessibilityIdentifier("PhaseList")
@@ -1548,7 +1548,7 @@ struct EditableMetadataEditor: View {
                     }
                 }
             }
-        }.padding(12).background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.08)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor), lineWidth: 1)))
+        }.padding(12).background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .textBackgroundColor)).overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor), lineWidth: 1)))
     }
 
     private var artworkStatusText: String {
@@ -1681,7 +1681,7 @@ struct TransportCard: View {
                     Text(controller.isPlaying ? "Playing" : "Paused").font(.caption).foregroundStyle(.secondary)
                 }
             }
-        }.padding(12).background(RoundedRectangle(cornerRadius: 14).fill(Color.primary.opacity(0.11)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.13), lineWidth: 1))).onChange(of: controller.currentTime) { _, newValue in if !isDragging { sliderValue = newValue } }.onAppear { sliderValue = controller.currentTime }
+        }.padding(12).background(RoundedRectangle(cornerRadius: 14).fill(Color(nsColor: .controlBackgroundColor)).overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.13), lineWidth: 1))).onChange(of: controller.currentTime) { _, newValue in if !isDragging { sliderValue = newValue } }.onAppear { sliderValue = controller.currentTime }
     }
 }
 
@@ -1695,7 +1695,7 @@ struct OriginalMixRow: View {
             Text("Original mix").font(.callout.weight(.medium)).foregroundStyle(.primary)
             Spacer()
             Text(controller.formattedDuration).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-        }.padding(.horizontal, 14).padding(.vertical, 12).background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.11)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.13), lineWidth: 1)))
+        }.padding(.horizontal, 14).padding(.vertical, 12).background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.13), lineWidth: 1)))
     }
 }
 
