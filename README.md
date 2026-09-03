@@ -24,6 +24,37 @@ Native macOS app · Apple Silicon · Separation runs locally on-device (fetching
 3. **Mix** — mute, solo, and balance the six strata together.
 4. **Export or reopen** — Save MP3, Export stems and mixes, or reopen the saved Library session later.
 
+```mermaid
+flowchart TD
+    subgraph NETWORK["Network access"]
+        direction LR
+        URL["YouTube URL"] --> PREVIEW["Metadata preview<br/>yt-dlp + Node<br/>title · artwork · duration<br/>(not playable)"]
+        ACQUIRE_SAVE["Audio acquisition<br/>yt-dlp"]
+        ACQUIRE_CREATE["Audio acquisition<br/>yt-dlp"]
+    end
+
+    PREVIEW --> CHOICE{"Choose an action<br/>(separation optional)"}
+    CHOICE -->|Save MP3| ACQUIRE_SAVE
+    CHOICE -->|Create Strata| ACQUIRE_CREATE
+
+    subgraph LOCAL["Local processing"]
+        direction LR
+        FFMPEG_SAVE["FFmpeg"] --> MP3["MP3 export"]
+        CANON["FFmpeg canonicalization"] --> WAV["44.1 kHz stereo Float32 WAV"]
+        WAV --> SEPARATE["Separate locally<br/>MLX / BS-RoFormer"]
+        SEPARATE --> STRATA["Six synced strata<br/>Vocals · Drums · Bass · Guitar · Piano · Other"]
+        STRATA --> MIXER["Synchronized Strata mixer"]
+        STRATA --> LIBRARY["Persisted Library session"]
+        MIXER --> EXPORT["Optional individual or selected-mix<br/>WAV/MP3 export"]
+    end
+
+    ACQUIRE_SAVE --> FFMPEG_SAVE
+    ACQUIRE_CREATE --> CANON
+
+    style NETWORK fill:#eef6ff,stroke:#2563eb,stroke-width:2px
+    style LOCAL fill:#eefbf1,stroke:#2f855a,stroke-width:2px
+```
+
 ## Sources
 
 ### Local audio
