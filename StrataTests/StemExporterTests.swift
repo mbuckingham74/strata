@@ -346,6 +346,89 @@ final class StemExporterTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: sourceURL), sourceData)
     }
 
+    func testExportFailedOverwritePreservesExistingDestination() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let sourceURL = directoryURL.appendingPathComponent("drums.wav")
+        let destinationURL = directoryURL.appendingPathComponent("chosen.wav")
+        let sourceData = Data([0x52, 0x49, 0x46, 0x46, 0x01, 0x02, 0x03, 0x04])
+        let artifact = try makeArtifact(name: .drums, url: sourceURL, data: sourceData)
+        let previousData = Data([0xAA, 0xBB, 0xCC])
+        try previousData.write(to: destinationURL)
+        try FileManager.default.removeItem(at: sourceURL)
+
+        XCTAssertThrowsError(try StemExporter.export(artifact, to: destinationURL))
+        XCTAssertEqual(try Data(contentsOf: destinationURL), previousData)
+    }
+
+    func testMixFailedOverwritePreservesExistingDestination() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let drums = try makeWAVArtifact(
+            name: .drums,
+            url: directoryURL.appendingPathComponent("drums.wav"),
+            leftSamples: [0.1, 0.2],
+            rightSamples: [0.3, 0.4]
+        )
+        let bass = try makeWAVArtifact(
+            name: .bass,
+            url: directoryURL.appendingPathComponent("bass.wav"),
+            leftSamples: [0.5, 0.1, 0.2],
+            rightSamples: [0.1, 0.5, 0.2]
+        )
+        let destinationURL = directoryURL.appendingPathComponent("selected-mix.wav")
+        let previousData = Data([0xAA, 0xBB, 0xCC])
+        try previousData.write(to: destinationURL)
+
+        XCTAssertThrowsError(
+            try StemExporter.exportMix([drums, bass], to: destinationURL, format: .wav)
+        )
+        XCTAssertEqual(try Data(contentsOf: destinationURL), previousData)
+    }
+
+    func testMixSuccessfulOverwriteReplacesDestination() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let drums = try makeWAVArtifact(
+            name: .drums,
+            url: directoryURL.appendingPathComponent("drums.wav"),
+            leftSamples: [0.5, 0.0],
+            rightSamples: [0.0, 0.5]
+        )
+        let bass = try makeWAVArtifact(
+            name: .bass,
+            url: directoryURL.appendingPathComponent("bass.wav"),
+            leftSamples: [0.25, 0.25],
+            rightSamples: [0.25, 0.25]
+        )
+        let destinationURL = directoryURL.appendingPathComponent("selected-mix.wav")
+        try Data([0xAA, 0xBB]).write(to: destinationURL)
+
+        try StemExporter.exportMix([drums, bass], to: destinationURL, format: .wav)
+
+        let outputFile = try AVAudioFile(forReading: destinationURL)
+        XCTAssertEqual(outputFile.length, 2)
+        guard let outputBuffer = AVAudioPCMBuffer(
+            pcmFormat: outputFile.processingFormat,
+            frameCapacity: AVAudioFrameCount(outputFile.length)
+        ) else {
+            return XCTFail("Could not allocate output verification buffer")
+        }
+        try outputFile.read(into: outputBuffer)
+        let outputChannels = try XCTUnwrap(outputBuffer.floatChannelData)
+        XCTAssertEqual(outputChannels[0][0], 0.75, accuracy: 0.000_01)
+        XCTAssertEqual(outputChannels[1][1], 0.75, accuracy: 0.000_01)
+    }
+
     func testExportRejectsOriginalArtifactAsDestination() throws {
         let directoryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

@@ -161,10 +161,14 @@ struct StemExporter {
 
         switch format {
         case .wav:
-            if fileManager.fileExists(atPath: destinationURL.path) {
-                try fileManager.removeItem(at: destinationURL)
+            let temporaryURL = temporarySiblingURL(for: destinationURL, fileManager: fileManager)
+            do {
+                try fileManager.copyItem(at: artifact.url, to: temporaryURL)
+                try replaceDestination(at: destinationURL, with: temporaryURL, fileManager: fileManager)
+            } catch {
+                try? fileManager.removeItem(at: temporaryURL)
+                throw error
             }
-            try fileManager.copyItem(at: artifact.url, to: destinationURL)
         case .mp3:
             guard let ffmpegURL else {
                 throw StemExportError.ffmpegLaunchFailed("FFmpeg not available — missing validated FFmpeg from RuntimeReadiness")
@@ -257,6 +261,19 @@ struct StemExporter {
         }
     }
 
+    private static func temporarySiblingURL(for destinationURL: URL, fileManager: FileManager) -> URL {
+        let directoryURL = destinationURL.deletingLastPathComponent()
+        return directoryURL.appendingPathComponent(".\(destinationURL.lastPathComponent).\(UUID().uuidString).tmp")
+    }
+
+    private static func replaceDestination(at destinationURL: URL, with temporaryURL: URL, fileManager: FileManager) throws {
+        if fileManager.fileExists(atPath: destinationURL.path) {
+            _ = try fileManager.replaceItemAt(destinationURL, withItemAt: temporaryURL)
+        } else {
+            try fileManager.moveItem(at: temporaryURL, to: destinationURL)
+        }
+    }
+
     private static func writeAlignedMix(
         _ artifacts: [StemArtifact],
         gains: [StemName: Float] = [:],
@@ -310,10 +327,21 @@ struct StemExporter {
             throw StemExportError.combinedExportRequiresMultipleStems
         }
 
-        if fileManager.fileExists(atPath: destinationURL.path) {
-            try fileManager.removeItem(at: destinationURL)
+        let temporaryURL = temporarySiblingURL(for: destinationURL, fileManager: fileManager)
+        do {
+            try renderAlignedMix(files: files, totalFrameCount: totalFrameCount, to: temporaryURL)
+            try replaceDestination(at: destinationURL, with: temporaryURL, fileManager: fileManager)
+        } catch {
+            try? fileManager.removeItem(at: temporaryURL)
+            throw error
         }
+    }
 
+    private static func renderAlignedMix(
+        files: [(file: AVAudioFile, gain: Float)],
+        totalFrameCount: UInt64,
+        to temporaryURL: URL
+    ) throws {
         let outputSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVSampleRateKey: Double(canonicalSampleRate),
@@ -326,7 +354,7 @@ struct StemExporter {
         let outputFile: AVAudioFile
         do {
             outputFile = try AVAudioFile(
-                forWriting: destinationURL,
+                forWriting: temporaryURL,
                 settings: outputSettings,
                 commonFormat: .pcmFormatFloat32,
                 interleaved: false
