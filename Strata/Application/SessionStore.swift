@@ -55,11 +55,19 @@ import Observation
         // Already persisted this job (e.g. reopen) — skip.
         if let last = lastPersistedJobId, last == result.jobId { return }
         // Reopened sessions live under Projects root; fresh separations live in scratch (Caches/Strata or temp).
+        // A fresh re-separation of a persisted YouTube project reuses its persisted
+        // mixture as input, so it also lives under Projects root — but it carries a
+        // new jobId and must reach dedupe/replacement rather than being skipped.
         let projectsRoot = persistence.projectsRootURL().standardizedFileURL.path
         let inputPath = result.inputURL.standardizedFileURL.path
         if inputPath.hasPrefix(projectsRoot + "/") || inputPath == projectsRoot {
-            lastPersistedJobId = result.jobId
-            return
+            if let owning = owningYouTubeProject(forInputURL: result.inputURL),
+               persistedJobId(for: owning) != result.jobId {
+                // Fall through to persistCompletedSeparation below.
+            } else {
+                lastPersistedJobId = result.jobId
+                return
+            }
         }
         do {
             try persistCompletedSeparation(
@@ -81,8 +89,30 @@ import Observation
     }
 
     private func isYouTubeLike(_ s: String) -> Bool {
-        let lower = s.lowercased()
-        return lower.contains("youtube.com") || lower.contains("youtu.be")
+        YouTubeCanonicalIdentity.isYouTubeURL(s)
+    }
+
+    /// The persisted YouTube project that owns an input file, if the input lives
+    /// inside that project's own directory (e.g. a re-separation reusing the
+    /// persisted `source/mixture.wav`). This is the reopened-project identity used
+    /// when transient YouTube state (loaded URL, draft) is absent or stale.
+    private func owningYouTubeProject(forInputURL inputURL: URL) -> StrataProject? {
+        let root = persistence.projectsRootURL().standardizedFileURL.path
+        let input = inputURL.standardizedFileURL.path
+        guard input.hasPrefix(root + "/") else { return nil }
+        let relative = String(input.dropFirst((root + "/").count))
+        let id = relative.split(separator: "/").first.map(String.init) ?? ""
+        guard (try? StrataProject.validateProjectID(id)) != nil else { return nil }
+        let dir = persistence.projectDirectory(for: id).standardizedFileURL.path
+        guard input == dir || input.hasPrefix(dir + "/") else { return nil }
+        guard let project = try? persistence.load(projectID: id),
+              project.source.kind == .youTube else { return nil }
+        return project
+    }
+
+    /// The job currently persisted for a project, if its separation result loads.
+    private func persistedJobId(for project: StrataProject) -> String? {
+        try? persistence.loadSeparationResult(for: project).jobId
     }
 
     // MARK: - Persist completed separation
@@ -116,18 +146,23 @@ import Observation
         let trimmed = candidate?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let finalDisplay = trimmed.isEmpty ? "Untitled" : trimmed
 
-        // Derive source
+        // Derive source. The owning persisted YouTube project wins when the input
+        // is its own asset (re-separation): the audio being separated determines
+        // identity even if transient state is absent or the draft went stale.
+        // Otherwise fall back to transient state, then to a local file.
         let draftTrimmed = draftYouTubeURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+        let owning = owningYouTubeProject(forInputURL: result.inputURL)
+        let newMetadata = inferenceController.effectiveYouTubeMetadata ?? inferenceController.youTubeExportMetadata
         let source: StrataProjectSource
-        if let ytURL = inferenceController.loadedYouTubeURL {
-            let metadata = inferenceController.effectiveYouTubeMetadata ?? inferenceController.youTubeExportMetadata
-            source = StrataProjectSource(kind: .youTube, locator: ytURL.absoluteString, metadata: metadata)
+        if let owning {
+            let metadata = newMetadata ?? owning.source.metadata
+            source = StrataProjectSource(kind: .youTube, locator: owning.source.locator, metadata: metadata)
+        } else if let ytURL = inferenceController.loadedYouTubeURL {
+            source = StrataProjectSource(kind: .youTube, locator: ytURL.absoluteString, metadata: newMetadata)
         } else if !draftTrimmed.isEmpty && isYouTubeLike(draftTrimmed) {
-            let metadata = inferenceController.effectiveYouTubeMetadata ?? inferenceController.youTubeExportMetadata
-            source = StrataProjectSource(kind: .youTube, locator: draftTrimmed, metadata: metadata)
+            source = StrataProjectSource(kind: .youTube, locator: draftTrimmed, metadata: newMetadata)
         } else if inferenceController.isYouTubeSourceLoaded, let url = inferenceController.loadedYouTubeURL {
-            let metadata = inferenceController.effectiveYouTubeMetadata ?? inferenceController.youTubeExportMetadata
-            source = StrataProjectSource(kind: .youTube, locator: url.absoluteString, metadata: metadata)
+            source = StrataProjectSource(kind: .youTube, locator: url.absoluteString, metadata: newMetadata)
         } else {
             // Local file
             let locator = playbackController.sourceURL?.path ?? result.inputURL.path
@@ -136,6 +171,54 @@ import Observation
         }
 
         let now = Date()
+        // YouTube re-separation dedup: same video must update the existing row
+        // (same project id, replaced assets) instead of creating a duplicate.
+        // Local files keep current behavior (new row per completion).
+        if source.kind == .youTube {
+            let newKey = YouTubeCanonicalIdentity.dedupeKey(for: source.locator)
+            let match = persistence.enumerateProjects().first(where: {
+                $0.source.kind == .youTube
+                    && YouTubeCanonicalIdentity.dedupeKey(for: $0.source.locator) == newKey
+            })
+            if let match {
+                // Replacement preserves what the new separation does not supply:
+                // persisted metadata (when controllers carry none), the artwork
+                // reference (when no new file is supplied), and saved gains (when
+                // the controller still holds untouched defaults). Fresh values win.
+                let finalSource: StrataProjectSource
+                if source.metadata != nil {
+                    finalSource = source
+                } else {
+                    // Same video, no fresh metadata: keep the persisted metadata.
+                    finalSource = StrataProjectSource(kind: .youTube, locator: source.locator, metadata: match.source.metadata)
+                }
+                let finalGains: [StemName: Double] =
+                    gainsMap.values.allSatisfy({ $0 == 1.0 }) ? match.gains : gainsMap
+                let carriedArtworkPath: String? = {
+                    guard let p = match.artworkPath else { return nil }
+                    let u = persistence.projectDirectory(for: match.id).appendingPathComponent(p)
+                    return FileManager.default.fileExists(atPath: u.path) ? p : nil
+                }()
+                let updated: StrataProject
+                do {
+                    updated = try StrataProject(
+                        schemaVersion: 1,
+                        id: match.id,
+                        createdAt: match.createdAt,
+                        lastOpenedAt: now,
+                        displayTitle: finalDisplay,
+                        source: finalSource,
+                        artworkPath: carriedArtworkPath,
+                        gains: finalGains
+                    )
+                } catch {
+                    lastError = bounded(error.localizedDescription)
+                    throw error
+                }
+                let artwork = inferenceController.effectiveArtworkURL
+                return try persist(project: updated, result: result, artworkSourceURL: artwork)
+            }
+        }
         let id = UUID().uuidString.lowercased()
         let project: StrataProject
         do {

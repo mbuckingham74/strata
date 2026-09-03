@@ -1636,4 +1636,91 @@ final class YouTubeIngestClientTests: XCTestCase {
         let result2 = try await client2.ingestWithMetadata(youTubeURL: shortYouTubeURL())
         XCTAssertTrue(FileManager.default.fileExists(atPath: result2.audioURL.path))
     }
+
+    // MARK: - Strict YouTube host validation
+
+    func testStrictYouTubeHostValidationOnAllPaths() async throws {
+        let cacheBase = try makeCacheBase()
+        defer { try? FileManager.default.removeItem(at: cacheBase) }
+        // Bogus tools: genuine hosts pass the URL guard then fail on tool
+        // validation without launching anything; lookalikes must throw
+        // invalidYouTubeURL before tools are touched.
+        let bogusTool = URL(fileURLWithPath: "/nonexistent/tool")
+        let client = YouTubeIngestClient(ytDlpURL: bogusTool, ffmpegURL: bogusTool, cacheBaseURL: cacheBase)
+
+        let genuineHosts = [
+            "youtube.com",
+            "www.youtube.com",
+            "m.youtube.com",
+            "music.youtube.com",
+            "youtu.be",
+            "youtube-nocookie.com",
+            "www.youtube-nocookie.com",
+        ]
+        for host in genuineHosts {
+            let url = URL(string: "https://\(host)/watch?v=dQw4w9WgXcQ")!
+            do {
+                _ = try await client.ingestWithMetadata(youTubeURL: url)
+                XCTFail("Genuine host \(host) should pass URL guard (expected later tool failure)")
+            } catch let err as YouTubeIngestError {
+                if case .invalidYouTubeURL = err {
+                    XCTFail("Genuine host \(host) wrongly rejected on ingestWithMetadata")
+                }
+            }
+            do {
+                _ = try await client.fetchPreview(youTubeURL: url)
+                XCTFail("Genuine host \(host) should pass URL guard (expected later tool failure)")
+            } catch let err as YouTubeIngestError {
+                if case .invalidYouTubeURL = err {
+                    XCTFail("Genuine host \(host) wrongly rejected on fetchPreview")
+                }
+            }
+            do {
+                _ = try await client.downloadAudioOnly(youTubeURL: url)
+                XCTFail("Genuine host \(host) should pass URL guard (expected later tool failure)")
+            } catch let err as YouTubeIngestError {
+                if case .invalidYouTubeURL = err {
+                    XCTFail("Genuine host \(host) wrongly rejected on downloadAudioOnly")
+                }
+            }
+        }
+
+        let lookalikes = [
+            "evil-youtube.com",
+            "youtube.com.evil.com",
+            "notyoutube.com",
+            "fakeyoutu.be",
+        ]
+        for host in lookalikes {
+            let url = URL(string: "https://\(host)/watch?v=dQw4w9WgXcQ")!
+            do {
+                _ = try await client.ingestWithMetadata(youTubeURL: url)
+                XCTFail("Lookalike \(host) should throw invalidYouTubeURL on ingestWithMetadata")
+            } catch let err as YouTubeIngestError {
+                guard case .invalidYouTubeURL = err else {
+                    return XCTFail("Lookalike \(host) wrong error on ingestWithMetadata: \(err)")
+                }
+            }
+            do {
+                _ = try await client.fetchPreview(youTubeURL: url)
+                XCTFail("Lookalike \(host) should throw invalidYouTubeURL on fetchPreview")
+            } catch let err as YouTubeIngestError {
+                guard case .invalidYouTubeURL = err else {
+                    return XCTFail("Lookalike \(host) wrong error on fetchPreview: \(err)")
+                }
+            }
+            do {
+                _ = try await client.downloadAudioOnly(youTubeURL: url)
+                XCTFail("Lookalike \(host) should throw invalidYouTubeURL on downloadAudioOnly")
+            } catch let err as YouTubeIngestError {
+                guard case .invalidYouTubeURL = err else {
+                    return XCTFail("Lookalike \(host) wrong error on downloadAudioOnly: \(err)")
+                }
+            }
+        }
+
+        // No tool was launched and no run directory created for rejected URLs.
+        let remaining = try FileManager.default.contentsOfDirectory(at: cacheBase, includingPropertiesForKeys: nil)
+        XCTAssertTrue(remaining.isEmpty, "No run dirs should be created, got \(remaining)")
+    }
 }

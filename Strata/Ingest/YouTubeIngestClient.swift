@@ -269,8 +269,8 @@ actor YouTubeIngestClient {
     func ingestWithMetadata(youTubeURL: URL, onProgress: @Sendable (YouTubeIngestPhase) -> Void = { _ in }) async throws -> YouTubeIngestResult {
         // Validate YouTube URL
         guard let scheme = youTubeURL.scheme?.lowercased(), scheme == "https",
-              let host = youTubeURL.host?.lowercased(),
-              host.contains("youtube.com") || host.contains("youtu.be") else {
+              let host = youTubeURL.host,
+              YouTubeCanonicalIdentity.isYouTubeHost(host) else {
             throw YouTubeIngestError.invalidYouTubeURL(youTubeURL.absoluteString)
         }
 
@@ -426,8 +426,8 @@ actor YouTubeIngestClient {
 
     func fetchPreview(youTubeURL: URL) async throws -> YouTubePreviewResult {
         guard let scheme = youTubeURL.scheme?.lowercased(), scheme == "https",
-              let host = youTubeURL.host?.lowercased(),
-              host.contains("youtube.com") || host.contains("youtu.be") else {
+              let host = youTubeURL.host,
+              YouTubeCanonicalIdentity.isYouTubeHost(host) else {
             throw YouTubeIngestError.invalidYouTubeURL(youTubeURL.absoluteString)
         }
         guard isAbsoluteFileURL(ytDlpURL) else {
@@ -530,8 +530,8 @@ actor YouTubeIngestClient {
 
     func downloadAudioOnly(youTubeURL: URL) async throws -> YouTubeIngestResult {
         guard let scheme = youTubeURL.scheme?.lowercased(), scheme == "https",
-              let host = youTubeURL.host?.lowercased(),
-              host.contains("youtube.com") || host.contains("youtu.be") else {
+              let host = youTubeURL.host,
+              YouTubeCanonicalIdentity.isYouTubeHost(host) else {
             throw YouTubeIngestError.invalidYouTubeURL(youTubeURL.absoluteString)
         }
         guard isAbsoluteFileURL(ytDlpURL) else {

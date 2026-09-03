@@ -304,8 +304,13 @@ final class StrataProjectPersistence: @unchecked Sendable {
         try fileManager.createDirectory(at: sourceDir, withIntermediateDirectories: true)
         try fileManager.createDirectory(at: separationDir, withIntermediateDirectories: true)
 
-        // Helper to copy after removing existing dest
+        // Helper to copy, replacing any existing dest. Skips when source and
+        // destination are the same file (re-separation reusing persisted assets):
+        // deleting before copying would destroy the asset.
         func copyAsset(from src: URL, to dst: URL) throws {
+            let srcPath = src.standardizedFileURL.resolvingSymlinksInPath().path
+            let dstPath = dst.standardizedFileURL.resolvingSymlinksInPath().path
+            if srcPath == dstPath { return }
             if fileManager.fileExists(atPath: dst.path) {
                 try fileManager.removeItem(at: dst)
             }
@@ -331,21 +336,21 @@ final class StrataProjectPersistence: @unchecked Sendable {
         let manifestDest = dir.appendingPathComponent(project.inferenceManifestPath, isDirectory: false)
         try copyAsset(from: manifestSourceURL, to: manifestDest)
 
-        // Copy artwork if provided
+        // Copy artwork if provided: write the new file first, then remove an
+        // obsolete artwork file with a different extension, so a failed copy
+        // never leaves the project without artwork.
         var mutableProject = project
         if let artURL = artworkSourceURL {
             let ext = artURL.pathExtension
-            // Remove any existing artwork.* files with different ext to avoid stale files (optional, keep minimal: just copy new)
             let newArtworkPath = "source/artwork.\(ext)"
             let artworkDest = dir.appendingPathComponent(newArtworkPath, isDirectory: false)
-            // If artworkPath previously had different ext, remove old file if different destination
+            try copyAsset(from: artURL, to: artworkDest)
             if let existing = mutableProject.artworkPath, existing != newArtworkPath {
                 let oldDest = dir.appendingPathComponent(existing, isDirectory: false)
                 if fileManager.fileExists(atPath: oldDest.path) {
                     try? fileManager.removeItem(at: oldDest)
                 }
             }
-            try copyAsset(from: artURL, to: artworkDest)
             mutableProject.artworkPath = newArtworkPath
         } else {
             // If project has artworkPath, ensure file exists after persist (validates self-containment)

@@ -89,6 +89,8 @@
 		A1000000000000000000004C /* InferenceSetupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004C /* InferenceSetupTests.swift */; };
 		A10000000000000000000055 /* SidebarArtworkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000055 /* SidebarArtworkTests.swift */; };
 		A1000000000000000000004D /* ExternalToolResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004D /* ExternalToolResolver.swift */; };
+		A10000000000000000000056 /* YouTubeIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000056 /* YouTubeIdentity.swift */; };
+		A10000000000000000000057 /* YouTubeDedupeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000057 /* YouTubeDedupeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -191,6 +193,8 @@
 		B1000000000000000000004C /* InferenceSetupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSetupTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000055 /* SidebarArtworkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarArtworkTests.swift; sourceTree = "<group>"; };
 		B1000000000000000000004D /* ExternalToolResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalToolResolver.swift; sourceTree = "<group>"; };
+		B10000000000000000000056 /* YouTubeIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeIdentity.swift; sourceTree = "<group>"; };
+		B10000000000000000000057 /* YouTubeDedupeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeDedupeTests.swift; sourceTree = "<group>"; };
 		C00000000000000000000001 /* Strata.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Strata.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C00000000000000000000002 /* StrataTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C00000000000000000000003 /* StrataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -303,6 +307,7 @@
 				B10000000000000000000039 /* LocalMP3ExportTests.swift */,
 				B1000000000000000000003B /* StorageLocationPreferencesTests.swift */,
 				B10000000000000000000043 /* SessionStoreTests.swift */,
+				B10000000000000000000057 /* YouTubeDedupeTests.swift */,
 				B10000000000000000000044 /* SessionLibraryNavigationTests.swift */,
 				B10000000000000000000045 /* WorkerLaunchConfigurationTests.swift */,
 				B10000000000000000000047 /* WorkerProvisionerTests.swift */,
@@ -339,6 +344,7 @@
 				B1000000000000000000002D /* StrataProject.swift */,
 				B1000000000000000000002E /* StrataProjectPersistence.swift */,
 				B10000000000000000000042 /* SessionStore.swift */,
+				B10000000000000000000056 /* YouTubeIdentity.swift */,
 			);
 			path = Application;
 			sourceTree = "<group>";
@@ -613,6 +619,7 @@
 				A1000000000000000000002D /* StrataProject.swift in Sources */,
 				A1000000000000000000002E /* StrataProjectPersistence.swift in Sources */,
 				A10000000000000000000042 /* SessionStore.swift in Sources */,
+				A10000000000000000000056 /* YouTubeIdentity.swift in Sources */,
 				A10000000000000000000046 /* WorkerProvisioner.swift in Sources */,
 				A10000000000000000000048 /* UvAvailability.swift in Sources */,
 				A1000000000000000000004E /* FFmpegAvailability.swift in Sources */,
@@ -659,6 +666,7 @@
 				A10000000000000000000039 /* LocalMP3ExportTests.swift in Sources */,
 				A1000000000000000000003B /* StorageLocationPreferencesTests.swift in Sources */,
 				A10000000000000000000043 /* SessionStoreTests.swift in Sources */,
+				A10000000000000000000057 /* YouTubeDedupeTests.swift in Sources */,
 				A10000000000000000000044 /* SessionLibraryNavigationTests.swift in Sources */,
 				A10000000000000000000045 /* WorkerLaunchConfigurationTests.swift in Sources */,
 				A10000000000000000000047 /* WorkerProvisionerTests.swift in Sources */,
