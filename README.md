@@ -71,8 +71,6 @@ The **Library** sidebar lists saved sessions by most-recently opened, with title
 - **Delete** (right-click a session) asks for confirmation and permanently removes that session and its audio files.
 - Re-running **Create Strata** for the same YouTube video updates that video’s existing Library row instead of adding a duplicate. Local files create a new row per completed separation.
 
-<!-- Screenshot 3 — expected file: docs/readme/library-reopen.png — Library session switching/reopen sequence: sidebar with multiple saved sessions, selecting an older session, mixer restored without re-separating. -->
-
 ## Export
 
 Exports open a save panel. **Export Folder…** sets the default folder shown by future export panels; you can still pick any destination each time.
