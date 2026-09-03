@@ -137,7 +137,7 @@ struct RuntimeReadiness: Sendable, Equatable {
         if !nodeAvailable {
             if let installed = nodeInstalledVersion {
                 let path = nodeAttemptedPath ?? nodeExecutableURL?.path ?? nodeManagedURL?.path ?? Self.nodePath
-                return "YouTube disabled · Node version mismatch at \(path) (installed \(installed), supported \(ExternalToolCompatibility.nodeSupportedVersion))"
+                return "YouTube disabled · Node version mismatch at \(path) (installed \(installed), requires Node 22+)"
             }
             let path = nodeAttemptedPath ?? nodeManagedURL?.path ?? Self.nodePath
             return "YouTube disabled · missing Node at \(path)"

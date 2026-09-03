@@ -172,7 +172,8 @@ final class RuntimeReadinessVersionTests: XCTestCase {
         XCTAssertTrue(r.isMp3ExportReady)
         XCTAssertTrue(r.sidebarStatus.contains("Node"))
         XCTAssertTrue(r.sidebarStatus.contains("21.0.0"))
-        XCTAssertTrue(r.sidebarStatus.contains(ExternalToolCompatibility.nodeSupportedVersion))
+        XCTAssertTrue(r.sidebarStatus.contains("requires Node 22+"))
+        XCTAssertFalse(r.sidebarStatus.contains("supported \(ExternalToolCompatibility.nodeSupportedVersion)"))
         XCTAssertTrue(r.sidebarStatus.contains(RuntimeReadiness.nodePath))
     }
 
