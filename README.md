@@ -6,7 +6,7 @@ Turn a song into six synced strata you can mute, reshape, and export.
 
 Native macOS app · Apple Silicon · Separation runs locally on-device (fetching a YouTube Source needs network).
 
-<!-- Screenshot 1 — expected file: docs/readme/strata-mixer.png — completed mixer hero with Library visible: six-stratum mixer, Original mix summary, and Library sidebar with saved sessions. -->
+![Strata mixer showing six synced strata with the Library sidebar](docs/readme/strata-mixer.png)
 
 ## Features
 
@@ -45,7 +45,7 @@ From the preview card you can:
 
 Loading a new URL replaces the previous preview. The preview step needs only yt-dlp + Node; FFmpeg is needed later for acquisition/export/separation paths that use it.
 
-<!-- Screenshot 2 — expected file: docs/readme/youtube-workflow.png — three-stage Add YouTube Source → preview (metadata/artwork/duration, Preview only) → Create Strata progress sequence. -->
+![Adding a YouTube source by pasting a URL in Strata](docs/readme/strata_load_source_URL.png)
 
 ## Mixing and playback
 
