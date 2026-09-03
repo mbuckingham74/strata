@@ -1,6 +1,8 @@
 # Strata
 
-![Strata app icon](Strata/Assets.xcassets/AppIcon.appiconset/AppIcon-256.png)
+<p align="center">
+  <img src="Strata/Assets.xcassets/AppIcon.appiconset/AppIcon-256.png" alt="Strata app icon">
+</p>
 
 Turn a song into six synced strata you can mute, reshape, and export.
 
