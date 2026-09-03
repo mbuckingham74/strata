@@ -776,4 +776,152 @@ final class StrataProjectPersistenceTests: XCTestCase {
         let badManifest = scratchTmp.appendingPathComponent("missing.json")
         XCTAssertThrowsError(try persistence.persistAssets(for: valid, mixtureSourceURL: mixtureURL, manifestSourceURL: badManifest, stemSourceURLs: stemURLs, artworkSourceURL: nil))
     }
+
+    // MARK: - Failure-safe replacement
+
+    /// FileManager seam that fails a mid-commit staged->project copy, simulating
+    /// a later copy failure during replacement of an existing project.
+    private final class FailMidCommitFileManager: FileManager {
+        var commitCopiesToFailAfter: Int = 1
+        private var commitCopiesSeen: Int = 0
+        override func copyItem(at src: URL, to dst: URL) throws {
+            // Commit copies read from the staging directory; staging and backup
+            // copies must succeed so the failure lands mid-commit.
+            if src.path.contains("StrataStage-") {
+                commitCopiesSeen += 1
+                if commitCopiesSeen > commitCopiesToFailAfter {
+                    throw NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC), userInfo: [NSLocalizedDescriptionKey: "simulated mid-commit copy failure"])
+                }
+            }
+            try super.copyItem(at: src, to: dst)
+        }
+    }
+
+    private func snapshotProjectAssets(persistence: StrataProjectPersistence, projectID: String) throws -> [String: Data] {
+        let dir = persistence.projectDirectory(for: projectID)
+        let fm = FileManager.default
+        var snap: [String: Data] = [:]
+        let relatives = ["source/mixture.wav", "separation/manifest.json"] + StemName.allCases.map { "separation/\($0.rawValue).wav" }
+        for rel in relatives {
+            snap[rel] = try Data(contentsOf: dir.appendingPathComponent(rel))
+        }
+        snap["project.json"] = try Data(contentsOf: persistence.projectFileURL(for: projectID))
+        return snap
+    }
+
+    func testFailedReplacementLeavesExistingProjectUnchanged() throws {
+        let tmp = temporaryProjectsRoot()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let persistence = StrataProjectPersistence(fileManager: .default, projectsRootOverride: tmp)
+        var gains: [StemName: Double] = [:]
+        for s in StemName.allCases { gains[s] = 0.3 }
+        let now = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970))
+        let project = try StrataProject(
+            schemaVersion: 1,
+            id: UUID().uuidString.lowercased(),
+            createdAt: now,
+            lastOpenedAt: now,
+            displayTitle: "Original",
+            source: StrataProjectSource(kind: .youTube, locator: "https://www.youtube.com/watch?v=abc123DEF45", metadata: nil),
+            gains: gains
+        )
+        try persistence.createProjectDirectory(for: project)
+        let scratchV1 = FileManager.default.temporaryDirectory.appendingPathComponent("StrataReplaceV1-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratchV1, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratchV1) }
+        let (mixV1, manV1, stemsV1, jobV1) = try createScratchSeparation(tmp: scratchV1, frames: 1024)
+        let artV1 = scratchV1.appendingPathComponent("artwork.jpg")
+        try Data("original-art".utf8).write(to: artV1)
+        try persistence.persistAssets(for: project, mixtureSourceURL: mixV1, manifestSourceURL: manV1, stemSourceURLs: stemsV1, artworkSourceURL: artV1)
+
+        var carried = try persistence.load(projectID: project.id)
+        let before = try snapshotProjectAssets(persistence: persistence, projectID: project.id)
+        let beforeArtwork = try Data(contentsOf: persistence.projectDirectory(for: project.id).appendingPathComponent("source/artwork.jpg"))
+        let beforeJobId = try persistence.loadSeparationResult(for: project.id).jobId
+        XCTAssertEqual(beforeJobId, jobV1)
+
+        // New separation results for the same project.
+        let scratchV2 = FileManager.default.temporaryDirectory.appendingPathComponent("StrataReplaceV2-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratchV2, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratchV2) }
+        let (mixV2, manV2, stemsV2, _) = try createScratchSeparation(tmp: scratchV2, frames: 2048)
+        carried.lastOpenedAt = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970) + 60)
+
+        // Fail on the 2nd commit copy: the first commit already replaced one
+        // asset, so this exercises backup restore, not just staging.
+        let failingFM = FailMidCommitFileManager()
+        failingFM.commitCopiesToFailAfter = 1
+        let failingPersistence = StrataProjectPersistence(fileManager: failingFM, projectsRootOverride: tmp)
+        XCTAssertThrowsError(try failingPersistence.persistAssets(for: carried, mixtureSourceURL: mixV2, manifestSourceURL: manV2, stemSourceURLs: stemsV2, artworkSourceURL: nil))
+
+        // Old project fully usable and unchanged.
+        let after = try snapshotProjectAssets(persistence: persistence, projectID: project.id)
+        XCTAssertEqual(after, before)
+        let afterArtwork = try Data(contentsOf: persistence.projectDirectory(for: project.id).appendingPathComponent("source/artwork.jpg"))
+        XCTAssertEqual(afterArtwork, beforeArtwork)
+        let reopened = try persistence.load(projectID: project.id)
+        XCTAssertEqual(reopened.artworkPath, "source/artwork.jpg")
+        XCTAssertEqual(reopened.gains, gains)
+        XCTAssertEqual(try persistence.loadSeparationResult(for: project.id).jobId, jobV1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: mixV2.path))
+    }
+
+    func testSuccessfulReplacementKeepsIDAndCarriesForwardMetadata() throws {
+        let tmp = temporaryProjectsRoot()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let persistence = StrataProjectPersistence(fileManager: .default, projectsRootOverride: tmp)
+        var gains: [StemName: Double] = [:]
+        for s in StemName.allCases { gains[s] = 0.3 }
+        let now = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970))
+        let metadata = YouTubeTrackMetadata(artist: "Artist", title: "Title")!
+        let project = try StrataProject(
+            schemaVersion: 1,
+            id: UUID().uuidString.lowercased(),
+            createdAt: now,
+            lastOpenedAt: now,
+            displayTitle: "Original",
+            source: StrataProjectSource(kind: .youTube, locator: "https://www.youtube.com/watch?v=abc123DEF45", metadata: metadata),
+            gains: gains
+        )
+        try persistence.createProjectDirectory(for: project)
+        let scratchV1 = FileManager.default.temporaryDirectory.appendingPathComponent("StrataReplaceOK-V1-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratchV1, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratchV1) }
+        let (mixV1, manV1, stemsV1, _) = try createScratchSeparation(tmp: scratchV1, frames: 1024)
+        let artV1 = scratchV1.appendingPathComponent("artwork.jpg")
+        try Data("original-art".utf8).write(to: artV1)
+        try persistence.persistAssets(for: project, mixtureSourceURL: mixV1, manifestSourceURL: manV1, stemSourceURLs: stemsV1, artworkSourceURL: artV1)
+
+        var carried = try persistence.load(projectID: project.id)
+        carried.lastOpenedAt = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970) + 60)
+        let scratchV2 = FileManager.default.temporaryDirectory.appendingPathComponent("StrataReplaceOK-V2-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratchV2, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratchV2) }
+        let (mixV2, manV2, stemsV2, jobV2) = try createScratchSeparation(tmp: scratchV2, frames: 2048)
+        // No new artwork: existing artwork/gains/metadata carry forward.
+        try persistence.persistAssets(for: carried, mixtureSourceURL: mixV2, manifestSourceURL: manV2, stemSourceURLs: stemsV2, artworkSourceURL: nil)
+
+        let reloaded = try persistence.load(projectID: project.id)
+        XCTAssertEqual(reloaded.id, project.id)
+        XCTAssertEqual(reloaded.createdAt, project.createdAt)
+        XCTAssertEqual(reloaded.artworkPath, "source/artwork.jpg")
+        XCTAssertEqual(reloaded.gains, gains)
+        XCTAssertEqual(reloaded.source.metadata, metadata)
+        let dir = persistence.projectDirectory(for: project.id)
+        XCTAssertEqual(try Data(contentsOf: dir.appendingPathComponent("source/mixture.wav")), try Data(contentsOf: mixV2))
+        for stem in StemName.allCases {
+            XCTAssertEqual(
+                try Data(contentsOf: dir.appendingPathComponent("separation/\(stem.rawValue).wav")),
+                try Data(contentsOf: stemsV2[stem]!),
+                "stem \(stem.rawValue) not replaced"
+            )
+        }
+        XCTAssertEqual(try Data(contentsOf: dir.appendingPathComponent("separation/manifest.json")), try Data(contentsOf: manV2))
+        XCTAssertEqual(try Data(contentsOf: dir.appendingPathComponent("source/artwork.jpg")), Data("original-art".utf8))
+        XCTAssertEqual(try persistence.loadSeparationResult(for: project.id).jobId, jobV2)
+        // project.json format unchanged (canonical keys only).
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: persistence.projectFileURL(for: project.id))) as! [String: Any]
+        XCTAssertNotNil(json["schema_version"])
+        XCTAssertNil(json["stemPaths"])
+    }
 }

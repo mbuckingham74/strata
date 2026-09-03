@@ -314,62 +314,27 @@ final class StrataProjectPersistence: @unchecked Sendable {
             }
         }
 
-        // Create directories
+        // Create directories (no destructive changes to existing assets)
         let sourceDir = dir.appendingPathComponent("source", isDirectory: true)
         let separationDir = dir.appendingPathComponent("separation", isDirectory: true)
         try fileManager.createDirectory(at: sourceDir, withIntermediateDirectories: true)
         try fileManager.createDirectory(at: separationDir, withIntermediateDirectories: true)
 
-        // Helper to copy, replacing any existing dest. Skips when source and
-        // destination are the same file (re-separation reusing persisted assets):
-        // deleting before copying would destroy the asset.
-        func copyAsset(from src: URL, to dst: URL) throws {
-            let srcPath = src.standardizedFileURL.resolvingSymlinksInPath().path
-            let dstPath = dst.standardizedFileURL.resolvingSymlinksInPath().path
-            if srcPath == dstPath { return }
-            if fileManager.fileExists(atPath: dst.path) {
-                try fileManager.removeItem(at: dst)
-            }
-            do {
-                try fileManager.copyItem(at: src, to: dst)
-            } catch {
-                throw StrataProjectPersistenceError.writeFailed("copy \(src.lastPathComponent) -> \(dst.path): \(error.localizedDescription)")
-            }
-        }
-
-        // Copy mixture
-        let mixtureDest = dir.appendingPathComponent(project.canonicalInputPath, isDirectory: false)
-        try copyAsset(from: mixtureSourceURL, to: mixtureDest)
-
-        // Copy stems
-        for stem in StemName.allCases {
-            guard let src = stemSourceURLs[stem] else { continue }
-            let dest = dir.appendingPathComponent(StrataProject.stemRelativePath(for: stem), isDirectory: false)
-            try copyAsset(from: src, to: dest)
-        }
-
-        // Copy manifest
-        let manifestDest = dir.appendingPathComponent(project.inferenceManifestPath, isDirectory: false)
-        try copyAsset(from: manifestSourceURL, to: manifestDest)
-
-        // Copy artwork if provided: write the new file first, then remove an
-        // obsolete artwork file with a different extension, so a failed copy
-        // never leaves the project without artwork.
+        // Failure-safe replacement: stage all new assets to a temp directory
+        // first, then commit them over the existing project files. A source
+        // read/copy failure therefore throws before any existing asset is
+        // touched, leaving an existing (e.g. deduplicated YouTube) project
+        // fully usable. Commit failures attempt a backup restore.
         var mutableProject = project
-        if let artURL = artworkSourceURL {
-            let ext = artURL.pathExtension
-            let newArtworkPath = "source/artwork.\(ext)"
-            let artworkDest = dir.appendingPathComponent(newArtworkPath, isDirectory: false)
-            try copyAsset(from: artURL, to: artworkDest)
-            if let existing = mutableProject.artworkPath, existing != newArtworkPath {
-                let oldDest = dir.appendingPathComponent(existing, isDirectory: false)
-                if fileManager.fileExists(atPath: oldDest.path) {
-                    try? fileManager.removeItem(at: oldDest)
-                }
-            }
+        let newArtworkPath: String? = {
+            guard let artURL = artworkSourceURL else { return nil }
+            return "source/artwork.\(artURL.pathExtension)"
+        }()
+        if let newArtworkPath {
             mutableProject.artworkPath = newArtworkPath
         } else {
-            // If project has artworkPath, ensure file exists after persist (validates self-containment)
+            // If project has artworkPath, ensure file exists after persist (validates self-containment).
+            // Pre-commit check only; no filesystem mutation here.
             if let artPath = mutableProject.artworkPath {
                 let artDest = dir.appendingPathComponent(artPath, isDirectory: false)
                 guard fileManager.fileExists(atPath: artDest.path) else {
@@ -378,8 +343,132 @@ final class StrataProjectPersistence: @unchecked Sendable {
             }
         }
 
-        // Only after all assets succeeded, write project.json
-        try save(mutableProject)
+        func isSameFile(_ a: URL, _ b: URL) -> Bool {
+            a.standardizedFileURL.resolvingSymlinksInPath().path ==
+            b.standardizedFileURL.resolvingSymlinksInPath().path
+        }
+
+        struct PlannedCopy {
+            let src: URL
+            let dest: URL
+            let staged: URL
+            let backup: URL
+        }
+        let stagingRoot = fileManager.temporaryDirectory
+            .appendingPathComponent("StrataStage-\(UUID().uuidString)", isDirectory: true)
+        let backupRoot = fileManager.temporaryDirectory
+            .appendingPathComponent("StrataBackup-\(UUID().uuidString)", isDirectory: true)
+        var plan: [PlannedCopy] = []
+        func planCopy(from src: URL, toRelative relative: String) {
+            let dest = dir.appendingPathComponent(relative, isDirectory: false)
+            if isSameFile(src, dest) { return }
+            plan.append(PlannedCopy(
+                src: src,
+                dest: dest,
+                staged: stagingRoot.appendingPathComponent(relative, isDirectory: false),
+                backup: backupRoot.appendingPathComponent(relative, isDirectory: false)
+            ))
+        }
+        planCopy(from: mixtureSourceURL, toRelative: project.canonicalInputPath)
+        for stem in StemName.allCases {
+            planCopy(from: stemSourceURLs[stem]!, toRelative: StrataProject.stemRelativePath(for: stem))
+        }
+        planCopy(from: manifestSourceURL, toRelative: project.inferenceManifestPath)
+        if let artURL = artworkSourceURL, let newArtworkPath {
+            planCopy(from: artURL, toRelative: newArtworkPath)
+        }
+
+        func cleanup(_ urls: URL...) {
+            for url in urls { try? fileManager.removeItem(at: url) }
+        }
+
+        // Stage: copy every source into the staging directory. Any failure
+        // here leaves the project directory untouched.
+        do {
+            for item in plan {
+                try fileManager.createDirectory(
+                    at: item.staged.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try fileManager.copyItem(at: item.src, to: item.staged)
+            }
+        } catch {
+            cleanup(stagingRoot)
+            throw StrataProjectPersistenceError.writeFailed(error.localizedDescription)
+        }
+
+        // Back up existing destination files so a failed commit can restore them.
+        do {
+            for item in plan {
+                guard fileManager.fileExists(atPath: item.dest.path) else { continue }
+                try fileManager.createDirectory(
+                    at: item.backup.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try fileManager.copyItem(at: item.dest, to: item.backup)
+            }
+        } catch {
+            cleanup(stagingRoot, backupRoot)
+            throw StrataProjectPersistenceError.writeFailed(error.localizedDescription)
+        }
+
+        func restoreFromBackup() {
+            for item in plan {
+                if fileManager.fileExists(atPath: item.backup.path) {
+                    try? fileManager.removeItem(at: item.dest)
+                    try? fileManager.copyItem(at: item.backup, to: item.dest)
+                } else {
+                    // No backup means the destination did not exist before
+                    // commit (backup step records every existing dest), so the
+                    // dest is either absent (untouched later item: no-op) or a
+                    // partially committed new file: remove it.
+                    try? fileManager.removeItem(at: item.dest)
+                }
+            }
+        }
+
+        // Commit: copy staged files over destinations. Copies (not moves) keep
+        // staging intact so rollback can distinguish new vs pre-existing files.
+        do {
+            for item in plan {
+                if fileManager.fileExists(atPath: item.dest.path) {
+                    try fileManager.removeItem(at: item.dest)
+                } else {
+                    try fileManager.createDirectory(
+                        at: item.dest.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                }
+                try fileManager.copyItem(at: item.staged, to: item.dest)
+            }
+        } catch {
+            restoreFromBackup()
+            cleanup(stagingRoot, backupRoot)
+            if let pe = error as? StrataProjectPersistenceError { throw pe }
+            throw StrataProjectPersistenceError.writeFailed(error.localizedDescription)
+        }
+
+        // Only after all assets committed, write project.json. A save failure
+        // rolls assets back so the old project stays fully usable.
+        do {
+            try save(mutableProject)
+        } catch {
+            restoreFromBackup()
+            cleanup(stagingRoot, backupRoot)
+            throw error
+        }
+        cleanup(stagingRoot, backupRoot)
+
+        // Remove an obsolete artwork file with a different extension only after
+        // the new assets and project.json committed successfully, so a failed
+        // replacement never leaves the project without artwork.
+        if artworkSourceURL != nil, let newArtworkPath,
+           let existing = project.artworkPath, existing != newArtworkPath {
+            let oldDest = dir.appendingPathComponent(existing, isDirectory: false)
+            if fileManager.fileExists(atPath: oldDest.path) {
+                try? fileManager.removeItem(at: oldDest)
+            }
+        }
     }
 
     // MARK: - Load separation result (project layout)
