@@ -87,6 +87,7 @@
 		A1000000000000000000004A /* InferenceSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004A /* InferenceSetup.swift */; };
 		A1000000000000000000004B /* InferenceSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004B /* InferenceSetupView.swift */; };
 		A1000000000000000000004C /* InferenceSetupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004C /* InferenceSetupTests.swift */; };
+		A10000000000000000000055 /* SidebarArtworkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000055 /* SidebarArtworkTests.swift */; };
 		A1000000000000000000004D /* ExternalToolResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000004D /* ExternalToolResolver.swift */; };
 /* End PBXBuildFile section */
 
@@ -188,6 +189,7 @@
 		B1000000000000000000004A /* InferenceSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSetup.swift; sourceTree = "<group>"; };
 		B1000000000000000000004B /* InferenceSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSetupView.swift; sourceTree = "<group>"; };
 		B1000000000000000000004C /* InferenceSetupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceSetupTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000055 /* SidebarArtworkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarArtworkTests.swift; sourceTree = "<group>"; };
 		B1000000000000000000004D /* ExternalToolResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalToolResolver.swift; sourceTree = "<group>"; };
 		C00000000000000000000001 /* Strata.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Strata.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C00000000000000000000002 /* StrataTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrataTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -310,6 +312,7 @@
 				B10000000000000000000053 /* NodeAvailabilityTests.swift */,
 				B10000000000000000000054 /* RuntimeReadinessModelTests.swift */,
 				B1000000000000000000004C /* InferenceSetupTests.swift */,
+				B10000000000000000000055 /* SidebarArtworkTests.swift */,
 				52BB6F95A001A67E69DB3822 /* ExternalToolResolverTests.swift */,
 			);
 			path = StrataTests;
@@ -665,6 +668,7 @@
 				A10000000000000000000053 /* NodeAvailabilityTests.swift in Sources */,
 				A10000000000000000000054 /* RuntimeReadinessModelTests.swift in Sources */,
 				A1000000000000000000004C /* InferenceSetupTests.swift in Sources */,
+				A10000000000000000000055 /* SidebarArtworkTests.swift in Sources */,
 				37CFDD388993CD7D884327A4 /* ExternalToolResolverTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

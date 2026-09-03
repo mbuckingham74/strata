@@ -28,6 +28,15 @@ import Observation
         lastError = nil
     }
 
+    /// Resolve the persisted artwork file for a Library project, if present and on disk.
+    /// Uses the persisted `artworkPath` only (relative to the project directory); no transient state,
+    /// so the thumbnail survives reopen and relaunch.
+    func artworkURL(for project: StrataProject) -> URL? {
+        guard let artPath = project.artworkPath else { return nil }
+        let candidate = persistence.projectDirectory(for: project.id).appendingPathComponent(artPath)
+        return FileManager.default.fileExists(atPath: candidate.path) ? candidate : nil
+    }
+
     func refresh() {
         loadProjects()
     }

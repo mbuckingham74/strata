@@ -180,7 +180,7 @@ struct SidebarView: View {
                                         // SessionStore.lastError is already set (bounded); presented via alert — no second error model.
                                     }
                                 } label: {
-                                    SidebarEntry(title: project.displayTitle, duration: project.source.kind == .youTube ? "YouTube" : "Local", isSelected: project.id == store.selectedProjectID)
+                                    SidebarEntry(title: project.displayTitle, duration: project.source.kind == .youTube ? "YouTube" : "Local", isSelected: project.id == store.selectedProjectID, artworkURL: store.artworkURL(for: project))
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityLabel(project.displayTitle)
@@ -239,12 +239,25 @@ struct SidebarEntry: View {
     let title: String
     let duration: String
     let isSelected: Bool
+    var artworkURL: URL? = nil
     var body: some View {
         HStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.56, green: 0.46, blue: 0.95).opacity(0.22)).frame(width: 36, height: 36)
-                Image(systemName: "waveform").font(.system(size: 14, weight: .medium)).foregroundStyle(Color(red: 0.56, green: 0.46, blue: 0.95))
+            Group {
+                if let url = artworkURL, let nsImage = NSImage(contentsOf: url) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 36, height: 36)
+                        .clipped()
+                } else {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.56, green: 0.46, blue: 0.95).opacity(0.22)).frame(width: 36, height: 36)
+                        Image(systemName: "waveform").font(.system(size: 14, weight: .medium)).foregroundStyle(Color(red: 0.56, green: 0.46, blue: 0.95))
+                    }
+                }
             }
+            .frame(width: 36, height: 36)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.callout).lineLimit(1).foregroundStyle(.primary)
                 Text(duration).font(.caption).foregroundStyle(.secondary)
