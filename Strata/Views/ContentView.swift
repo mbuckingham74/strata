@@ -297,7 +297,7 @@ struct MainWorkspaceView: View {
                                 OriginalMixRow(controller: controller).padding(.horizontal, 20)
                             }
                         } else {
-                            EmptyStateView(showingImporter: $showingImporter).frame(height: 260).padding(.top, 20)
+                            EmptyStateView().frame(height: 220).padding(.top, 20)
                         }
                     }
 
@@ -325,9 +325,8 @@ extension MainWorkspaceView {
 }
 
 struct EmptyStateView: View {
-    @Binding var showingImporter: Bool
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
             Group {
                 if let nsImage = NSApp.applicationIconImage {
                     Image(nsImage: nsImage)
@@ -345,10 +344,9 @@ struct EmptyStateView: View {
             }
             .accessibilityHidden(true)
             VStack(spacing: 8) {
-                Text("No audio selected").font(.title3.weight(.semibold)).foregroundStyle(.primary)
-                Text("Add a local audio file to play, pause, and seek through AVAudioEngine.").font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 360)
+                Text("Start with a source").font(.title3.weight(.semibold)).foregroundStyle(.primary)
+                Text("Paste a YouTube URL or choose local audio below to begin.").font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 360)
             }
-            Button { showingImporter = true } label: { Label("Add Audio", systemImage: "plus").font(.callout.weight(.medium)).padding(.horizontal, 16).padding(.vertical, 8) }.buttonStyle(.borderedProminent).tint(Color(red: 0, green: 150 / 255, blue: 1)).accessibilityLabel("Add Audio")
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -397,6 +395,18 @@ struct InferenceCard: View {
               let audioURL = inferenceController.loadedYouTubeAudioURL,
               playbackController.hasFile else { return false }
         return FileManager.default.fileExists(atPath: audioURL.path)
+    }
+
+    private var hasSuitableLocalSource: Bool {
+        playbackController.hasFile && playbackController.sourceURL != nil && inferenceController.isLocalSeparationReady
+    }
+
+    private var shouldShowLocalActions: Bool {
+        !inferenceController.isYouTubeSourceLoaded && (hasSuitableLocalSource || inferenceController.isSeparating)
+    }
+
+    private var shouldShowYouTubeCreate: Bool {
+        inferenceController.isYouTubeSourceLoaded && (inferenceController.isYouTubeSeparationReady || inferenceController.isSeparating)
     }
 
     // Unified initializer
@@ -473,7 +483,7 @@ struct InferenceCard: View {
             } else {
                 // Pre-completion workflow — preserve exactly as before
 
-                // Unified local source — single selection via Add Audio
+                // Unified local source — single Choose Local Audio… CTA (source-first)
                 if !inferenceController.isYouTubeSourceLoaded {
                     HStack(spacing: 10) {
                         if playbackController.hasFile, let title = playbackController.title {
@@ -483,14 +493,14 @@ struct InferenceCard: View {
                             }
                             Spacer()
                             Button { showingImporter = true } label: {
-                                Label("Change", systemImage: "arrow.triangle.2.circlepath").font(.caption.weight(.medium))
-                            }.buttonStyle(.bordered).tint(.secondary).disabled(inferenceController.isSeparating)
+                                Label("Choose Local Audio…", systemImage: "plus").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                            }.buttonStyle(.borderedProminent).tint(Color(red: 0, green: 150 / 255, blue: 1)).disabled(inferenceController.isSeparating)
                         } else {
-                            Text("No file selected — Add audio to separate").font(.caption).foregroundStyle(.tertiary)
+                            Text("No local file selected").font(.caption).foregroundStyle(.tertiary)
                             Spacer()
                             Button { showingImporter = true } label: {
-                                Label("Add Audio", systemImage: "plus").font(.caption.weight(.medium))
-                            }.buttonStyle(.bordered).tint(.secondary).disabled(inferenceController.isSeparating)
+                                Label("Choose Local Audio…", systemImage: "plus").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                            }.buttonStyle(.borderedProminent).tint(Color(red: 0, green: 150 / 255, blue: 1)).disabled(inferenceController.isSeparating)
                         }
                     }
                 }
@@ -508,10 +518,10 @@ struct InferenceCard: View {
                             guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return }
                             inferenceController.loadYouTubeSource(youTubeURL: url)
                         } label: {
-                            Label("Load source", systemImage: "arrow.down.circle").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                            Label("Add YouTube Source", systemImage: "arrow.down.circle").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(Color(red: 0, green: 150 / 255, blue: 1))
+                        .tint(Color(red: 1, green: 0, blue: 0))
                         .disabled(youTubeURLBinding.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || inferenceController.isSeparating || !inferenceController.isYouTubePreviewReady)
                         .accessibilityIdentifier("LoadYouTubeSourceButton")
                     }
@@ -607,20 +617,23 @@ struct InferenceCard: View {
                             }
 
                             // Gated actions: deferred audio acquisition (audio-only)
+                            // Create Strata hidden until YouTube source loaded + passes separation readiness
                             HStack(spacing: 10) {
-                                Button {
-                                    if hasAudioFile {
-                                        inferenceController.startSeparationFromLoadedYouTubeSource()
-                                    } else {
-                                        inferenceController.startSeparationFromLoadedPreview()
+                                if shouldShowYouTubeCreate {
+                                    Button {
+                                        if hasAudioFile {
+                                            inferenceController.startSeparationFromLoadedYouTubeSource()
+                                        } else {
+                                            inferenceController.startSeparationFromLoadedPreview()
+                                        }
+                                    } label: {
+                                        Label("Create Strata", systemImage: "waveform").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
                                     }
-                                } label: {
-                                    Label("Create Strata", systemImage: "waveform").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(Color(red: 0, green: 150 / 255, blue: 1))
+                                    .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating || !inferenceController.isYouTubeSeparationReady)
+                                    .accessibilityIdentifier("SeparateLoadedYouTubeButton")
                                 }
-                                .buttonStyle(.borderedProminent)
-                                .tint(Color(red: 0, green: 150 / 255, blue: 1))
-                                .disabled(!inferenceController.isYouTubeSourceLoaded || inferenceController.isSeparating || !inferenceController.isYouTubeSeparationReady)
-                                .accessibilityIdentifier("SeparateLoadedYouTubeButton")
 
                                 Button {
                                     if hasAudioFile, let prep = inferenceController.prepareYouTubeMP3ExportFromLoadedSource() {
@@ -653,13 +666,16 @@ struct InferenceCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 10) {
                     if !inferenceController.isYouTubeSourceLoaded {
-                        Button {
-                            guard let url = playbackController.sourceURL else { return }
-                            inferenceController.startSeparation(localFileURL: url)
-                        } label: {
-                            Label("Create Strata", systemImage: "waveform").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
-                        }.buttonStyle(.borderedProminent).tint(Color(red: 0, green: 150 / 255, blue: 1)).disabled(!playbackController.hasFile || playbackController.sourceURL == nil || inferenceController.isSeparating || !inferenceController.isLocalSeparationReady)
-                        .accessibilityIdentifier("LocalSeparateButton")
+                        // Create Strata hidden until local source loaded + passes separation readiness
+                        if shouldShowLocalActions {
+                            Button {
+                                guard let url = playbackController.sourceURL else { return }
+                                inferenceController.startSeparation(localFileURL: url)
+                            } label: {
+                                Label("Create Strata", systemImage: "waveform").font(.callout.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 6)
+                            }.buttonStyle(.borderedProminent).tint(Color(red: 0, green: 150 / 255, blue: 1)).disabled(!playbackController.hasFile || playbackController.sourceURL == nil || inferenceController.isSeparating || !inferenceController.isLocalSeparationReady)
+                            .accessibilityIdentifier("LocalSeparateButton")
+                        }
                         Button {
                             exportLocalMP3()
                         } label: {
